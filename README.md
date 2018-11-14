@@ -11,3 +11,28 @@ Magalix provides unique insights and recommendations about resources utilization
 - Control when and how optimization is done
 - Automatically apply optimizations with minimal or no disruption to operations
 - Gain detailed recommendations to right size cluster VMs
+
+# Documentation
+
+The general documentation of the Magalix and its agent, including instructions for installation and dashboards, is located under the [docs website](https://docs.magalix.com).
+
+# Installation
+A valid account is required to run the agent properly.
+
+1. Go to [https://console.magalix.com](https://console.magalix.com) to create an account.
+2. Copy and paste the provided Kubectl command into your shell. 
+3. It will install Magalix agent with the proper credentials to read your metrics and generate recommendations. 
+
+**Notes**
+
+* Your first cluster analytics are free.
+* No changes will be applied till you turn on the autopilot feature at the [console](https://console.magalix.com)
+* The Autopilot feature is a Pro feature. You need to buy a subscription to enable it. 
+
+# Troubleshooting 
+
+The most common issues that users face installing Magalix agent is RBAC. Please read our [troubelshooting guide](https://docs.magalix.com/docs/connecting-clusters) to resolve initial setup issues you may encounter. 
+
+# Questions and Support
+Please reach out to us at our [support forum](https://docs.magalix.com/discuss), or send us an email at <support@magalix.com>
+
