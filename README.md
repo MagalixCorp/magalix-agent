@@ -47,6 +47,8 @@ Few minutes after agent installation, metrics will start to flow. Magalix analyt
 # Get Slack Notifications
 You can add slack webhook to receive notifications when a container or the cluster is having issues or when recommendations are generated. Go to [cluster's dashboard](https://console.magalix.com/) and click on the watch icon. 
 
+![How to watch a cluster](https://github.com/MagalixCorp/magalix-agent/blob/master/pics/snapshots-watch-cluster.png "Watch cluster popup")
+
 **Note**
 Your first cluster watch feature is enabled by default. It will send you email only notifications. 
 
