@@ -42,6 +42,8 @@ You can install Magalix agent through GKE marketplace.
 # Accessing Insights and Recommendations
 Few minutes after agent installation, metrics will start to flow. Magalix analytics and recommendations engine will generate predictions and recommendations in few hours. You will also receive email notifications when recommendations are generated.
 
+![Few snapshots of recommenations, resources distributions, and namespace resources timeseries](https://github.com/MagalixCorp/magalix-agent/blob/master/pics/snapshots-decision-distribution-timeseries-ns.png "Generated Decision and Resources Distribution")
+
 # Get Slack Notifications
 You can add slack webhook to receive notifications when a container or the cluster is having issues or when recommendations are generated. Go to [cluster's dashboard](https://console.magalix.com/) and click on the watch icon. 
 
