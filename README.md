@@ -19,15 +19,34 @@ The general documentation of the Magalix and its agent, including instructions f
 # Installation
 A valid account is required to run the agent properly.
 
+## Directly through Magalix.com 
+
 1. Go to [https://console.magalix.com](https://console.magalix.com) to create an account.
 2. Copy and paste the provided Kubectl command into your shell. 
 3. It will install Magalix agent with the proper credentials to read your metrics and generate recommendations. 
 
+## Via GKE Marketplace
+
+You can install Magalix agent through GKE marketplace. 
+
+1. Insert your email in GKE installation/configuration form. You will need it to log into [Magalix console](https://console.magalix.com). The deployment container will create an account and connect the agent to this account.
+2. Once installation is successfully complete, you will receive an email with instructions to see your clusters dashboard at [Magalix console](https://console.magalix.com)
+3. If you didn't receive that welcome email for some reason, you can just go thorugh the [reset password process](https://console.magalix.com/auth/#/forgot-password).
+
 **Notes**
 
 * Your first cluster analytics are free.
-* No changes will be applied till you turn on the autopilot feature at the [console](https://console.magalix.com)
+* No recommendations will be applied to your cluster till you turn on the Autopilot feature at the [console](https://console.magalix.com)
 * The Autopilot feature is a Pro feature. You need to buy a subscription to enable it. 
+
+# Accessing Insights and Recommendations
+Few minutes after agent installation, metrics will start to flow. Magalix analytics and recommendations engine will generate predictions and recommendations in few hours. You will also receive email notifications when recommendations are generated.
+
+# Get Slack Notifications
+You can add slack webhook to receive notifications when a container or the cluster is having issues or when recommendations are generated. Go to [cluster's dashboard](https://console.magalix.com/) and click on the watch icon. 
+
+**Note**
+Your first cluster watch feature is enabled by default. It will send you email only notifications. 
 
 # Troubleshooting 
 
