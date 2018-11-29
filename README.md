@@ -2,7 +2,6 @@
 
 [![CircleCI](https://circleci.com/gh/MagalixTechnologies/agent/tree/master.svg?style=svg&circle-token=d6b83df945852d7c96c44fea82e433432c48ed09)](https://circleci.com/gh/MagalixTechnologies/agent/tree/master)
 
-# Overview
 Magalix provides unique insights and recommendations about resources utilization inside Kubernetes. Magalix Autopilot right sizes Kubernetes cluster by dynamically managing resources of pods and containers. Save up to 50% of your cloud bill. Stay on top of capacity management. 
 
 ### Core Insights
