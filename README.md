@@ -1,4 +1,4 @@
-# Magalix Agent [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=Run%20kubernetes%20clusters%20on%20autopilot%20&url=https://www.magalix.com/&via=MagalixCorp&hashtags=Kubernetes,Cloud,SRE,DevOps)
+# Magalix Agent - Overview [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=Run%20kubernetes%20clusters%20on%20autopilot%20&url=https://www.magalix.com/&via=MagalixCorp&hashtags=Kubernetes,Cloud,SRE,DevOps)
 
 [![CircleCI](https://circleci.com/gh/MagalixTechnologies/agent/tree/master.svg?style=svg&circle-token=d6b83df945852d7c96c44fea82e433432c48ed09)](https://circleci.com/gh/MagalixTechnologies/agent/tree/master) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -32,9 +32,14 @@ A valid account is required to run the agent properly.
 
 You can install Magalix agent through GKE marketplace. 
 
-1. Insert your email in GKE installation/configuration form. You will need it to log into [Magalix console](https://console.magalix.com). The deployment container will create an account and connect the agent to this account.
+### First Time User
+1. Insert your email in GKE installation/configuration form. The deployment container will create an account and connect the agent to this account.
 2. Once installation is successfully complete, you will receive an email with instructions to see your clusters dashboard at [Magalix console](https://console.magalix.com)
 3. If you didn't receive that welcome email for some reason, you can just go thorugh the [reset password process](https://console.magalix.com/auth/#/forgot-password).
+
+### If you have an Existing Magalix Account
+1. Insert your email and password in GKE installation/configuration form. The deployment container will define a new cluster under your account and use generated secrets to connect installed agent with your account. 
+2. Once installation is successfully complete, you will receive an email confirming cluster connectivity.
 
 **Notes**
 
@@ -54,6 +59,13 @@ You can add slack webhook to receive notifications when a container or the clust
 
 **Note**
 Your first cluster watch feature is enabled by default. It will send you email only notifications. 
+
+# Updating The Agent's Image
+If you need to update the running agent's installation, you will receive email that you should do. Because the image pull policy is set to Always, everytime you delete the pod, a fresh image will be installed. 
+
+# Removing Magalix Agent
+
+You can remove Magalix agent by simply deleting its Deployment controller, which is named magalix-agent. This will remove all the agent's pods and associated resources. 
 
 # Troubleshooting 
 
