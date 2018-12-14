@@ -1,0 +1,73 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: magalix-agent
+  namespace: kube-system
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: magalix-agent
+    spec:
+      serviceAccountName: magalix-agent
+      restartPolicy: Always
+      containers:
+        - image: magalixcorp/agent:latest
+          imagePullPolicy: Always
+          name: agent
+          args:
+            - --kube-incluster
+            - --gateway=ws://agent-gateway.magalix.com/
+            - --source=kubelet
+            - --trace-log=/agent.log
+          envFrom:
+            - secretRef:
+                name: magalix-agent
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: magalix-agent
+  namespace: kube-system
+type: Opaque
+data:
+  ACCOUNT_ID: #ADD ACCOUNT ID - go to https://consoel.magalix.com 
+  CLUSTER_ID: # ADD CLUSTER ID - go to https://consoel.magalix.com 
+  SECRET: # ADD CLUSTER SPECIFIC SECRET - go to https://consoel.magalix.com 
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: magalix-agent
+  namespace: kube-system
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: magalix-agent
+rules:
+- apiGroups: ["", "extensions", "apps", "batch"]
+  resources: ["nodes", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "cronjobs"]
+  verbs: ["get", "watch", "list", "patch"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: magalix-agent
+subjects:
+- kind: ServiceAccount
+  name: magalix-agent
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: magalix-agent
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,12 @@
+component,Origin,License
+core,https://github.com/docopt/docopt.go/blob/master/LICENSE,MIT
+core,github.com/kovetskiy/lorg,MIT
+core,github.com/reconquest/cog,MIT
+core,github.com/reconquest/health-go,MIT
+core,github.com/reconquest/influxql,MIT
+core,github.com/reconquest/karma-go,MIT
+core,github.com/reconquest/sign-go,MIT
+core,https://github.com/ryanuber/go-glob/blob/master/LICENSE,MIT
+core,https://github.com/kubernetes/client-go/blob/master/LICENSE,Apache License 2.0
+core,https://github.com/kubernetes/apimachinery/blob/master/LICENSE,Apache License 2.0
+core,https://github.com/kubernetes/api/blob/master/LICENSE,Apache License 2.0
