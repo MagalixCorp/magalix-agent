@@ -1,6 +1,6 @@
 # Magalix Agent - Overview [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=Run%20kubernetes%20clusters%20on%20autopilot%20&url=https://www.magalix.com/&via=MagalixCorp&hashtags=Kubernetes,Cloud,SRE,DevOps)
 
-
+[![CircleCI](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master.svg?style=svg&circle-token=d6b83df945852d7c96c44fea82e433432c48ed09)](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Magalix provides unique insights and recommendations about resources utilization inside Kubernetes. Magalix Autopilot right sizes Kubernetes cluster by dynamically managing resources of pods and containers. Save up to 50% of your cloud bill. Stay on top of capacity management. 
 

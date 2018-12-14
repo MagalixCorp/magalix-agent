@@ -1,0 +1,162 @@
+version: 2
+jobs:
+  "build & push":
+    docker:
+      - image: magalixcorp/circleci-golang-lite
+
+    steps:
+      - run:
+          name: Set up source path directory
+          command: |
+            echo 'export SOURCE_PATH=/go/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME' >> $BASH_ENV
+            echo 'export PATH=/usr/local/bin/upx:$PATH' >> $BASH_ENV
+            echo 'export PATH=/usr/bin/gcloud:$PATH' >> $BASH_ENV
+            echo 'export PATH=/root/google-cloud-sdk/bin:$PATH' >> $BASH_ENV
+
+      - run:
+          name: Install Google Cloud SDK
+          command: |
+            apk update
+            apk add python
+
+            # Update the package list and install the Cloud SDK
+            curl https://sdk.cloud.google.com | bash -s -- --disable-prompts
+
+            # The next line updates PATH for the Google Cloud SDK.
+            source /root/google-cloud-sdk/completion.bash.inc
+
+            source $BASH_ENV
+      - run:
+          name: Checkout code
+          command: |
+            mkdir -p ~/.ssh
+            echo 'StrictHostKeyChecking no' >> ~/.ssh/config
+
+            git config --global \
+              url."ssh://git@github.com".insteadOf "https://github.com"
+
+            git clone -q --recursive "$CIRCLE_REPOSITORY_URL" "$SOURCE_PATH"
+
+            cd $SOURCE_PATH
+
+            if [[ "$CIRCLE_TAG" ]]; then
+              git checkout -q "$CIRCLE_TAG"
+            fi
+
+            if [[ "$CIRCLE_BRANCH" ]]; then
+              git checkout -q "$CIRCLE_BRANCH"
+            fi
+
+      - run:
+          name: Should build?
+          command: |
+            cd $SOURCE_PATH
+
+            RANGE=${CIRCLE_COMPARE_URL##*/}
+
+            if ! git rev-parse -q --verify "${RANGE%%..*}" > /dev/null; then
+              echo :: force push detected, building anyway
+              echo 'export SHOULD_BUILD=true' >> $BASH_ENV
+
+              exit 0
+            fi
+
+            if git diff "$RANGE" --name-only \
+                | grep -qE -e '\.(go|ya?ml)' -e '(\w+)file' -e '\.(\w+)ignore'
+            then
+              echo 'export SHOULD_BUILD=true' >> $BASH_ENV
+            fi
+
+      - run:
+          name: Should push?
+          command: |
+            if [[ ! "$SHOULD_BUILD" ]]; then
+              echo :: will not push, no build
+
+              exit 0
+            fi
+
+            if [[ "$CIRCLE_BRANCH" == "master" || "$CIRCLE_BRANCH" == "stable" ]]
+            then
+              echo 'export SHOULD_PUSH=true' >> $BASH_ENV
+            else
+              echo :: will not push
+            fi
+
+      - restore_cache:
+          keys:
+            - go-src-pkg-cache
+
+      - run:
+          name: Build binary
+          command: |
+            if [[ ! "$SHOULD_BUILD" ]]; then
+              echo :: no build
+
+              exit 0
+            fi
+
+            export GOCACHE=/go/cache/
+
+            cd $SOURCE_PATH
+            make build
+
+      - save_cache:
+          key: go-src-pkg-cache
+          paths:
+            - /go/src/k8s.io/
+            - /go/pkg/
+            - /go/cache/
+
+      - setup_remote_docker
+
+      - deploy:
+          name: Build image & Push to Docker Registry
+          command: |
+            if [[ ! "$SHOULD_PUSH" ]]; then
+              echo :: no push
+
+              exit 0
+            fi
+
+            cd $SOURCE_PATH
+
+            docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_PASSWORD"
+
+            if [[ "$CIRCLE_BRANCH" == "stable" ]]; then
+              export VERSION=latest
+            else
+              export VERSION=dev
+            fi
+
+            make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
+
+
+            push_to_gcr() {
+              GCLOUD_SERVICE_KEY=$1
+              GOOGLE_COMPUTE_ZONE=$2
+              GOOGLE_PROJECT_ID=$3
+
+              echo "pushing to GCP  $GOOGLE_PROJECT_ID"
+              gcloud --quiet components update
+              echo $GCLOUD_SERVICE_KEY | base64 -d - | gcloud auth activate-service-account --key-file=-
+              gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
+              gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
+              gcloud auth configure-docker
+              docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2 -f Dockerfile .
+              gcloud docker -- push gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2
+            }
+
+            push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID}
+            push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD}
+
+
+
+
+workflows:
+  version: 2
+  "build & push":
+    jobs:
+      - "build & push":
+          context: org-global
+
