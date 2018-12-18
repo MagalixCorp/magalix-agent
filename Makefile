@@ -1,4 +1,4 @@
-NAME = $(notdir $(PWD))
+NAME = agent
 
 VERSION = $(shell printf "%s.%s" \
 	$$(git rev-list --count HEAD) \
