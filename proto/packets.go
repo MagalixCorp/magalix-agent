@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"k8s.io/api/apps/v1beta2"
+	"k8s.io/api/batch/v1beta1"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/watcher"
@@ -15,7 +17,28 @@ import (
 	kv1 "k8s.io/api/core/v1"
 )
 
-var typesRegisterd bool
+var (
+	gobTypesRegistered bool
+	gobTypes           = []interface{}{
+		uuid.UUID{},
+		satori.UUID{},
+		[uuid.Size]byte{},
+
+		new(watcher.Status),
+		new(watcher.ContainerStatusSource),
+
+		new(kv1.NodeList),
+		new(kv1.LimitRangeList),
+		new([]kv1.Pod),
+
+		new(v1beta1.CronJobList),
+
+		new(v1beta2.DaemonSetList),
+		new(v1beta2.StatefulSetList),
+		new(v1beta2.ReplicaSetList),
+		new(v1beta2.DeploymentList),
+	}
+)
 
 type PacketHello struct {
 	Major uint `json:"major"`
@@ -234,6 +257,14 @@ type PacketDecisionsResponse struct {
 	Failed   int `json:"failed"`
 }
 
+type PacketRaw map[string]interface{}
+type PacketRawRequest struct {
+	PacketRaw
+
+	Timestamp time.Time
+}
+type PacketRawResponse struct{}
+
 func Decode(in []byte, out interface{}) error {
 	return DecodeGOB(in, out)
 }
@@ -243,14 +274,14 @@ func Encode(in interface{}) ([]byte, error) {
 }
 
 func DecodeGOB(in []byte, out interface{}) error {
-	RegisterTypes()
+	RegisterGOBTypes()
 	inBuf := bytes.NewBuffer(in)
 	dec := gob.NewDecoder(inBuf)
 	return dec.Decode(out)
 }
 
 func EncodeGOB(in interface{}) ([]byte, error) {
-	RegisterTypes()
+	RegisterGOBTypes()
 	var outBuf bytes.Buffer
 	enc := gob.NewEncoder(&outBuf)
 	if err := enc.Encode(in); err != nil {
@@ -267,13 +298,11 @@ func EncodeJSON(in interface{}) ([]byte, error) {
 	return json.Marshal(in)
 }
 
-func RegisterTypes() {
-	if !typesRegisterd {
-		typesRegisterd = true
-		gob.Register(uuid.UUID{})
-		gob.Register(satori.UUID{})
-		gob.Register([uuid.Size]byte{})
-		gob.Register(new(watcher.Status))
-		gob.Register(new(watcher.ContainerStatusSource))
+func RegisterGOBTypes() {
+	if !gobTypesRegistered {
+		for _, t := range gobTypes {
+			gob.Register(t)
+		}
+		gobTypesRegistered = true
 	}
 }

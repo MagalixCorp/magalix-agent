@@ -173,19 +173,19 @@ func (scanner *Scanner) GetNodesAddresses() []string {
 	return addresses
 }
 
-func (scanner *Scanner) getNodes() ([]kuber.Node, error) {
-	rawnodes, err := scanner.kube.GetNodes()
+func (scanner *Scanner) getNodes() ([]kuber.Node, *kv1.NodeList, error) {
+	nodeList, err := scanner.kube.GetNodes()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	pods, err := scanner.kube.GetPods()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	nodes := kuber.UpdateNodesContainers(
-		kuber.GetNodes(rawnodes),
+		kuber.GetNodes(nodeList.Items),
 		kuber.GetContainersByNode(pods),
 	)
 
@@ -199,20 +199,20 @@ func (scanner *Scanner) getNodes() ([]kuber.Node, error) {
 
 	err = identifyNodes(nodes, scanner.clusterID)
 	if err != nil {
-		return nil, karma.Format(
+		return nil, nil, karma.Format(
 			err,
 			"unable to obtain unique identifiers for nodes",
 		)
 	}
 
-	return nodes, nil
+	return nodes, nodeList, nil
 }
 
 func (scanner *Scanner) scanApplications() {
 	for {
 		scanner.logger.Infof(nil, "scanning kubernetes applications")
 
-		apps, err := scanner.getApplications()
+		apps, rawResources, err := scanner.getApplications()
 		if err != nil {
 			scanner.logger.Errorf(err, "unable to scan kubernetes applications")
 			time.Sleep(timeoutScannerBackoff)
@@ -234,6 +234,7 @@ func (scanner *Scanner) scanApplications() {
 		scanner.appsLastScan = time.Now()
 
 		scanner.SendApplications(apps)
+		scanner.client.SendRaw(rawResources)
 
 		scanner.logger.Infof(
 			nil,
@@ -247,7 +248,7 @@ func (scanner *Scanner) scanNodes() {
 	for {
 		scanner.logger.Infof(nil, "scanning kubernetes nodes")
 
-		nodes, err := scanner.getNodes()
+		nodes, nodeList, err := scanner.getNodes()
 		if err != nil {
 			scanner.logger.Errorf(err, "unable to scan kubernetes nodes")
 			time.Sleep(timeoutScannerBackoff)
@@ -264,6 +265,9 @@ func (scanner *Scanner) scanNodes() {
 		scanner.nodesLastScan = time.Now()
 
 		scanner.SendNodes(nodes)
+		scanner.client.SendRaw(map[string]interface{}{
+			"nodes": nodeList,
+		})
 
 		scanner.logger.Infof(
 			nil,
@@ -289,7 +293,7 @@ func getLimitRangesForNamespace(
 	return ranges
 }
 
-func (scanner *Scanner) getApplications() ([]*Application, error) {
+func (scanner *Scanner) getApplications() ([]*Application, map[string]interface{}, error) {
 	controllers, err := scanner.kube.GetReplicationControllers()
 	if err != nil {
 		scanner.logger.Errorf(
@@ -355,6 +359,16 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 		)
 	}
 
+	rawResources := map[string]interface{}{
+		"pods":         pods,
+		"deployments":  deployments,
+		"statefulSets": statefulSets,
+		"daemonSets":   daemonSets,
+		"replicaSets":  replicaSets,
+		"cronJobs":     cronJobs,
+		"limitRanges":  limitRanges,
+	}
+
 	type Resource struct {
 		Namespace      string
 		Name           string
@@ -393,7 +407,7 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 	}
 
 	if controllers != nil {
-		for _, controller := range controllers {
+		for _, controller := range controllers.Items {
 			resources = append(resources, Resource{
 				Kind:        "ReplicationController",
 				Annotations: controller.Annotations,
@@ -416,7 +430,7 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 	}
 
 	if deployments != nil {
-		for _, deployment := range deployments {
+		for _, deployment := range deployments.Items {
 			resources = append(resources, Resource{
 				Kind:        "Deployment",
 				Annotations: deployment.Annotations,
@@ -439,7 +453,7 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 	}
 
 	if statefulSets != nil {
-		for _, set := range statefulSets {
+		for _, set := range statefulSets.Items {
 			resources = append(resources, Resource{
 				Kind:        "StatefulSet",
 				Annotations: set.Annotations,
@@ -462,7 +476,7 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 	}
 
 	if daemonSets != nil {
-		for _, daemon := range daemonSets {
+		for _, daemon := range daemonSets.Items {
 			resources = append(resources, Resource{
 				Kind:        "DaemonSet",
 				Annotations: daemon.Annotations,
@@ -485,7 +499,7 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 	}
 
 	if replicaSets != nil {
-		for _, replicaSet := range replicaSets {
+		for _, replicaSet := range replicaSets.Items {
 			// skipping when it is a part of another service
 			if len(replicaSet.GetOwnerReferences()) > 0 {
 				continue
@@ -512,7 +526,7 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 	}
 
 	if cronJobs != nil {
-		for _, cronJob := range cronJobs {
+		for _, cronJob := range cronJobs.Items {
 			activeCount := int32(len(cronJob.Status.Active))
 			resources = append(resources, Resource{
 				Kind:        "CronJob",
@@ -559,7 +573,7 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 					Name: resource.Namespace,
 				},
 				LimitRanges: getLimitRangesForNamespace(
-					limitRanges,
+					limitRanges.Items,
 					resource.Namespace,
 				),
 			}
@@ -618,13 +632,13 @@ func (scanner *Scanner) getApplications() ([]*Application, error) {
 
 	err = identifyApplications(apps, scanner.clusterID)
 	if err != nil {
-		return nil, karma.Format(
+		return nil, nil, karma.Format(
 			err,
 			"unable to assign UUIDs to scanned applications",
 		)
 	}
 
-	return apps, nil
+	return apps, rawResources, nil
 }
 
 func newInt32Pointer(val int32) *int32 {

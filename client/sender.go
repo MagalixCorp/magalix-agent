@@ -113,3 +113,13 @@ func (client *Client) sendBye(reason string) error {
 		Reason: reason,
 	}, &response)
 }
+
+// SendRaw sends arbitrary raw data to be stored in magalix BE
+func (client *Client) SendRaw(rawResources map[string]interface{}) {
+	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}
+	client.WithBackoff(func() error {
+		var response proto.PacketRawResponse
+		err:= client.Send(proto.PacketKindRawStoreRequest, &packet, &response)
+		return err
+	})
+}

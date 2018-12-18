@@ -159,7 +159,7 @@ func InitKubernetes(
 }
 
 // GetNodes get kubernetes nodes
-func (kube *Kube) GetNodes() ([]kv1.Node, error) {
+func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of nodes")
 	nodes, err := kube.core.Nodes().List(kmeta.ListOptions{})
 	if err != nil {
@@ -169,7 +169,7 @@ func (kube *Kube) GetNodes() ([]kv1.Node, error) {
 		)
 	}
 
-	return nodes.Items, nil
+	return nodes, nil
 }
 
 // GetPods get kubernetes pods
@@ -188,7 +188,7 @@ func (kube *Kube) GetPods() ([]kv1.Pod, error) {
 
 // GetReplicationControllers get replication controllers
 func (kube *Kube) GetReplicationControllers() (
-	[]kv1.ReplicationController, error,
+	*kv1.ReplicationControllerList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replication controllers")
 	controllers, err := kube.core.ReplicationControllers("").
@@ -200,11 +200,11 @@ func (kube *Kube) GetReplicationControllers() (
 		)
 	}
 
-	return controllers.Items, nil
+	return controllers, nil
 }
 
 // GetDeployments get deployments
-func (kube *Kube) GetDeployments() ([]kbeta2.Deployment, error) {
+func (kube *Kube) GetDeployments() (*kbeta2.DeploymentList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of deployments")
 	deployments, err := kube.apps.Deployments("").List(kmeta.ListOptions{})
 	if err != nil {
@@ -214,12 +214,12 @@ func (kube *Kube) GetDeployments() ([]kbeta2.Deployment, error) {
 		)
 	}
 
-	return deployments.Items, nil
+	return deployments, nil
 }
 
 // GetStatefulSets get statuful sets
 func (kube *Kube) GetStatefulSets() (
-	[]kbeta2.StatefulSet, error,
+	*kbeta2.StatefulSetList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of stateful sets")
 	statefulSets, err := kube.apps.
@@ -232,12 +232,12 @@ func (kube *Kube) GetStatefulSets() (
 		)
 	}
 
-	return statefulSets.Items, nil
+	return statefulSets, nil
 }
 
 // GetDaemonSets get daemon sets
 func (kube *Kube) GetDaemonSets() (
-	[]kbeta2.DaemonSet, error,
+	*kbeta2.DaemonSetList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of daemon sets")
 	daemonSets, err := kube.apps.
@@ -250,12 +250,12 @@ func (kube *Kube) GetDaemonSets() (
 		)
 	}
 
-	return daemonSets.Items, nil
+	return daemonSets, nil
 }
 
 // GetReplicaSets get replicasets
 func (kube *Kube) GetReplicaSets() (
-	[]kbeta2.ReplicaSet, error,
+	*kbeta2.ReplicaSetList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
 	replicaSets, err := kube.apps.
@@ -268,12 +268,12 @@ func (kube *Kube) GetReplicaSets() (
 		)
 	}
 
-	return replicaSets.Items, nil
+	return replicaSets, nil
 }
 
 // GetCronJobs get cron jobs
 func (kube *Kube) GetCronJobs() (
-	[]kbeta1.CronJob, error,
+	*kbeta1.CronJobList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
 	cronJobs, err := kube.batch.
@@ -286,12 +286,12 @@ func (kube *Kube) GetCronJobs() (
 		)
 	}
 
-	return cronJobs.Items, nil
+	return cronJobs, nil
 }
 
 // GetLimitRanges get limits and ranges for namespaces
 func (kube *Kube) GetLimitRanges() (
-	[]kv1.LimitRange, error,
+	*kv1.LimitRangeList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of limitRanges from all namespaces")
 	limitRanges, err := kube.core.LimitRanges("").
@@ -303,7 +303,7 @@ func (kube *Kube) GetLimitRanges() (
 		)
 	}
 
-	return limitRanges.Items, nil
+	return limitRanges, nil
 }
 
 // SetResources set resources for a service
