@@ -37,6 +37,9 @@ var (
 		new(v1beta2.StatefulSetList),
 		new(v1beta2.ReplicaSetList),
 		new(v1beta2.DeploymentList),
+
+		new(map[string]interface {}),
+		new([]interface {}),
 	}
 )
 

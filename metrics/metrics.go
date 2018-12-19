@@ -62,20 +62,26 @@ func watchMetrics(
 	scanner *scanner.Scanner,
 	interval time.Duration,
 ) {
-	pipe := make(chan []*Metrics)
-	go sendMetrics(client, pipe)
-	defer close(pipe)
+	metricsPipe := make(chan []*Metrics)
+	go sendMetrics(client, metricsPipe)
+	defer close(metricsPipe)
+
+	rawMetricsPipe := make(chan map[string]interface{})
+	go sendRawMetrics(client, rawMetricsPipe)
+	defer close(rawMetricsPipe)
 
 	ticker := nextTick(interval)
 	for {
 		<-ticker
-		metrics, err := source.GetMetrics(scanner)
+		metrics, rawMetrics, err := source.GetMetrics(scanner)
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
 
+		rawMetricsPipe <- rawMetrics
+
 		for i := 0; i < len(metrics); i += limit {
-			pipe <- metrics[i:min(i+limit, len(metrics))]
+			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 		}
 		ticker = nextTick(interval)
 	}
@@ -107,6 +113,29 @@ func sendMetrics(client *client.Client, pipe chan []*Metrics) {
 			<-queue
 		}
 		queue <- metrics
+	}
+}
+
+func sendRawMetrics(client *client.Client, pipe chan map[string]interface{}) {
+	queueLimit := 100
+	queue := make(chan map[string]interface{}, queueLimit)
+	defer close(queue)
+	go func() {
+		for rawMetrics := range queue {
+			if rawMetrics == nil {
+				continue
+			}
+			client.SendRaw(map[string]interface{}{
+				"metrics": rawMetrics,
+			})
+		}
+	}()
+	for raw := range pipe {
+		if len(queue) >= queueLimit-1 {
+			// Discard the oldest value
+			<-queue
+		}
+		queue <- raw
 	}
 }
 

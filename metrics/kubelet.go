@@ -1,8 +1,10 @@
 package metrics
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
@@ -126,11 +128,13 @@ func NewKubelet(
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
 	scanner *scanner.Scanner,
-) ([]*Metrics, error) {
+) ([]*Metrics, map[string]interface{}, error) {
 	kubelet.collectGarbage()
 
 	metricsMutex := &sync.Mutex{}
 	metrics := []*Metrics{}
+	rawMutex := &sync.Mutex{}
+	rawResponses := map[string]interface{}{}
 
 	getKey := func(
 		entity string,
@@ -272,6 +276,12 @@ func (kubelet *Kubelet) GetMetrics(
 
 	}
 
+	addRawResponse := func(nodeID uuid.UUID, rawResponse map[string]interface{}) {
+		rawMutex.Lock()
+		defer rawMutex.Unlock()
+		rawResponses[nodeID.String()] = rawResponse
+	}
+
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes := scanner.GetNodes()
 
@@ -355,11 +365,25 @@ func (kubelet *Kubelet) GetMetrics(
 			}
 			defer summaryResponse.Body.Close()
 
-			err = json.NewDecoder(summaryResponse.Body).Decode(&summary)
+			summaryBytes, err := ioutil.ReadAll(summaryResponse.Body)
+			if err != nil {
+				return karma.Format(err,
+					"{kubelet} unable to read summary response",
+				)
+			}
+			var rawSummary interface{}
+			err = json.Unmarshal(bytes.NewBuffer(summaryBytes).Bytes(), &rawSummary)
+			if err != nil {
+				kubelet.Errorf(
+					err,
+					"{kubelet} unable to unmarshal raw summary response",
+				)
+			}
+			err = json.Unmarshal(bytes.NewBuffer(summaryBytes).Bytes(), &summary)
 			if err != nil {
 				return karma.Format(
 					err,
-					"{kubelet} unable to decode summary",
+					"{kubelet} unable to unmarshal summary response",
 				)
 			}
 
@@ -570,7 +594,23 @@ func (kubelet *Kubelet) GetMetrics(
 				return err
 			}
 			defer cadvisorResponse.Body.Close()
-			cadvisor, err := DecodeCAdvisor(cadvisorResponse.Body)
+
+			cadvisorBytes, err := ioutil.ReadAll(cadvisorResponse.Body)
+			if err != nil {
+				return karma.Format(err,
+					"{kubelet} unable to read cadvisor response",
+				)
+			}
+			var rawCadvisor interface{}
+			err = json.Unmarshal(bytes.NewBuffer(cadvisorBytes).Bytes(), &rawCadvisor)
+			if err != nil {
+				kubelet.Errorf(
+					err,
+					"{kubelet} unable to unmarshal cadvisor raw response",
+				)
+			}
+
+			cadvisor, err := DecodeCAdvisor(ioutil.NopCloser(bytes.NewBuffer(cadvisorBytes)))
 
 			for _, metric := range []struct {
 				Name string
@@ -600,6 +640,11 @@ func (kubelet *Kubelet) GetMetrics(
 					}
 				}
 			}
+
+			addRawResponse(node.ID, map[string]interface{}{
+				"summary":  rawSummary,
+				"cadvisor": rawCadvisor,
+			})
 
 			return nil
 		},
@@ -697,7 +742,7 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	return result, nil
+	return result, rawResponses, nil
 }
 
 func (kubelet *Kubelet) collectGarbage() {
