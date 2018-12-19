@@ -150,6 +150,38 @@ jobs:
             push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID}
             push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD}
 
+      - deploy:
+          name: Build image & Push to GCR Registry
+          command: |
+            if [[ ! "$SHOULD_PUSH" ]]; then
+              echo :: no push
+
+              exit 0
+            fi
+
+            cd $SOURCE_PATH
+
+            push_to_gcr() {
+              GCLOUD_SERVICE_KEY=$1
+              GOOGLE_COMPUTE_ZONE=$2
+              GOOGLE_PROJECT_ID=$3
+
+              echo "pushing to GCP  $GOOGLE_PROJECT_ID"
+              gcloud --quiet components update
+              echo $GCLOUD_SERVICE_KEY | base64 -d - | gcloud auth activate-service-account --key-file=-
+              gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
+              gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
+              gcloud auth configure-docker
+              docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2 -f Dockerfile .
+              gcloud docker -- push gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2
+            }
+
+            if [[ "$CIRCLE_BRANCH" == "stable" ]]; then
+              push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD}
+            else
+              push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID}
+            fi
+
 
 
 
