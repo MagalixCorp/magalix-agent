@@ -45,17 +45,6 @@ const (
 	TypeSysContainer = "sys_container"
 )
 
-func nextTick(interval time.Duration) <-chan time.Time {
-	if time.Hour%interval == 0 {
-		now := time.Now()
-		// TODO: sub seconds
-		nanos := time.Second*time.Duration(now.Second()) + time.Minute*time.Duration(now.Minute())
-		next := interval - nanos%interval
-		return time.After(next)
-	}
-	return time.After(interval)
-}
-
 func watchMetrics(
 	client *client.Client,
 	source MetricsSource,
@@ -70,9 +59,7 @@ func watchMetrics(
 	go sendRawMetrics(client, rawMetricsPipe)
 	defer close(rawMetricsPipe)
 
-	ticker := nextTick(interval)
-	for {
-		<-ticker
+	ticker := utils.NewTicker(interval, func() {
 		metrics, rawMetrics, err := source.GetMetrics(scanner)
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
@@ -83,8 +70,8 @@ func watchMetrics(
 		for i := 0; i < len(metrics); i += limit {
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 		}
-		ticker = nextTick(interval)
-	}
+	})
+	ticker.Start(true, true)
 }
 
 func min(a, b int) int {

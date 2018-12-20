@@ -153,7 +153,7 @@ func (executor *Executor) Init() {
 
 func (executor *Executor) watchOOM() {
 	stopped := false
-	scanner := executor.scanner.WaitForNextScan()
+	scanner := executor.scanner.WaitForNextTick()
 	// a set of uuids
 	uuids := make(map[uuid.UUID]struct{})
 	for !stopped {
@@ -161,7 +161,7 @@ func (executor *Executor) watchOOM() {
 		case oomKilled := <-executor.oomKilled:
 			uuids[oomKilled] = struct{}{}
 		case <-scanner:
-			scanner = executor.scanner.WaitForNextScan()
+			scanner = executor.scanner.WaitForNextTick()
 			for oomKilled := range uuids {
 				uuid := oomKilled
 				if container, service, application, ok := executor.scanner.FindContainerByID(
