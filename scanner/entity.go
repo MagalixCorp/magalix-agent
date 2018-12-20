@@ -50,7 +50,7 @@ type Service struct {
 }
 
 // Container represents a single container controlled by a service
-// if the container belongs to a pod with no controller, an orphand pod
+// if the container belongs to a pod with no controller, an orphaned pod
 // service automatically gets created as a parent
 type Container struct {
 	Entity
