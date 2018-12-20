@@ -544,7 +544,7 @@ func (kube *Kube) GetDeployments() (*kbeta2.DeploymentList, error) {
 	return deployments, nil
 }
 
-// GetStatefulSets get statuful sets
+// GetStatefulSets get stateful sets
 func (kube *Kube) GetStatefulSets() (
 	*kbeta2.StatefulSetList, error,
 ) {
