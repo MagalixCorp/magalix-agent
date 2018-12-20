@@ -66,7 +66,7 @@ Options:
   --kubelet-backoff-sleep <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
-  --kubelet-backoff-max-retries <retries>    Max reties of backoff policy, then consider failed.
+  --kubelet-backoff-max-retries <retries>    Max retries of backoff policy, then consider failed.
                                               [default: 5]
   --metrics-interval <duration>              Metrics request and send interval.
                                               [default: 1m]
