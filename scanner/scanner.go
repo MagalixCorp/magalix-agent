@@ -827,7 +827,7 @@ func (scanner *Scanner) FindContainerWithParents(
 }
 
 // FindContainerByPodUIDContainerName find application, service, container id
-// and pod name from kubernets pod id and container name
+// and pod name from kubernetes pod id and container name
 func (scanner *Scanner) FindContainerByPodUIDContainerName(
 	podUID string,
 	containerName string,
