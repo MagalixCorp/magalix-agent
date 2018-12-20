@@ -43,7 +43,7 @@ type Executor struct {
 	decisionsChan chan *proto.PacketDecision
 }
 
-// InitExecutor creates a new excecutor then starts it
+// InitExecutor creates a new executor then starts it
 func InitExecutor(
 	client *client.Client,
 	kube *kuber.Kube,
@@ -57,7 +57,7 @@ func InitExecutor(
 	return e
 }
 
-// NewExecutor creates a new excecutor
+// NewExecutor creates a new executor
 func NewExecutor(
 	client *client.Client,
 	kube *kuber.Kube,
