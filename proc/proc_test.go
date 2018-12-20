@@ -837,7 +837,7 @@ func results(args ...interface{}) []result {
 				continue
 			}
 
-			panic("unexepected status reason: " + argReason)
+			panic("unexpected status reason: " + argReason)
 		}
 
 		if arg == nil {
