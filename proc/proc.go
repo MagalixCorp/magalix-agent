@@ -255,7 +255,7 @@ func (proc *Proc) handleReplicaSpec(spec ReplicaSpec) {
 	proc.health.Resolve("replica", "get", "state")
 
 	// TODO: add validation for spec.Replicas > 0
-	// does kubernetes guaruantees that?
+	// does kubernetes guarantees that?
 
 	proc.writeEvent(
 		watcher.NewEvent(
