@@ -42,6 +42,8 @@ type Scanner struct {
 	history History
 	mutex   *sync.Mutex
 
+	optInAnalysisData bool
+
 	dones []chan struct{}
 }
 
@@ -52,6 +54,7 @@ func InitScanner(
 	skipNamespaces []string,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
+	optInAnalysisData bool,
 ) *Scanner {
 	scanner := &Scanner{
 		client:         client,
@@ -61,6 +64,8 @@ func InitScanner(
 		accountID:      accountID,
 		clusterID:      clusterID,
 		history:        NewHistory(),
+
+		optInAnalysisData: optInAnalysisData,
 
 		mutex: &sync.Mutex{},
 		dones: make([]chan struct{}, 0),
@@ -96,7 +101,7 @@ func (scanner *Scanner) scanNodes() {
 		scanner.nodesLastScan = time.Now()
 
 		scanner.SendNodes(nodes)
-		scanner.client.SendRaw(map[string]interface{}{
+		scanner.SendAnalysisData(map[string]interface{}{
 			"nodes": nodeList,
 		})
 
@@ -169,7 +174,7 @@ func (scanner *Scanner) scanApplications() {
 		scanner.appsLastScan = time.Now()
 
 		scanner.SendApplications(apps)
-		scanner.client.SendRaw(rawResources)
+		scanner.SendAnalysisData(rawResources)
 
 		scanner.logger.Infof(
 			nil,
