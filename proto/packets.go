@@ -29,7 +29,7 @@ var (
 
 		new(kv1.NodeList),
 		new(kv1.LimitRangeList),
-		new([]kv1.Pod),
+		new(kv1.PodList),
 
 		new(v1beta1.CronJobList),
 

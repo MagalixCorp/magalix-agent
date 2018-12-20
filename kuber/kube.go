@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 
-	"github.com/MagalixCorp/magalix-agent/client"
+	"os"
+	"regexp"
+
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	kbeta2 "k8s.io/api/apps/v1beta2"
@@ -22,6 +23,9 @@ import (
 	kcore "k8s.io/client-go/kubernetes/typed/core/v1"
 	krest "k8s.io/client-go/rest"
 	certutil "k8s.io/client-go/util/cert"
+
+	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/proto"
 )
 
 const (
@@ -58,6 +62,16 @@ type ContainerResourcesRequirements struct {
 type TotalResources struct {
 	Replicas   *int
 	Containers []ContainerResourcesRequirements
+}
+
+type Resource struct {
+	Namespace      string
+	Name           string
+	Kind           string
+	Annotations    map[string]string
+	ReplicasStatus proto.ReplicasStatus
+	Containers     []kv1.Container
+	PodRegexp      *regexp.Regexp
 }
 
 func InitKubernetes(
@@ -172,10 +186,270 @@ func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
 	return nodes, nil
 }
 
+func (kube *Kube) GetResources() (
+	pods []kv1.Pod,
+	limitRanges []kv1.LimitRange,
+	resources []Resource,
+	rawResources map[string]interface{},
+) {
+	controllers, err := kube.GetReplicationControllers()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get replication controllers",
+		)
+	}
+
+	podList, err := kube.GetPods()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get pods",
+		)
+	}
+
+	deployments, err := kube.GetDeployments()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get deployments",
+		)
+	}
+
+	statefulSets, err := kube.GetStatefulSets()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get statefulSets",
+		)
+	}
+
+	daemonSets, err := kube.GetDaemonSets()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get daemonSets",
+		)
+	}
+
+	replicaSets, err := kube.GetReplicaSets()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get replicasets",
+		)
+	}
+
+	cronJobs, err := kube.GetCronJobs()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get cron jobs",
+		)
+	}
+
+	limitRangeList, err := kube.GetLimitRanges()
+	if err != nil {
+		kube.logger.Errorf(
+			err,
+			"unable to get limitRanges",
+		)
+	}
+
+	rawResources = map[string]interface{}{
+		"pods":         podList,
+		"deployments":  deployments,
+		"statefulSets": statefulSets,
+		"daemonSets":   daemonSets,
+		"replicaSets":  replicaSets,
+		"cronJobs":     cronJobs,
+		"limitRanges":  limitRangeList,
+	}
+
+	if podList != nil {
+		pods = podList.Items
+		for _, pod := range pods {
+			if len(pod.OwnerReferences) > 0 {
+				continue
+			}
+			resources = append(resources, Resource{
+				Kind:       "OrphanPod",
+				Namespace:  pod.Namespace,
+				Name:       pod.Name,
+				Containers: pod.Spec.Containers,
+				PodRegexp: regexp.MustCompile(
+					fmt.Sprintf(
+						"^%s$",
+						regexp.QuoteMeta(pod.Name),
+					),
+				),
+				ReplicasStatus: proto.ReplicasStatus{
+					Desired:   newInt32Pointer(1),
+					Ready:     newInt32Pointer(1),
+					Available: newInt32Pointer(1),
+				},
+			})
+		}
+	}
+
+	if controllers != nil {
+		for _, controller := range controllers.Items {
+			resources = append(resources, Resource{
+				Kind:        "ReplicationController",
+				Annotations: controller.Annotations,
+				Namespace:   controller.Namespace,
+				Name:        controller.Name,
+				Containers:  controller.Spec.Template.Spec.Containers,
+				PodRegexp: regexp.MustCompile(
+					fmt.Sprintf(
+						"^%s-[^-]+$",
+						regexp.QuoteMeta(controller.Name),
+					),
+				),
+				ReplicasStatus: proto.ReplicasStatus{
+					Desired:   newInt32Pointer(controller.Status.Replicas),
+					Ready:     newInt32Pointer(controller.Status.ReadyReplicas),
+					Available: newInt32Pointer(controller.Status.AvailableReplicas),
+				},
+			})
+		}
+	}
+
+	if deployments != nil {
+		for _, deployment := range deployments.Items {
+			resources = append(resources, Resource{
+				Kind:        "Deployment",
+				Annotations: deployment.Annotations,
+				Namespace:   deployment.Namespace,
+				Name:        deployment.Name,
+				Containers:  deployment.Spec.Template.Spec.Containers,
+				PodRegexp: regexp.MustCompile(
+					fmt.Sprintf(
+						"^%s-[^-]+-[^-]+$",
+						regexp.QuoteMeta(deployment.Name),
+					),
+				),
+				ReplicasStatus: proto.ReplicasStatus{
+					Desired:   newInt32Pointer(deployment.Status.Replicas),
+					Ready:     newInt32Pointer(deployment.Status.ReadyReplicas),
+					Available: newInt32Pointer(deployment.Status.AvailableReplicas),
+				},
+			})
+		}
+	}
+
+	if statefulSets != nil {
+		for _, set := range statefulSets.Items {
+			resources = append(resources, Resource{
+				Kind:        "StatefulSet",
+				Annotations: set.Annotations,
+				Namespace:   set.Namespace,
+				Name:        set.Name,
+				Containers:  set.Spec.Template.Spec.Containers,
+				PodRegexp: regexp.MustCompile(
+					fmt.Sprintf(
+						"^%s-([0-9]+)$",
+						regexp.QuoteMeta(set.Name),
+					),
+				),
+				ReplicasStatus: proto.ReplicasStatus{
+					Desired:   newInt32Pointer(set.Status.Replicas),
+					Ready:     newInt32Pointer(set.Status.ReadyReplicas),
+					Available: newInt32Pointer(set.Status.CurrentReplicas),
+				},
+			})
+		}
+	}
+
+	if daemonSets != nil {
+		for _, daemon := range daemonSets.Items {
+			resources = append(resources, Resource{
+				Kind:        "DaemonSet",
+				Annotations: daemon.Annotations,
+				Namespace:   daemon.Namespace,
+				Name:        daemon.Name,
+				Containers:  daemon.Spec.Template.Spec.Containers,
+				PodRegexp: regexp.MustCompile(
+					fmt.Sprintf(
+						"^%s-[^-]+$",
+						regexp.QuoteMeta(daemon.Name),
+					),
+				),
+				ReplicasStatus: proto.ReplicasStatus{
+					Desired:   newInt32Pointer(daemon.Status.DesiredNumberScheduled),
+					Ready:     newInt32Pointer(daemon.Status.NumberReady),
+					Available: newInt32Pointer(daemon.Status.NumberAvailable),
+				},
+			})
+		}
+	}
+
+	if replicaSets != nil {
+		for _, replicaSet := range replicaSets.Items {
+			// skipping when it is a part of another service
+			if len(replicaSet.GetOwnerReferences()) > 0 {
+				continue
+			}
+			resources = append(resources, Resource{
+				Kind:        "ReplicaSet",
+				Annotations: replicaSet.Annotations,
+				Namespace:   replicaSet.Namespace,
+				Name:        replicaSet.Name,
+				Containers:  replicaSet.Spec.Template.Spec.Containers,
+				PodRegexp: regexp.MustCompile(
+					fmt.Sprintf(
+						"^%s-[^-]+$",
+						regexp.QuoteMeta(replicaSet.Name),
+					),
+				),
+				ReplicasStatus: proto.ReplicasStatus{
+					Desired:   newInt32Pointer(replicaSet.Status.Replicas),
+					Ready:     newInt32Pointer(replicaSet.Status.ReadyReplicas),
+					Available: newInt32Pointer(replicaSet.Status.AvailableReplicas),
+				},
+			})
+		}
+	}
+
+	if cronJobs != nil {
+		for _, cronJob := range cronJobs.Items {
+			activeCount := int32(len(cronJob.Status.Active))
+			resources = append(resources, Resource{
+				Kind:        "CronJob",
+				Annotations: cronJob.Annotations,
+				Namespace:   cronJob.Namespace,
+				Name:        cronJob.Name,
+				Containers:  cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers,
+				PodRegexp: regexp.MustCompile(
+					fmt.Sprintf(
+						"^%s-[^-]+-[^-]+$",
+						regexp.QuoteMeta(cronJob.Name),
+					),
+				),
+				ReplicasStatus: proto.ReplicasStatus{
+					Ready: newInt32Pointer(activeCount),
+				},
+			})
+		}
+	}
+
+	if limitRangeList != nil {
+		limitRanges = limitRangeList.Items
+	}
+
+	return
+}
+
+func newInt32Pointer(val int32) *int32 {
+	res := new(int32)
+	*res = val
+	return res
+}
+
 // GetPods get kubernetes pods
-func (kube *Kube) GetPods() ([]kv1.Pod, error) {
+func (kube *Kube) GetPods() (*kv1.PodList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of pods")
-	pods, err := kube.core.Pods("").List(kmeta.ListOptions{})
+	podList, err := kube.core.Pods("").List(kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -183,7 +457,7 @@ func (kube *Kube) GetPods() ([]kv1.Pod, error) {
 		)
 	}
 
-	return pods.Items, nil
+	return podList, nil
 }
 
 // GetReplicationControllers get replication controllers
