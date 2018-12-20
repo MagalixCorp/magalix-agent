@@ -29,7 +29,8 @@ import (
 )
 
 const (
-	milliCore = 1000
+	milliCore   = 1000
+	maskedValue = "**MASKED**"
 )
 
 // Kube kube struct
@@ -72,6 +73,18 @@ type Resource struct {
 	ReplicasStatus proto.ReplicasStatus
 	Containers     []kv1.Container
 	PodRegexp      *regexp.Regexp
+}
+
+type RawResources struct {
+	PodList        *kv1.PodList
+	LimitRangeList *kv1.LimitRangeList
+
+	CronJobList *kbeta1.CronJobList
+
+	DeploymentList  *kbeta2.DeploymentList
+	StatefulSetList *kbeta2.StatefulSetList
+	DaemonSetList   *kbeta2.DaemonSetList
+	ReplicaSetList  *kbeta2.ReplicaSetList
 }
 
 func InitKubernetes(
@@ -474,6 +487,12 @@ func (kube *Kube) GetReplicationControllers() (
 		)
 	}
 
+	if controllers != nil {
+		for _, item := range controllers.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
+	}
+
 	return controllers, nil
 }
 
@@ -486,6 +505,12 @@ func (kube *Kube) GetDeployments() (*kbeta2.DeploymentList, error) {
 			err,
 			"unable to retrieve deployments from all namespaces",
 		)
+	}
+
+	if deployments != nil {
+		for _, item := range deployments.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
 	}
 
 	return deployments, nil
@@ -506,6 +531,12 @@ func (kube *Kube) GetStatefulSets() (
 		)
 	}
 
+	if statefulSets != nil {
+		for _, item := range statefulSets.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
+	}
+
 	return statefulSets, nil
 }
 
@@ -522,6 +553,12 @@ func (kube *Kube) GetDaemonSets() (
 			err,
 			"unable to retrieve daemon sets from all namespaces",
 		)
+	}
+
+	if daemonSets != nil {
+		for _, item := range daemonSets.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
 	}
 
 	return daemonSets, nil
@@ -542,6 +579,12 @@ func (kube *Kube) GetReplicaSets() (
 		)
 	}
 
+	if replicaSets != nil {
+		for _, item := range replicaSets.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
+	}
+
 	return replicaSets, nil
 }
 
@@ -558,6 +601,12 @@ func (kube *Kube) GetCronJobs() (
 			err,
 			"unable to retrieve cron jobs from all namespaces",
 		)
+	}
+
+	if cronJobs != nil {
+		for _, item := range cronJobs.Items {
+			maskPodSpec(&item.Spec.JobTemplate.Spec.Template.Spec)
+		}
 	}
 
 	return cronJobs, nil
@@ -647,4 +696,40 @@ func (kube *Kube) SetResources(kind string, name string, namespace string, total
 
 	_, err = res.Get()
 	return err
+}
+
+func maskPodSpec(podSpec *kv1.PodSpec) {
+	podSpec.Containers = maskContainers(podSpec.Containers)
+	podSpec.InitContainers = maskContainers(podSpec.InitContainers)
+
+}
+
+func maskContainers(containers []kv1.Container) (
+	masked []kv1.Container,
+) {
+	for _, container := range containers {
+		container.Env = maskEnvVars(container.Env)
+		container.Args = maskArgs(container.Args)
+		masked = append(masked, container)
+	}
+	return
+}
+
+func maskEnvVars(env [] kv1.EnvVar) (masked [] kv1.EnvVar) {
+	masked = make([]kv1.EnvVar, len(env))
+	for i, envVar := range env {
+		if envVar.Value != "" {
+			envVar.Value = maskedValue
+		}
+		masked[i] = envVar
+	}
+	return
+}
+
+func maskArgs(args []string) (masked []string) {
+	masked = make([]string, len(args))
+	for i := range args {
+		masked[i] = maskedValue
+	}
+	return
 }
