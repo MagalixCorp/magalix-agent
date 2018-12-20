@@ -6,7 +6,7 @@ import (
 	uuid "github.com/MagalixTechnologies/uuid-go"
 )
 
-// States global state for the pricessor
+// States global state for the processor
 type States struct {
 	apps map[uuid.UUID]*AppState
 	*sync.Mutex
