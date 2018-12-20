@@ -200,7 +200,7 @@ func (syncer *Syncer) isProcessed(resource string) bool {
 	return found
 }
 
-// InformResource set version and sunc resource
+// InformResource set version and sync resource
 func (syncer *Syncer) InformResource(resource string, version string) {
 	syncer.setVersion(resource, version)
 
