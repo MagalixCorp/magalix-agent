@@ -173,7 +173,7 @@ jobs:
               gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
               gcloud auth configure-docker
               docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2 -f Dockerfile .
-              gcloud docker -- push gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2
+              docker push gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2
             }
 
             if [[ "$CIRCLE_BRANCH" == "master" ]]; then
