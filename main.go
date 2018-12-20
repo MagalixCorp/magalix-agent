@@ -85,7 +85,7 @@ Options:
   --timeout-proto-reconnect <duration>       Timeout between reconneting retries.
                                               [default: 1s]
   --timeout-proto-backoff <duration>         Timeout of backoff policy.
-                                              Timeout will be multipled from 1 to 10.
+                                              Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
   --opt-in-analysis-data                     Send anonymous data for analysis.
   --analysis-data-interval <duration>        Analysis data send interval.
