@@ -82,7 +82,7 @@ Options:
                                               [default: 60s]
   --timeout-proto-read <duration>            Timeout to read a message from websocket channel.
                                               [default: 60s]
-  --timeout-proto-reconnect <duration>       Timeout between reconneting retries.
+  --timeout-proto-reconnect <duration>       Timeout between reconnecting retries.
                                               [default: 1s]
   --timeout-proto-backoff <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
