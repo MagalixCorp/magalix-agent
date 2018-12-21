@@ -76,7 +76,7 @@ jobs:
               exit 0
             fi
 
-            if [[ "$CIRCLE_BRANCH" == "master" || "$CIRCLE_BRANCH" == "stable" ]]
+            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" ]]
             then
               echo 'export SHOULD_PUSH=true' >> $BASH_ENV
             else
@@ -123,7 +123,7 @@ jobs:
 
             docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_PASSWORD"
 
-            if [[ "$CIRCLE_BRANCH" == "stable" ]]; then
+            if [[ "$CIRCLE_BRANCH" == "master" ]]; then
               export VERSION=latest
             else
               export VERSION=dev
@@ -176,7 +176,7 @@ jobs:
               gcloud docker -- push gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2
             }
 
-            if [[ "$CIRCLE_BRANCH" == "stable" ]]; then
+            if [[ "$CIRCLE_BRANCH" == "master" ]]; then
               push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD}
             else
               push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID}
