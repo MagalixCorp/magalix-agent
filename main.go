@@ -3,20 +3,20 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/executor"
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"os"
 	"strings"
 
 	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/events"
+	"github.com/MagalixCorp/magalix-agent/executor"
+	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/metrics"
 	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
 	"github.com/reconquest/karma-go"
-	"os"
 )
 
 var usage = `agent - magalix services agent.
@@ -77,6 +77,7 @@ Options:
   --disable-metrics                          Disable metrics collecting and sending.
   --disable-events                           Disable events collecting and sending.
   --dry-run                                  Disable decision execution.
+  --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file

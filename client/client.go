@@ -46,6 +46,7 @@ type Client struct {
 
 	authorized bool
 
+	shouldSendLogs  bool
 	logsQueue       chan proto.PacketLogItem
 	logsQueueWorker *sync.WaitGroup
 
@@ -66,6 +67,7 @@ func newClient(
 	secret []byte,
 	timeouts timeouts,
 	parentLogger *log.Logger,
+	shouldSendLogs bool,
 ) *Client {
 	url, err := url.Parse(address)
 	if err != nil {
@@ -74,10 +76,11 @@ func newClient(
 	client := &Client{
 		parentLogger: parentLogger,
 
-		address:   address,
-		AccountID: accountID,
-		ClusterID: clusterID,
-		secret:    secret,
+		address:        address,
+		AccountID:      accountID,
+		ClusterID:      clusterID,
+		secret:         secret,
+		shouldSendLogs: shouldSendLogs,
 
 		channel: channel.NewClient(*url, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
@@ -198,6 +201,7 @@ func InitClient(
 			protoBackoff:   utils.MustParseDuration(args, "--timeout-proto-backoff"),
 		},
 		parentLogger,
+		!args["--no-send-logs"].(bool),
 	)
 	go sign.Notify(func(os.Signal) bool {
 		if !client.IsReady() {

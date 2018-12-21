@@ -10,8 +10,6 @@ import (
 	"github.com/reconquest/karma-go"
 )
 
-const sendlogs = false
-
 var _ structured.Sender = ((*Client)(nil)).sendLogs
 
 func (client *Client) sendLogs(
@@ -77,7 +75,7 @@ func (client *Client) watchLogsQueue() {
 
 	flush:
 
-		if sendlogs {
+		if client.shouldSendLogs {
 			client.WithBackoff(func() error {
 				client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
 
