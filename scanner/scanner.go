@@ -42,7 +42,8 @@ type Scanner struct {
 	history History
 	mutex   *sync.Mutex
 
-	optInAnalysisData bool
+	optInAnalysisData  bool
+	analysisDataSender func(args ...interface{})
 
 	dones []chan struct{}
 }
@@ -55,6 +56,7 @@ func InitScanner(
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
 	optInAnalysisData bool,
+	analysisDataInterval time.Duration,
 ) *Scanner {
 	scanner := &Scanner{
 		client:         client,
@@ -69,6 +71,20 @@ func InitScanner(
 
 		mutex: &sync.Mutex{},
 		dones: make([]chan struct{}, 0),
+	}
+	if optInAnalysisData {
+		scanner.analysisDataSender = utils.Throttle(analysisDataInterval, func(args ...interface{}) {
+			if data, ok := args[0].(map[string]interface{}); ok {
+				scanner.client.SendRaw(data)
+			} else {
+				scanner.logger.Error(
+					"invalid raw data type! Please contact developer",
+				)
+			}
+		})
+	} else {
+		// noop function
+		scanner.analysisDataSender = func(args ...interface{}) {}
 	}
 	scanner.Ticker = utils.NewTicker(intervalScanner, scanner.scan)
 	scanner.Start(true, false)

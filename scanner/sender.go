@@ -23,7 +23,5 @@ func (scanner *Scanner) SendNodes(nodes []kuber.Node) {
 
 // SendAnalysisData sends analysis data if the user opts in
 func (scanner *Scanner) SendAnalysisData(data map[string]interface{}) {
-	if scanner.optInAnalysisData {
-		scanner.client.SendRaw(data)
-	}
+	scanner.analysisDataSender(data)
 }
