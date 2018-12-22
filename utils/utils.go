@@ -194,3 +194,24 @@ func InSkipNamespace(skipNamespacePatterns []string, namespace string) bool {
 
 	return false
 }
+
+func Throttle(interval time.Duration, fn func(args ...interface{})) func(args ...interface{}) {
+	nextTick := time.Now().
+		Truncate(time.Second).
+		Truncate(interval).
+		Add(interval)
+
+	fmt.Println(nextTick.Format(time.RFC3339))
+
+	return func(args ...interface{}) {
+		now := time.Now()
+		if now.After(nextTick) || now.Equal(nextTick) {
+			fn(args...)
+			nextTick = now.
+				Truncate(time.Second).
+				Truncate(interval).
+				Add(interval)
+			fmt.Println(nextTick.Format(time.RFC3339))
+		}
+	}
+}
