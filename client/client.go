@@ -128,12 +128,13 @@ func (client *Client) WaitForConnection(timeout time.Duration) bool {
 }
 
 func (client *Client) WithBackoff(fn func() error) {
-	client.withBackoffLimit(fn, int(^uint(0)>>1))
+	client.WithBackoffLimit(fn, int(^uint(0)>>1))
 }
 
-func (client *Client) withBackoffLimit(fn func() error, limit int) {
+func (client *Client) WithBackoffLimit(fn func() error, limit int) {
+	var err error
 	for try := 0; try < limit; try++ {
-		err := fn()
+		err = fn()
 		if err == nil {
 			break
 		}
@@ -147,7 +148,16 @@ func (client *Client) withBackoffLimit(fn func() error, limit int) {
 			timeout,
 		)
 
-		time.Sleep(timeout)
+		if try+1 < limit {
+			time.Sleep(timeout)
+		}
+	}
+	if err != nil {
+		client.Errorf(
+			karma.Describe("limit", limit).Reason(err),
+			"unhandled error occurred, retires limit %v is exceeded",
+			limit,
+		)
 	}
 }
 

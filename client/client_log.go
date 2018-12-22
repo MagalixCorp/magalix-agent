@@ -76,7 +76,8 @@ func (client *Client) watchLogsQueue() {
 	flush:
 
 		if client.shouldSendLogs {
-			client.WithBackoff(func() error {
+			// retry for 5 times then drop the packet
+			client.WithBackoffLimit(func() error {
 				client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
 
 				var response []byte
@@ -89,7 +90,7 @@ func (client *Client) watchLogsQueue() {
 				}
 
 				return nil
-			})
+			}, 5)
 
 			if fatal {
 				client.Done(1)
