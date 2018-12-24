@@ -27,6 +27,7 @@ const (
 	PacketKindBye PacketKind = "bye"
 
 	PacketKindDecision PacketKind = "decision"
+	PacketKindRestart  PacketKind = "restart"
 
 	PacketKindRawStoreRequest PacketKind = "raw/store"
 )

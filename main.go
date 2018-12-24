@@ -11,6 +11,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/executor"
 	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/metrics"
+	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -171,13 +172,23 @@ func main() {
 
 	oomKilled := make(chan uuid.UUID)
 
-	executor.InitExecutor(
+	e := executor.InitExecutor(
 		gwClient,
 		kube,
 		entityScanner,
 		oomKilled,
 		args,
 	)
+
+	gwClient.AddListener(proto.PacketKindDecision, e.Listener)
+	gwClient.AddListener(proto.PacketKindRestart, func(in []byte) (out []byte, err error) {
+		var restart proto.PacketRestart
+		if err = proto.Decode(in, &restart); err != nil {
+			return
+		}
+		defer gwClient.Done(restart.Staus)
+		return nil, nil
+	})
 
 	if eventsEnabled {
 		events.InitEvents(

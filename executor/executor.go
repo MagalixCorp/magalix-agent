@@ -3,9 +3,9 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/kuber"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixTechnologies/log-go"
@@ -61,7 +61,7 @@ func NewExecutor(
 	return executor
 }
 
-func (executor *Executor) listener(in []byte) (out []byte, err error) {
+func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	var decisions proto.PacketDecisions
 	if err = proto.Decode(in, &decisions); err != nil {
 		return
@@ -148,7 +148,6 @@ func (executor *Executor) listener(in []byte) (out []byte, err error) {
 
 // Init adds decision listener and starts oom watcher
 func (executor *Executor) Init() {
-	executor.client.AddListener(proto.PacketKindDecision, executor.listener)
 	go executor.watchOOM()
 }
 

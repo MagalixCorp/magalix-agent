@@ -6,14 +6,14 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
-	"k8s.io/api/apps/v1beta2"
-	"k8s.io/api/batch/v1beta1"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/kovetskiy/lorg"
 	satori "github.com/satori/go.uuid"
+	"k8s.io/api/apps/v1beta2"
+	"k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 )
 
@@ -38,8 +38,8 @@ var (
 		new(v1beta2.ReplicaSetList),
 		new(v1beta2.DeploymentList),
 
-		new(map[string]interface {}),
-		new([]interface {}),
+		new(map[string]interface{}),
+		new([]interface{}),
 	}
 )
 
@@ -258,6 +258,10 @@ type PacketDecisions []Decision
 type PacketDecisionsResponse struct {
 	Executed int `json:"executed"`
 	Failed   int `json:"failed"`
+}
+
+type PacketRestart struct {
+	Staus int `json:"status"`
 }
 
 type PacketRaw map[string]interface{}
