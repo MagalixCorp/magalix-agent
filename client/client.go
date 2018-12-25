@@ -97,7 +97,6 @@ func newClient(
 	}
 
 	client.initLogger()
-	client.initLogsQueue()
 
 	return client
 }

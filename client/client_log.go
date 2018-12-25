@@ -32,8 +32,11 @@ func (client *Client) initLogger() {
 	// Note that parentLogger is the global stderr
 	client.Logger.SetDisplayer(client.parentLogger.Display)
 
-	// but as sender we will use client's packet logs
-	client.Logger.SetSender(client.sendLogs)
+	if client.shouldSendLogs {
+		// as sender we will use client's packet logs
+		client.Logger.SetSender(client.sendLogs)
+		client.initLogsQueue()
+	}
 
 	client.Logger.Log.SetExiter(func(int) {
 		return
@@ -74,28 +77,25 @@ func (client *Client) watchLogsQueue() {
 		}
 
 	flush:
+		// retry for 5 times then drop the packet
+		client.WithBackoffLimit(func() error {
+			client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
 
-		if client.shouldSendLogs {
-			// retry for 5 times then drop the packet
-			client.WithBackoffLimit(func() error {
-				client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
-
-				var response []byte
-				err := client.Send(proto.PacketKindLogs, logs, &response)
-				if err != nil {
-					return karma.Format(
-						err,
-						"unable to send logs packet",
-					)
-				}
-
-				return nil
-			}, 5)
-
-			if fatal {
-				client.Done(1)
-				goto done
+			var response []byte
+			err := client.Send(proto.PacketKindLogs, logs, &response)
+			if err != nil {
+				return karma.Format(
+					err,
+					"unable to send logs packet",
+				)
 			}
+
+			return nil
+		}, 5)
+
+		if fatal {
+			client.Done(1)
+			goto done
 		}
 
 	}
