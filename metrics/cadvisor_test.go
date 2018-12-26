@@ -10,13 +10,13 @@ func TestDecodeCAdvisor(t *testing.T) {
 	tests := []struct {
 		name    string
 		in      string
-		want    CadvisorMetrics
+		want    CAdvisorMetrics
 		wantErr bool
 	}{
 		{
 			name: "test empty input",
 			in:   "",
-			want: CadvisorMetrics{},
+			want: CAdvisorMetrics{},
 		},
 		{
 			name: "test regular input",
@@ -27,7 +27,7 @@ container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/bursta
 container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/burstable/podfb95fb02-e6aa-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 4577
 container_cpu_cfs_throttled_seconds_total{container_name="",id="/kubepods/burstable/pod6b6035fb-e6a9-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 3357.740971059
 `,
-			want: CadvisorMetrics{
+			want: CAdvisorMetrics{
 				"container_cpu_cfs_throttled_periods_total": []TagsValue{
 					{
 						Tags: map[string]string{
@@ -100,7 +100,7 @@ container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/bursta
 container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/burstable/podfb95fb02-e6aa-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 4577
 container_cpu_cfs_throttled_seconds_total{container_name="",id="/kubepods/burstable/pod6b6035fb-e6a9-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 3357.740971059
 `,
-			want: CadvisorMetrics{
+			want: CAdvisorMetrics{
 				"container_cpu_cfs_throttled_periods_total": []TagsValue{
 					{
 						Tags: map[string]string{
@@ -165,7 +165,7 @@ container_cpu_cfs_throttled_seconds_total{container_name="",id="/kubepods/bursta
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DecodeCAdvisor(strings.NewReader(tt.in))
+			got, err := decodeCAdvisorResponse(strings.NewReader(tt.in))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Decode() error = %v, wantErr %v", err, tt.wantErr)
 				return
