@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"github.com/ryanuber/go-glob"
 	"os"
 	"strconv"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
+	"github.com/ryanuber/go-glob"
 )
 
 var stderr *log.Logger

@@ -128,13 +128,11 @@ func NewKubelet(
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
 	scanner *scanner.Scanner,
-) ([]*Metrics, map[string]interface{}, error) {
+) ([]*Metrics, error) {
 	kubelet.collectGarbage()
 
 	metricsMutex := &sync.Mutex{}
 	metrics := []*Metrics{}
-	rawMutex := &sync.Mutex{}
-	rawResponses := map[string]interface{}{}
 
 	getKey := func(
 		entity string,
@@ -274,12 +272,6 @@ func (kubelet *Kubelet) GetMetrics(
 			Value:     value,
 		})
 
-	}
-
-	addRawResponse := func(nodeID uuid.UUID, rawResponse map[string]interface{}) {
-		rawMutex.Lock()
-		defer rawMutex.Unlock()
-		rawResponses[nodeID.String()] = rawResponse
 	}
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
@@ -610,7 +602,7 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 
-			cadvisor, err := DecodeCAdvisor(ioutil.NopCloser(bytes.NewBuffer(cadvisorBytes)))
+			cadvisor, err := decodeCAdvisorResponse(ioutil.NopCloser(bytes.NewBuffer(cadvisorBytes)))
 
 			for _, metric := range []struct {
 				Name string
@@ -640,11 +632,6 @@ func (kubelet *Kubelet) GetMetrics(
 					}
 				}
 			}
-
-			addRawResponse(node.ID, map[string]interface{}{
-				"summary":  rawSummary,
-				"cadvisor": rawCadvisor,
-			})
 
 			return nil
 		},
@@ -742,7 +729,7 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	return result, rawResponses, nil
+	return result, nil
 }
 
 func (kubelet *Kubelet) collectGarbage() {

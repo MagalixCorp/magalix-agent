@@ -17,6 +17,26 @@ import (
 
 const limit = 1000
 
+type RawMetric struct {
+	Metric string
+
+	Account uuid.UUID
+	Cluster uuid.UUID
+	Node    uuid.UUID
+
+	Application *uuid.UUID
+	Service     *uuid.UUID
+	Container   *uuid.UUID
+
+	Tags  map[string]string
+	Value float64
+
+	Timestamp time.Time
+}
+
+// map of metric_name:list of metric points
+type RawMetrics []*RawMetric
+
 // Metrics metrics struct
 type Metrics struct {
 	Name        string
@@ -55,17 +75,33 @@ func watchMetrics(
 	go sendMetrics(client, metricsPipe)
 	defer close(metricsPipe)
 
-	rawMetricsPipe := make(chan map[string]interface{})
-	go sendRawMetrics(client, rawMetricsPipe)
-	defer close(rawMetricsPipe)
-
 	ticker := utils.NewTicker(interval, func() {
-		metrics, rawMetrics, err := source.GetMetrics(scanner)
+		metrics, err := source.GetMetrics(scanner)
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
 
-		rawMetricsPipe <- rawMetrics
+		for i := 0; i < len(metrics); i += limit {
+			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
+		}
+	})
+	ticker.Start(true, true)
+}
+
+func watchRawMetrics(
+	client *client.Client,
+	source RawSource,
+	interval time.Duration,
+) {
+	metricsPipe := make(chan RawMetrics)
+	go sendRawMetrics(client, metricsPipe)
+	defer close(metricsPipe)
+
+	ticker := utils.NewTicker(interval, func() {
+		metrics, err := source.GetRawMetrics()
+		if err != nil {
+			client.Errorf(err, "unable to retrieve metrics from sink")
+		}
 
 		for i := 0; i < len(metrics); i += limit {
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
@@ -103,9 +139,9 @@ func sendMetrics(client *client.Client, pipe chan []*Metrics) {
 	}
 }
 
-func sendRawMetrics(client *client.Client, pipe chan map[string]interface{}) {
+func sendRawMetrics(client *client.Client, pipe chan RawMetrics) {
 	queueLimit := 100
-	queue := make(chan map[string]interface{}, queueLimit)
+	queue := make(chan *RawMetrics, queueLimit)
 	defer close(queue)
 	go func() {
 		for rawMetrics := range queue {
@@ -122,7 +158,7 @@ func sendRawMetrics(client *client.Client, pipe chan map[string]interface{}) {
 			// Discard the oldest value
 			<-queue
 		}
-		queue <- raw
+		queue <- &raw
 	}
 }
 
