@@ -587,14 +587,12 @@ func (kubelet *Kubelet) GetMetrics(
 			}
 			defer cadvisorResponse.Body.Close()
 
-			cadvisorBytes, err := ioutil.ReadAll(cadvisorResponse.Body)
+			cadvisor, err := decodeCAdvisorResponse(cadvisorResponse.Body)
 			if err != nil {
 				return karma.Format(err,
 					"{kubelet} unable to read cadvisor response",
 				)
 			}
-
-			cadvisor, err := decodeCAdvisorResponse(ioutil.NopCloser(bytes.NewBuffer(cadvisorBytes)))
 
 			for _, metric := range []struct {
 				Name string
