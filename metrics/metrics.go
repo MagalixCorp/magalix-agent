@@ -75,7 +75,7 @@ func watchMetrics(
 	go sendMetrics(client, metricsPipe)
 	defer close(metricsPipe)
 
-	ticker := utils.NewTicker(interval, func() {
+	ticker := utils.NewTicker("metrics", interval, func() {
 		metrics, err := source.GetMetrics(scanner)
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
@@ -85,7 +85,7 @@ func watchMetrics(
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 		}
 	})
-	ticker.Start(true, true)
+	ticker.Start(false, true)
 }
 
 func watchRawMetrics(
@@ -97,7 +97,7 @@ func watchRawMetrics(
 	go sendRawMetrics(client, metricsPipe)
 	defer close(metricsPipe)
 
-	ticker := utils.NewTicker(interval, func() {
+	ticker := utils.NewTicker("raw-metrics", interval, func() {
 		metrics, err := source.GetRawMetrics()
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
@@ -107,7 +107,7 @@ func watchRawMetrics(
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 		}
 	})
-	ticker.Start(true, true)
+	ticker.Start(false, true)
 }
 
 func min(a, b int) int {
