@@ -73,15 +73,19 @@ func InitScanner(
 		dones: make([]chan struct{}, 0),
 	}
 	if optInAnalysisData {
-		scanner.analysisDataSender = utils.Throttle(analysisDataInterval, func(args ...interface{}) {
-			if data, ok := args[0].(map[string]interface{}); ok {
-				scanner.client.SendRaw(data)
-			} else {
-				scanner.logger.Error(
-					"invalid raw data type! Please contact developer",
-				)
-			}
-		})
+		scanner.analysisDataSender = utils.Throttle(
+			"analysis-data",
+			analysisDataInterval,
+			func(args ...interface{}) {
+				if data, ok := args[0].(map[string]interface{}); ok {
+					go scanner.client.SendRaw(data)
+				} else {
+					scanner.logger.Error(
+						"invalid raw data type! Please contact developer",
+					)
+				}
+			},
+		)
 	} else {
 		// noop function
 		scanner.analysisDataSender = func(args ...interface{}) {}
