@@ -127,10 +127,10 @@ func (client *Client) WaitForConnection(timeout time.Duration) bool {
 }
 
 func (client *Client) WithBackoff(fn func() error) {
-	client.WithBackoffLimit(fn, int(^uint(0)>>1))
+	_ = client.WithBackoffLimit(fn, int(^uint(0)>>1))
 }
 
-func (client *Client) WithBackoffLimit(fn func() error, limit int) {
+func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 	var err error
 	for try := 0; try < limit; try++ {
 		err = fn()
@@ -158,6 +158,7 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) {
 			limit,
 		)
 	}
+	return err
 }
 
 // Send sends a packet to the agent-gateway

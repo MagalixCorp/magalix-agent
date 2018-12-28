@@ -117,9 +117,16 @@ func (client *Client) sendBye(reason string) error {
 // SendRaw sends arbitrary raw data to be stored in magalix BE
 func (client *Client) SendRaw(rawResources map[string]interface{}) {
 	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}
-	client.WithBackoffLimit(func() error {
+	context := karma.Describe("timestamp", packet)
+	client.Logger.Infof(context, "sending raw data")
+	err := client.WithBackoffLimit(func() error {
 		var response proto.PacketRawResponse
 		err := client.Send(proto.PacketKindRawStoreRequest, &packet, &response)
 		return err
 	}, 10)
+	if err == nil {
+		client.Logger.Infof(context, "raw data sent")
+	} else {
+		client.Logger.Errorf(context.Reason(err), "can't send raw data")
+	}
 }
