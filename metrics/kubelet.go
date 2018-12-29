@@ -601,14 +601,6 @@ func (kubelet *Kubelet) GetMetrics(
 					"{kubelet} unable to read cadvisor response",
 				)
 			}
-			var rawCadvisor interface{}
-			err = json.Unmarshal(bytes.NewBuffer(cadvisorBytes).Bytes(), &rawCadvisor)
-			if err != nil {
-				kubelet.Errorf(
-					err,
-					"{kubelet} unable to unmarshal cadvisor raw response",
-				)
-			}
 
 			cadvisor, err := DecodeCAdvisor(ioutil.NopCloser(bytes.NewBuffer(cadvisorBytes)))
 
@@ -643,7 +635,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 			addRawResponse(node.ID, map[string]interface{}{
 				"summary":  rawSummary,
-				"cadvisor": rawCadvisor,
+				"cadvisor": cadvisorBytes,
 			})
 
 			return nil
