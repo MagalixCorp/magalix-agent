@@ -1,6 +1,7 @@
 package client
 
 import (
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"sync"
 	"time"
 
@@ -58,6 +59,12 @@ func (client *Client) watchLogsQueue() {
 
 	var fatal bool
 
+	// retry for 5 times then drop the packet
+	backoff := utils.Backoff{
+		Sleep:      client.timeouts.protoBackoff,
+		MaxRetries: 5,
+	}
+
 	for {
 		logs := proto.PacketLogs{}
 		t := time.Now()
@@ -77,21 +84,28 @@ func (client *Client) watchLogsQueue() {
 		}
 
 	flush:
-		// retry for 5 times then drop the packet
-		client.WithBackoffLimit(func() error {
-			client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
+		// NOTE: don't use client.WithBackoffLimit as it uses the client
+		// NOTE: logger which we send its logs.
+		// NOTE: If used and sending logs fails, we may be trapped
+		// NOTE: in a deadlock because the logsQueue will be full.
+		utils.WithBackoff(
+			func() error {
+				client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
 
-			var response []byte
-			err := client.Send(proto.PacketKindLogs, logs, &response)
-			if err != nil {
-				return karma.Format(
-					err,
-					"unable to send logs packet",
-				)
-			}
+				var response []byte
+				err := client.Send(proto.PacketKindLogs, logs, &response)
+				if err != nil {
+					return karma.Format(
+						err,
+						"unable to send logs packet",
+					)
+				}
 
-			return nil
-		}, 5)
+				return nil
+			},
+			backoff,
+			nil,
+		)
 
 		if fatal {
 			client.Done(1)
