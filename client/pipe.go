@@ -36,12 +36,19 @@ func (p *Pipe) Send(pack Package) int {
 	return ret
 }
 
-// Start start sending packages
-func (p *Pipe) Start() {
+// Start start multiple workers for sending packages
+func (p *Pipe) Start(workers int) {
+	for i := 0; i < workers; i++ {
+		p.start()
+	}
+}
+
+// start start a single worker
+func (p *Pipe) start() {
 	go func() {
 		for {
 			p.cond.L.Lock()
-			pack := p.storage.Peek()
+			pack := p.storage.Pop()
 			if pack == nil {
 				p.cond.Wait()
 				p.cond.L.Unlock()
@@ -49,8 +56,8 @@ func (p *Pipe) Start() {
 			}
 			p.cond.L.Unlock()
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
-			if err == nil {
-				p.storage.Ack(pack)
+			if err != nil {
+				p.storage.Add(pack)
 			}
 		}
 	}()

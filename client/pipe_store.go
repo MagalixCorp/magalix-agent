@@ -44,6 +44,9 @@ type PipeStore interface {
 	Peek() *Package
 	// Acks that a peeked package has been sent, does nothing if the package has expired
 	Ack(*Package)
+	// Pop is an atomic peek and ack
+	// returns nil in case there are no packages
+	Pop() *Package
 	// Len gets the number of pending packets
 	Len() int
 }
@@ -66,8 +69,6 @@ func (s *DefaultPipeStore) Add(pack *Package) int {
 	}
 	s.Lock()
 	defer s.Unlock()
-	pack.retries = 0
-	pack.index = -1
 	pack.time = time.Now()
 	heap.Push(s.pq, pack)
 	heap.Fix(s.pq, pack.index)
@@ -98,10 +99,23 @@ func (s *DefaultPipeStore) Add(pack *Package) int {
 	return removed
 }
 
+func (s *DefaultPipeStore) Pop() *Package {
+	s.Lock()
+	defer s.Unlock()
+	pack := s.peek()
+	if pack != nil {
+		s.ack(pack)
+	}
+	return pack
+}
+
 func (s *DefaultPipeStore) Peek() *Package {
 	s.Lock()
 	defer s.Unlock()
+	return s.peek()
+}
 
+func (s *DefaultPipeStore) peek() *Package {
 	var pack *Package
 
 	for s.pq.Len() > 0 {
@@ -131,6 +145,10 @@ func (s *DefaultPipeStore) Peek() *Package {
 func (s *DefaultPipeStore) Ack(pack *Package) {
 	s.Lock()
 	defer s.Unlock()
+	s.ack(pack)
+}
+
+func (s *DefaultPipeStore) ack(pack *Package) {
 	if pack.index >= 0 {
 		s.remove(pack)
 	}

@@ -104,8 +104,9 @@ func (eventer *Eventer) sendStatus(
 		Kind:        proto.PacketKindStatusStoreRequest,
 		ExpiryTime:  utils.After(2 * time.Hour),
 		ExpiryCount: 1000,
-		Priority:    6,
-		Retries:     10,
+		// given low priority as these are generated a lot and it blocks lower priority packages
+		Priority: 12,
+		Retries:  10,
 		Data: proto.PacketStatusStoreRequest{
 			Entity:   entity,
 			EntityID: id,

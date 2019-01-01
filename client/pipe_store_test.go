@@ -1,7 +1,6 @@
 package client
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -511,36 +510,6 @@ func TestDefaultPipeStore_Peek_Ack(t *testing.T) {
 					s.Ack(got)
 				}
 			}
-		})
-	}
-}
-
-func TestDefaultPipeStore_Ack(t *testing.T) {
-	type fields struct {
-		Mutex   sync.Mutex
-		removed int
-		pq      *PriorityQueue
-		kinds   map[proto.PacketKind][]*Package
-	}
-	type args struct {
-		pack *Package
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &DefaultPipeStore{
-				Mutex:   tt.fields.Mutex,
-				removed: tt.fields.removed,
-				pq:      tt.fields.pq,
-				kinds:   tt.fields.kinds,
-			}
-			s.Ack(tt.args.pack)
 		})
 	}
 }
