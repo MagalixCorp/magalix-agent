@@ -13,7 +13,7 @@ type PipeSender interface {
 
 // Pipe pipe
 type Pipe struct {
-	sync.Cond
+	cond *sync.Cond
 
 	sender  PipeSender
 	storage PipeStore
@@ -22,6 +22,8 @@ type Pipe struct {
 // NewPipe creates a new pipe
 func NewPipe(sender PipeSender) *Pipe {
 	return &Pipe{
+		cond: sync.NewCond(&sync.Mutex{}),
+
 		sender:  sender,
 		storage: NewDefaultPipeStore(),
 	}
@@ -30,7 +32,7 @@ func NewPipe(sender PipeSender) *Pipe {
 // Send pushes a packet to the pipe to be sent
 func (p *Pipe) Send(pack Package) int {
 	ret := p.storage.Add(&pack)
-	p.Broadcast()
+	p.cond.Broadcast()
 	return ret
 }
 
@@ -38,11 +40,14 @@ func (p *Pipe) Send(pack Package) int {
 func (p *Pipe) Start() {
 	go func() {
 		for {
+			p.cond.L.Lock()
 			pack := p.storage.Peek()
 			if pack == nil {
-				p.Wait()
+				p.cond.Wait()
+				p.cond.L.Unlock()
 				continue
 			}
+			p.cond.L.Unlock()
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
 			if err == nil {
 				p.storage.Ack(pack)

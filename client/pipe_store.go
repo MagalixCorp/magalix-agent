@@ -122,7 +122,7 @@ func (s *DefaultPipeStore) Peek() *Package {
 	// decrease priority if number of retries increased
 	pack.retries++
 	if pack.Retries > 0 && pack.retries%pack.Retries == 0 {
-		pack.Priority--
+		pack.Priority++
 		heap.Fix(s.pq, pack.index)
 	}
 	return pack

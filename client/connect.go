@@ -58,6 +58,7 @@ func (client *Client) Connect() error {
 	odc := client.onDisconnect
 	client.channel.SetHooks(&oc, &odc)
 	go client.channel.Listen()
+	client.pipe.Start()
 	return nil
 }
 

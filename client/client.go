@@ -57,6 +57,8 @@ type Client struct {
 	blockedM sync.Mutex
 
 	timeouts timeouts
+
+	pipe *Pipe
 }
 
 // newClient creates a new client
@@ -95,6 +97,8 @@ func newClient(
 
 		timeouts: timeouts,
 	}
+
+	client.pipe = NewPipe(client)
 
 	client.initLogger()
 
@@ -188,6 +192,17 @@ func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{
 	return proto.Decode(res, out)
 }
 
+// Pipe send packages to the agent-gateway with defined priorities and expiration rules
+func (client *Client) Pipe(pack Package) {
+	if client.pipe == nil {
+		panic("client pipe not defined")
+	}
+	i := client.pipe.Send(pack)
+	if i > 0 {
+		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+	}
+}
+
 // AddListener adds a listener for a specific packet kind
 func (client *Client) AddListener(kind proto.PacketKind, listener func(in []byte) ([]byte, error)) {
 	if err := client.channel.AddListener(kind.String(), listener); err != nil {
@@ -195,6 +210,7 @@ func (client *Client) AddListener(kind proto.PacketKind, listener func(in []byte
 	}
 }
 
+// InitClient inits client
 func InitClient(
 	args map[string]interface{},
 	accountID, clusterID uuid.UUID,
