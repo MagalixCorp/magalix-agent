@@ -12,8 +12,6 @@ import (
 type Package struct {
 	// Kind packet kind
 	Kind proto.PacketKind
-	// ID packet identifier
-	ID int
 	// ExpiryTime time afterwards will not try to send packets
 	// nil means never expires
 	ExpiryTime *time.Time
@@ -21,9 +19,10 @@ type Package struct {
 	// 0 means never
 	ExpiryCount int
 	// Priority a number to indicate the order to send pending packets
-	// the lower the value the nore urget it is
+	// the lower the value the more urget it is
 	Priority int
 	// Retries max number of retries before decreasing priority by one
+	// 0 means never
 	Retries int
 	// retries actual number of reties
 	retries int
@@ -62,9 +61,13 @@ type DefaultPipeStore struct {
 }
 
 func (s *DefaultPipeStore) Add(pack *Package) int {
+	if pack == nil {
+		panic("programming error, make sure you don't pass nil package")
+	}
 	s.Lock()
 	defer s.Unlock()
 	pack.retries = 0
+	pack.index = -1
 	pack.time = time.Now()
 	heap.Push(s.pq, pack)
 	heap.Fix(s.pq, pack.index)
@@ -75,14 +78,16 @@ func (s *DefaultPipeStore) Add(pack *Package) int {
 		kind = []*Package{}
 		s.kinds[pack.Kind] = kind
 	}
-
 	kind = append(kind, pack)
+	s.kinds[pack.Kind] = kind
+
 	now := time.Now()
 	i := 0
 	for i < len(kind) {
-		if (kind[i].ExpiryCount > 0 && kind[i].ExpiryCount > len(kind)) || (kind[i].ExpiryTime != nil && now.After(*kind[i].ExpiryTime)) {
+		if (kind[i].ExpiryCount > 0 && kind[i].ExpiryCount < len(kind)) || (kind[i].ExpiryTime != nil && now.After(*kind[i].ExpiryTime)) {
 			s.removed++
-			s.removeKind(pack, i)
+			s.removeKind(kind[i], i)
+			kind, _ = s.kinds[pack.Kind]
 		} else {
 			i++
 		}
@@ -100,6 +105,7 @@ func (s *DefaultPipeStore) Peek() *Package {
 	var pack *Package
 
 	for s.pq.Len() > 0 {
+		// we are using first to make sure peek doesn't remove items from the pq
 		pack = s.pq.First().(*Package)
 
 		// check expiry time
@@ -137,7 +143,7 @@ func (s *DefaultPipeStore) remove(pack *Package) {
 		// the loop will be executed only once most of the time
 		// as the higher priority item for the same kind will mostly be the oldest one
 		for i, p := range kind {
-			if p.ID == pack.ID {
+			if p == pack {
 				kind = append(kind[:i], kind[i+1:]...)
 				s.kinds[pack.Kind] = kind
 				break
@@ -176,8 +182,8 @@ type PriorityQueue []*Package
 func (pq PriorityQueue) Len() int { return len(pq) }
 
 func (pq PriorityQueue) Less(i, j int) bool {
-	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].Priority < pq[j].Priority || (pq[i].Priority == pq[j].Priority && pq[i].time == pq[j].time)
+	// We want Pop to give us the lowest, not highest, priority so we use less than here.
+	return pq[i].Priority < pq[j].Priority || (pq[i].Priority == pq[j].Priority && pq[i].time.Before(pq[j].time))
 }
 
 func (pq PriorityQueue) Swap(i, j int) {
@@ -194,10 +200,7 @@ func (pq *PriorityQueue) Push(x interface{}) {
 }
 
 func (pq *PriorityQueue) First() interface{} {
-	old := *pq
-	n := len(old)
-	item := old[n-1]
-	return item
+	return (*pq)[0]
 }
 
 func (pq *PriorityQueue) Pop() interface{} {
