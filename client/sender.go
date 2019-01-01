@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/reconquest/karma-go"
 )
@@ -119,14 +120,12 @@ func (client *Client) SendRaw(rawResources map[string]interface{}) {
 	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}
 	context := karma.Describe("timestamp", packet)
 	client.Logger.Infof(context, "sending raw data")
-	err := client.WithBackoffLimit(func() error {
-		var response proto.PacketRawResponse
-		err := client.Send(proto.PacketKindRawStoreRequest, &packet, &response)
-		return err
-	}, 10)
-	if err == nil {
-		client.Logger.Infof(context, "raw data sent")
-	} else {
-		client.Logger.Errorf(context.Reason(err), "can't send raw data")
-	}
+	client.Pipe(Package{
+		Kind:        proto.PacketKindRawStoreRequest,
+		ExpiryTime:  utils.After(time.Hour),
+		ExpiryCount: 10,
+		Priority:    8,
+		Retries:     4,
+		Data:        &packet,
+	})
 }
