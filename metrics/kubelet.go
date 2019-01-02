@@ -1,10 +1,8 @@
 package metrics
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
@@ -276,6 +274,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes := scanner.GetNodes()
+	nodesScanTime := scanner.NodesLastScanTime()
 
 	addMetricValue(
 		TypeCluster,
@@ -285,7 +284,7 @@ func (kubelet *Kubelet) GetMetrics(
 		uuid.Nil,
 		uuid.Nil,
 		"",
-		scanner.NodesLastScanTime(),
+		nodesScanTime,
 		int64(len(nodes)),
 	)
 
@@ -315,12 +314,37 @@ func (kubelet *Kubelet) GetMetrics(
 			uuid.Nil,
 			uuid.Nil,
 			"",
-			scanner.NodesLastScanTime(),
+			nodesScanTime,
 			nodesCount,
 			map[string]interface{}{
 				"instance_group": instanceGroup,
 			},
 		)
+	}
+
+	for _, node := range nodes {
+		for _, measurement := range []struct {
+			Name  string
+			Time  time.Time
+			Value int64
+		}{
+			{"cpu/node_capacity", nodesScanTime, int64(node.Capacity.CPU)},
+			{"cpu/node_allocatable", nodesScanTime, int64(node.Allocatable.CPU)},
+			{"memory/node_capacity", nodesScanTime, int64(node.Capacity.Memory)},
+			{"memory/node_allocatable", nodesScanTime, int64(node.Allocatable.Memory)},
+		} {
+			addMetricValue(
+				TypeNode,
+				measurement.Name,
+				node.ID,
+				uuid.Nil,
+				uuid.Nil,
+				uuid.Nil,
+				"",
+				measurement.Time,
+				measurement.Value,
+			)
+		}
 	}
 
 	pr, err := alltogether.NewConcurrentProcessor(
@@ -357,21 +381,7 @@ func (kubelet *Kubelet) GetMetrics(
 			}
 			defer summaryResponse.Body.Close()
 
-			summaryBytes, err := ioutil.ReadAll(summaryResponse.Body)
-			if err != nil {
-				return karma.Format(err,
-					"{kubelet} unable to read summary response",
-				)
-			}
-			var rawSummary interface{}
-			err = json.Unmarshal(bytes.NewBuffer(summaryBytes).Bytes(), &rawSummary)
-			if err != nil {
-				kubelet.Errorf(
-					err,
-					"{kubelet} unable to unmarshal raw summary response",
-				)
-			}
-			err = json.Unmarshal(bytes.NewBuffer(summaryBytes).Bytes(), &summary)
+			err = json.NewDecoder(summaryResponse.Body).Decode(&summary)
 			if err != nil {
 				return karma.Format(
 					err,
@@ -385,11 +395,7 @@ func (kubelet *Kubelet) GetMetrics(
 				Value int64
 			}{
 				{"cpu/usage", summary.Node.CPU.Time, summary.Node.CPU.UsageCoreNanoSeconds},
-				{"cpu/node_capacity", summary.Node.CPU.Time, int64(node.Capacity.CPU)},
-				{"cpu/node_allocatable", summary.Node.CPU.Time, int64(node.Allocatable.CPU)},
 				{"memory/rss", summary.Node.Memory.Time, summary.Node.Memory.RSSBytes},
-				{"memory/node_capacity", summary.Node.Memory.Time, int64(node.Capacity.Memory)},
-				{"memory/node_allocatable", summary.Node.Memory.Time, int64(node.Allocatable.Memory)},
 				{"filesystem/usage", summary.Node.FS.Time, summary.Node.FS.UsedBytes},
 				{"filesystem/node_capacity", summary.Node.FS.Time, summary.Node.FS.CapacityBytes},
 				{"filesystem/node_allocatable", summary.Node.FS.Time, summary.Node.FS.CapacityBytes},
