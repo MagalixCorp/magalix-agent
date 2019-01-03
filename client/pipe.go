@@ -2,6 +2,7 @@ package client
 
 import (
 	"sync"
+	"time"
 
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixTechnologies/log-go"
@@ -58,13 +59,13 @@ func (p *Pipe) start() {
 				continue
 			}
 			p.cond.L.Unlock()
-			p.logger.Printf("sending packet %s, added: %s, remaining: %d", pack.Kind, pack.time, p.storage.Len())
+			p.logger.Printf("sending packet %s, diff: %s, remaining: %d", pack.Kind, time.Now().Sub(pack.time), p.storage.Len())
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
 			if err != nil {
-				p.logger.Printf("error sending packet %s", pack.Kind, pack.time, p.storage.Len())
+				p.logger.Printf("error sending packet %s, diff: %s", pack.Kind, time.Now().Sub(pack.time))
 				p.storage.Add(pack)
 			} else {
-				p.logger.Printf("completed sending packet %s, added: %s", pack.Kind, pack.time, p.storage.Len())
+				p.logger.Printf("completed sending packet %s, diff: %s", pack.Kind, time.Now().Sub(pack.time))
 			}
 		}
 	}()
