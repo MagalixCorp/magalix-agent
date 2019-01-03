@@ -5,12 +5,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/scanner"
@@ -33,6 +31,7 @@ type CAdvisorMetrics map[string][]TagsValue
 type CAdvisor struct {
 	*log.Logger
 
+	kubeletClient         *KubeletClient
 	scanner               *scanner.Scanner
 	backoff               utils.Backoff
 	getNodeKubeletAddress func(node kuber.Node) string
@@ -159,9 +158,9 @@ func (cAdvisor *CAdvisor) withBackoff(fn func() error) error {
 	return utils.WithBackoff(fn, cAdvisor.backoff, cAdvisor.Logger)
 }
 
-func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
+func (cAdvisor *CAdvisor) GetMetrics2() (*MetricsBatch, error) {
 	mutex := sync.Mutex{}
-	rawMetrics := RawMetrics{}
+	var metricsBatches []*MetricsBatch
 
 	getNodeMetrics := func(node kuber.Node) error {
 		cAdvisor.Infof(
@@ -171,23 +170,15 @@ func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
 		)
 
 		return cAdvisor.withBackoff(func() error {
-			cAdvisorResponse, err := http.Get(
-				cAdvisor.getNodeKubeletAddress(node) + "/metrics/cAdvisorMetrics",
+			nodeMetricsBatch, err := ReadPrometheusMetrics(
+				"https://"+cAdvisor.getNodeKubeletAddress(node)+"/metrics/cadvisor",
+				"", "", true,
+				func(labels map[string]string) (entities *Entities, tags map[string]string) {
+					entities, tags = cAdvisor.bind(labels)
+					entities.Node = &node.ID
+					return entities, tags
+				},
 			)
-			now := time.Now()
-
-			var body io.Reader
-
-			if cAdvisorResponse != nil && cAdvisorResponse.Body != nil {
-				defer func() {
-					if err := cAdvisorResponse.Body.Close(); err != nil {
-						cAdvisor.Errorf(
-							err,
-							"unable to close cAdvisorResponse.Body",
-						)
-					}
-				}()
-			}
 
 			if err != nil {
 				if strings.Contains(err.Error(), "the server could not find the requested resource") {
@@ -195,76 +186,20 @@ func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
 						"{cAdvisor} unable to get cAdvisor from node %q",
 						node.Name,
 					)
-					body = bytes.NewReader([]byte{})
+					return nil
 				} else {
 					return karma.Format(
 						err,
-						"{cAdvisor} unable to get cAdvisor from node %q",
+						"{cAdvisor} unable to read cAdvisor metrics from node %q",
 						node.Name,
 					)
 				}
-			} else {
-				body = cAdvisorResponse.Body
 			}
 
-			cAdvisorMetrics, err := decodeCAdvisorResponse(body)
-
-			if err != nil {
-				return karma.Format(
-					err,
-					"{cAdvisor} unable to decode cAdvisor response from node %q",
-					node.Name,
-				)
-			}
-
-			for metric, values := range cAdvisorMetrics {
-				for _, val := range values {
-
-					var containerName, podName, namespace string
-					var applicationID, serviceID, containerID uuid.UUID
-
-					containerName, _ = val.Tags["container_name"]
-					podName, _ = val.Tags["pod_name"]
-					namespace, _ = val.Tags["namespace"]
-
-					// NOTE: we still add metrics with no bounded entities
-					if containerName != "" {
-						var container *scanner.Container
-						applicationID, serviceID, container, _ = cAdvisor.scanner.FindContainer(namespace, podName,
-							containerName)
-						containerID = container.ID
-					} else if podName != "" {
-						applicationID, serviceID, _ = cAdvisor.scanner.FindService(namespace, podName)
-					}
-
-					var applicationTag, serviceTag, containerTag *uuid.UUID
-					if !applicationID.IsNil() {
-						applicationTag = &applicationID
-					}
-					if !serviceID.IsNil() {
-						serviceTag = &serviceID
-					}
-					if !containerID.IsNil() {
-						containerTag = &containerID
-					}
-
-					mutex.Lock()
-					rawMetrics = append(rawMetrics, &RawMetric{
-						Metric: metric,
-
-						Node: node.ID,
-
-						Application: applicationTag,
-						Service:     serviceTag,
-						Container:   containerTag,
-
-						Tags:  val.Tags,
-						Value: val.Value,
-
-						Timestamp: now,
-					})
-					mutex.Unlock()
-				}
+			if nodeMetricsBatch != nil {
+				mutex.Lock()
+				metricsBatches = append(metricsBatches, nodeMetricsBatch)
+				mutex.Unlock()
 			}
 
 			return nil
@@ -296,5 +231,89 @@ func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
 		}
 	}
 
-	return rawMetrics, nil
+	return FlattenMetricsBatches(metricsBatches), nil
+}
+
+func (cAdvisor *CAdvisor) bind(labels map[string]string) (
+	entities *Entities, tags map[string]string,
+) {
+	var ok bool
+	var containerName, podName, namespace string
+	var applicationID, serviceID, containerID uuid.UUID
+
+	if containerName, ok = labels["container_name"]; ok {
+		delete(labels, "container_name")
+	}
+	if podName, ok = labels["pod_name"]; ok {
+		delete(labels, "pod_name")
+	}
+	if namespace, ok = labels["namespace"]; ok {
+		delete(labels, "namespace")
+	}
+
+	// reset flag
+	ok = false
+
+	var metricType string
+
+	// NOTE: we still add metrics with no bounded entities!
+	if namespace != "" {
+		if containerName != "" && containerName != "POD" {
+			metricType = TypePodContainer
+
+			var container *scanner.Container
+			applicationID, serviceID, container, ok = cAdvisor.scanner.FindContainer(
+				namespace, podName, containerName,
+			)
+			if ok {
+				containerID = container.ID
+			}
+		} else if podName != "" && containerName == "POD" {
+			metricType = TypePod
+			applicationID, serviceID, ok = cAdvisor.scanner.FindService(namespace, podName)
+		}
+	} else {
+		// TODO: Node level and system containers metrics?
+		idLabel, _ := labels["id"]
+		if idLabel == "/" {
+			metricType = TypePodContainer
+		} else if idLabel != "" {
+			metricType = TypeSysContainer
+		} else {
+			//	TODO: is this even possible?
+		}
+	}
+
+	labels["type"] = metricType
+
+	entities = &Entities{}
+	if !applicationID.IsNil() {
+		entities.Application = &applicationID
+	}
+	if !serviceID.IsNil() {
+		entities.Service = &serviceID
+	}
+	if !containerID.IsNil() {
+		entities.Container = &containerID
+	}
+
+	return entities, labels
+}
+
+func NewCAdvisor(
+	kubeletClient *KubeletClient,
+	logger *log.Logger,
+	scanner *scanner.Scanner,
+	backoff utils.Backoff,
+) (*CAdvisor, error) {
+	cAdvisor := &CAdvisor{
+		Logger: logger,
+
+		kubeletClient: kubeletClient,
+
+		scanner: scanner,
+		backoff: backoff,
+	}
+
+	return cAdvisor, nil
 }
