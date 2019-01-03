@@ -69,7 +69,9 @@ func (s *DefaultPipeStore) Add(pack *Package) int {
 	}
 	s.Lock()
 	defer s.Unlock()
-	pack.time = time.Now()
+	if (pack.time == time.Time{}) {
+		pack.time = time.Now()
+	}
 	heap.Push(s.pq, pack)
 	heap.Fix(s.pq, pack.index)
 

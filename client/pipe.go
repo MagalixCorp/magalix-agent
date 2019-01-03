@@ -35,6 +35,7 @@ func NewPipe(sender PipeSender, logger *log.Logger) *Pipe {
 
 // Send pushes a packet to the pipe to be sent
 func (p *Pipe) Send(pack Package) int {
+	pack.time = time.Now()
 	ret := p.storage.Add(&pack)
 	p.cond.Broadcast()
 	return ret
