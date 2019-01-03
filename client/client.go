@@ -58,7 +58,8 @@ type Client struct {
 
 	timeouts timeouts
 
-	pipe *Pipe
+	pipe       *Pipe
+	pipeStatus *Pipe
 }
 
 // newClient creates a new client
@@ -99,6 +100,7 @@ func newClient(
 	}
 
 	client.pipe = NewPipe(client, client.parentLogger)
+	client.pipeStatus = NewPipe(client, client.parentLogger)
 
 	client.initLogger()
 
@@ -190,6 +192,18 @@ func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{
 		}
 	}
 	return proto.Decode(res, out)
+}
+
+// PipeStatus send status packages to the agent-gateway with defined priorities and expiration rules
+// TODO remove
+func (client *Client) PipeStatus(pack Package) {
+	if client.pipeStatus == nil {
+		panic("client pipeStatus not defined")
+	}
+	i := client.pipeStatus.Send(pack)
+	if i > 0 {
+		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+	}
 }
 
 // Pipe send packages to the agent-gateway with defined priorities and expiration rules

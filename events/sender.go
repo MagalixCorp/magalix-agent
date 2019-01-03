@@ -100,7 +100,7 @@ func (eventer *Eventer) sendStatus(
 		"{eventer} changing status",
 	)
 
-	eventer.client.Pipe(client.Package{
+	eventer.client.PipeStatus(client.Package{
 		Kind:        proto.PacketKindStatusStoreRequest,
 		ExpiryTime:  utils.After(2 * time.Hour),
 		ExpiryCount: 1000,

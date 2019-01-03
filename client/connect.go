@@ -59,6 +59,7 @@ func (client *Client) Connect() error {
 	client.channel.SetHooks(&oc, &odc)
 	go client.channel.Listen()
 	client.pipe.Start(10)
+	client.pipeStatus.Start(1)
 	return nil
 }
 
