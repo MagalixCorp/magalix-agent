@@ -98,7 +98,7 @@ func newClient(
 		timeouts: timeouts,
 	}
 
-	client.pipe = NewPipe(client)
+	client.pipe = NewPipe(client, client.parentLogger)
 
 	client.initLogger()
 
