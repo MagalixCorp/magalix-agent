@@ -33,6 +33,7 @@ func PacketNodes(nodes []kuber.Node) proto.PacketNodesStoreRequest {
 				ID:           node.ID,
 				Name:         node.Name,
 				IP:           node.IP,
+				Provider:     node.Provider,
 				Region:       node.Region,
 				InstanceType: node.InstanceType,
 				InstanceSize: node.InstanceSize,

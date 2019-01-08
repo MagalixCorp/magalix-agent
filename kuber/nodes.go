@@ -13,6 +13,7 @@ type Node struct {
 	Name          string       `json:"name"`
 	IP            string       `json:"ip"`
 	KubeletPort   int32        `json:"port"`
+	Provider      string       `json:"provider,omitempty"`
 	Region        string       `json:"region,omitempty"`
 	InstanceType  string       `json:"instance_type,omitempty"`
 	InstanceSize  string       `json:"instance_size,omitempty"`
@@ -210,6 +211,8 @@ func GetNodes(nodes []kapi.Node) []Node {
 			}
 		}
 
+		provider := strings.Split(node.Annotations["ProviderID"], ":")[0]
+
 		result = append(result, Node{
 			Name:         node.ObjectMeta.Name,
 			IP:           address,
@@ -217,6 +220,7 @@ func GetNodes(nodes []kapi.Node) []Node {
 			Region:       labels["failure-domain.beta.kubernetes.io/region"],
 			InstanceType: instanceType,
 			InstanceSize: instanceSize,
+			Provider:     provider,
 			Capacity:     GetNodeCapacity(node.Status.Capacity),
 			Allocatable:  GetNodeCapacity(node.Status.Allocatable),
 		})
