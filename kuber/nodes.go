@@ -210,7 +210,7 @@ func GetNodes(nodes []kapi.Node) []Node {
 			}
 		}
 
-		provider := strings.Split(node.Annotations["ProviderID"], ":")[0]
+		provider := strings.Split(node.Spec.ProviderID, ":")[0]
 
 		result = append(result, Node{
 			Name:         node.ObjectMeta.Name,
