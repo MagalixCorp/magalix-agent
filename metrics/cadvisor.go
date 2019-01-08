@@ -158,7 +158,7 @@ func (cAdvisor *CAdvisor) withBackoff(fn func() error) error {
 	return utils.WithBackoff(fn, cAdvisor.backoff, cAdvisor.Logger)
 }
 
-func (cAdvisor *CAdvisor) GetMetrics2() (*MetricsBatch, error) {
+func (cAdvisor *CAdvisor) GetMetrics() (*MetricsBatch, error) {
 	mutex := sync.Mutex{}
 	var metricsBatches []*MetricsBatch
 
@@ -171,7 +171,7 @@ func (cAdvisor *CAdvisor) GetMetrics2() (*MetricsBatch, error) {
 
 		return cAdvisor.withBackoff(func() error {
 			nodeMetricsBatch, err := ReadPrometheusMetrics(
-				"https://"+cAdvisor.getNodeKubeletAddress(node)+"/metrics/cadvisor",
+				cAdvisor.getNodeKubeletAddress(node)+"/metrics/cadvisor",
 				"", "", true,
 				func(labels map[string]string) (entities *Entities, tags map[string]string) {
 					entities, tags = cAdvisor.bind(labels)
