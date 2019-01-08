@@ -131,16 +131,51 @@ func watchMetricsProm(
 		if err != nil {
 			c.Errorf(err, "unable to retrieve metricsBatch from sink")
 		}
+
+		packet := packetMetricsProm(metricsBatch)
+
 		c.Pipe(client.Package{
 			Kind:        proto.PacketKindMetricsPromStoreRequest,
 			ExpiryTime:  utils.After(2 * time.Hour),
 			ExpiryCount: 100,
 			Priority:    4,
 			Retries:     10,
-			Data:        metricsBatch,
+			Data:        packet,
 		})
 	})
 	ticker.Start(false, true, true)
+}
+
+func packetMetricsProm(metricsBatch *MetricsBatch) *proto.PacketMetricsPromStoreRequest {
+	packet := &proto.PacketMetricsPromStoreRequest{
+		Timestamp: metricsBatch.Timestamp,
+		Metrics:   make([]*proto.PacketMetricFamilyItem, len(metricsBatch.Metrics)),
+	}
+
+	for i, metricFamily := range metricsBatch.Metrics {
+		familyItem := &proto.PacketMetricFamilyItem{
+			Name:   metricFamily.Name,
+			Type:   metricFamily.Type,
+			Help:   metricFamily.Help,
+			Tags:   metricFamily.Tags,
+			Values: make([]*proto.PacketMetricValueItem, len(metricFamily.Values)),
+		}
+		for j, metricValue := range metricFamily.Values {
+			familyItem.Values[j] = &proto.PacketMetricValueItem{
+				Node:        metricValue.Node,
+				Application: metricValue.Application,
+				Service:     metricValue.Service,
+				Container:   metricValue.Container,
+
+				Tags:  metricValue.Tags,
+				Value: metricValue.Value,
+			}
+		}
+
+		packet.Metrics[i] = familyItem
+	}
+
+	return packet
 }
 
 func min(a, b int) int {

@@ -163,6 +163,33 @@ type MetricStoreRequest struct {
 type PacketMetricsStoreResponse struct {
 }
 
+type PacketMetricValueItem struct {
+	Node        *uuid.UUID
+	Application *uuid.UUID
+	Service     *uuid.UUID
+	Container   *uuid.UUID
+
+	Tags  map[string]string
+	Value float64
+}
+
+type PacketMetricFamilyItem struct {
+	Name string
+	Help string
+	Type string
+	Tags []string
+
+	Values []*PacketMetricValueItem
+}
+type PacketMetricsPromStoreRequest struct {
+	Timestamp time.Time
+
+	Metrics []*PacketMetricFamilyItem
+}
+
+type PacketMetricsPromStoreResponse struct {
+}
+
 type PacketRegisterNodeCapacityItem struct {
 	CPU              int `json:"cpu"`
 	Memory           int `json:"memory"`
