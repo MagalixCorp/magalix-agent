@@ -10,5 +10,5 @@ type MetricsSource interface {
 }
 
 type Source interface {
-	GetMetrics2() (*MetricsBatch, error)
+	GetMetrics() (*MetricsBatch, error)
 }
