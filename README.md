@@ -49,6 +49,7 @@ You can install Magalix agent through GKE marketplace.
 
 * Your first cluster analytics are free.
 * No recommendations will be applied to your cluster till you turn on the Autopilot feature at the [console](https://console.magalix.com)
+* Cluster nodes must have Devstorage.read_only scope to install Magalix agent. Otherwise, you will get an error message of `insufficient Oauth scope`. Refer to [this Stackoverflow](https://stackoverflow.com/questions/51750479/insufficient-oauth-scope-when-trying-to-deploy-jenkins-click-to-deploy-on-an-exi) issue. Google also published [this article](https://medium.com/google-cloud/updating-google-container-engine-vm-scopes-with-zero-downtime-50bff87e5f80) explaining 
 * The Autopilot feature is a Pro feature. You need to buy a subscription to enable it. 
 
 # Accessing Insights and Recommendations
