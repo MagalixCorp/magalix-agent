@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -101,6 +102,7 @@ type Kubelet struct {
 	previous              map[string]KubeletValue
 	previousMutex         *sync.Mutex
 	timeouts              kubeletTimeouts
+	kubeletClient         *http.Client
 }
 
 // NewKubelet returns new kubelet
@@ -110,6 +112,12 @@ func NewKubelet(
 	resolution time.Duration,
 	timeouts kubeletTimeouts,
 ) (*Kubelet, error) {
+	// TODO: allow passing certificate for secure connection
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	httpClient := &http.Client{Transport: transport}
+
 	kubelet := &Kubelet{
 		Logger: log,
 
@@ -118,6 +126,7 @@ func NewKubelet(
 		previous:              map[string]KubeletValue{},
 		previousMutex:         &sync.Mutex{},
 		timeouts:              timeouts,
+		kubeletClient:         httpClient,
 	}
 
 	return kubelet, nil
@@ -363,8 +372,8 @@ func (kubelet *Kubelet) GetMetrics(
 				err              error
 			)
 			err = kubelet.withBackoff(func() error {
-				summaryResponse, err = http.Get(
-					"http://" + kubelet.getNodeKubeletAddress(node) + "/stats/summary",
+				summaryResponse, err = kubelet.kubeletClient.Get(
+					kubelet.getNodeKubeletAddress(node) + "/stats/summary",
 				)
 				if err != nil {
 					return karma.Format(
@@ -575,8 +584,8 @@ func (kubelet *Kubelet) GetMetrics(
 			}
 
 			err = kubelet.withBackoff(func() error {
-				cadvisorResponse, err = http.Get(
-					"http://" + kubelet.getNodeKubeletAddress(node) + "/metrics/cadvisor",
+				cadvisorResponse, err = kubelet.kubeletClient.Get(
+					kubelet.getNodeKubeletAddress(node) + "/metrics/cadvisor",
 				)
 				if err != nil {
 					return karma.Format(
