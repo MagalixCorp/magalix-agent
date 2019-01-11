@@ -44,6 +44,7 @@ type Client struct {
 
 	channel *channel.Client
 
+	connected  bool
 	authorized bool
 
 	shouldSendLogs  bool
@@ -114,6 +115,9 @@ func newClient(
 // Example:
 //   WaitForConnection(time.Second * 10)
 func (client *Client) WaitForConnection(timeout time.Duration) bool {
+	if client.authorized {
+		return true
+	}
 	c := make(chan struct{})
 	defer func() {
 		client.blocked.Delete(c)
@@ -167,31 +171,26 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 	return err
 }
 
-// Send sends a packet to the agent-gateway
-// It tries to send it, if it failed due to the agent-gateway not connected it waits
-// for connection before trying again
+// send sends a packet to the agent-gateway
 // it uses the default proto encoding to encode and decode in/out parameters
-func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
-	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
-	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
+func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{}) error {
 	req, err := proto.Encode(in)
 	if err != nil {
 		return err
 	}
 	res, err := client.channel.Send(kind.String(), req)
 	if err != nil {
-		// TODO: define errors in the channel package
-		if err.Error() == "client not found" {
-			client.WaitForConnection(time.Minute)
-			res, err = client.channel.Send(kind.String(), req)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
+		return err
 	}
 	return proto.Decode(res, out)
+}
+
+// Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send
+func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
+	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
+	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
+	client.WaitForConnection(time.Minute)
+	return client.send(kind, in, out)
 }
 
 // PipeStatus send status packages to the agent-gateway with defined priorities and expiration rules

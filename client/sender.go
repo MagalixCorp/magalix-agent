@@ -13,7 +13,7 @@ import (
 // hello Sends hello package
 func (client *Client) hello() error {
 	var hello proto.PacketHello
-	err := client.Send(proto.PacketKindHello, proto.PacketHello{
+	err := client.send(proto.PacketKindHello, proto.PacketHello{
 		Major: ProtocolMajorVersion,
 		Minor: ProtocolMinorVersion,
 	}, &hello)
@@ -36,7 +36,7 @@ func (client *Client) hello() error {
 // authorize authorizes the client
 func (client *Client) authorize() error {
 	var question proto.PacketAuthorizationQuestion
-	err := client.Send(proto.PacketKindAuthorizationRequest, proto.PacketAuthorizationRequest{
+	err := client.send(proto.PacketKindAuthorizationRequest, proto.PacketAuthorizationRequest{
 		AccountID: client.AccountID,
 		ClusterID: client.ClusterID,
 	}, &question)
@@ -60,7 +60,7 @@ func (client *Client) authorize() error {
 	}
 
 	var success proto.PacketAuthorizationSuccess
-	err = client.Send(proto.PacketKindAuthorizationAnswer, proto.PacketAuthorizationAnswer{
+	err = client.send(proto.PacketKindAuthorizationAnswer, proto.PacketAuthorizationAnswer{
 		Token: token,
 	}, &success)
 	if err != nil {

@@ -63,7 +63,7 @@ func (p *Pipe) start() {
 			p.logger.Printf("sending packet %s, diff: %s, remaining: %d", pack.Kind, time.Now().Sub(pack.time), p.storage.Len())
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
 			if err != nil {
-				p.logger.Printf("error sending packet %s, diff: %s", pack.Kind, time.Now().Sub(pack.time))
+				p.logger.Printf("error sending packet %s, diff: %s, err: %s", pack.Kind, time.Now().Sub(pack.time), err)
 				p.storage.Add(pack)
 			} else {
 				p.logger.Printf("completed sending packet %s, diff: %s", pack.Kind, time.Now().Sub(pack.time))
