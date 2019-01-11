@@ -59,6 +59,8 @@ type Client struct {
 
 	timeouts timeouts
 
+	lastSent time.Time
+
 	pipe       *Pipe
 	pipeStatus *Pipe
 }
@@ -182,6 +184,7 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 	if err != nil {
 		return err
 	}
+	client.lastSent = time.Now()
 	return proto.Decode(res, out)
 }
 

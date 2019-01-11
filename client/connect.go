@@ -59,6 +59,7 @@ func (client *Client) onDisconnect() {
 
 // Connect starts the client
 func (client *Client) Connect() error {
+	go client.StartWatchdog()
 	oc := client.onConnect
 	odc := client.onDisconnect
 	client.channel.SetHooks(&oc, &odc)
@@ -71,4 +72,20 @@ func (client *Client) Connect() error {
 // IsReady returns true if the agent is connected and authenticated
 func (client *Client) IsReady() bool {
 	return client.authorized
+}
+
+func (client *Client) StartWatchdog() {
+	startTime := time.Now()
+	for {
+		// it didn't sent anything before
+		if (client.lastSent == time.Time{}) {
+			if startTime.Add(1 * time.Minute).Before(time.Now()) {
+				break
+			}
+		} else if client.lastSent.Add(1 * time.Minute).Before(time.Now()) {
+			break
+		}
+		time.Sleep(time.Minute)
+	}
+	os.Exit(120)
 }
