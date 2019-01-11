@@ -79,10 +79,10 @@ func (client *Client) StartWatchdog() {
 	for {
 		// it didn't sent anything before
 		if (client.lastSent == time.Time{}) {
-			if startTime.Add(1 * time.Minute).Before(time.Now()) {
+			if startTime.Add(10 * time.Minute).Before(time.Now()) {
 				break
 			}
-		} else if client.lastSent.Add(1 * time.Minute).Before(time.Now()) {
+		} else if client.lastSent.Add(10 * time.Minute).Before(time.Now()) {
 			break
 		}
 		time.Sleep(time.Minute)
