@@ -202,7 +202,7 @@ func InitMetrics(
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
 		kubeletAddress, _ = args["--kubelet-address"].(string)
-		//kubeletPort, _    = args["--kubelet-port"].(string)
+		kubeletPort, _    = args["--kubelet-port"].(string)
 
 		metricsSources = make([]MetricsSource, 0)
 		foundErrors    = make([]error, 0)
@@ -233,7 +233,7 @@ func InitMetrics(
 				}
 			} else {
 				getNodeKubeletAddress = func(node kuber.Node) string {
-					return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
+					return fmt.Sprintf("%s:%s", node.IP, kubeletPort)
 				}
 			}
 			kubelet, err := NewKubelet(getNodeKubeletAddress, client.Logger, metricsInterval,
