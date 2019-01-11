@@ -223,3 +223,9 @@ func Throttle(
 		}
 	}
 }
+
+// After returns pointer to time after specific duration
+func After(d time.Duration) *time.Time {
+	t := time.Now().Add(d)
+	return &t
+}

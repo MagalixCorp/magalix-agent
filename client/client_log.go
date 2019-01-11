@@ -1,11 +1,11 @@
 package client
 
 import (
-	"github.com/MagalixCorp/magalix-agent/utils"
 	"sync"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/kovetskiy/lorg"
 	structured "github.com/reconquest/cog"
 	"github.com/reconquest/karma-go"
@@ -60,10 +60,6 @@ func (client *Client) watchLogsQueue() {
 	var fatal bool
 
 	// retry for 5 times then drop the packet
-	backoff := utils.Backoff{
-		Sleep:      client.timeouts.protoBackoff,
-		MaxRetries: 5,
-	}
 
 	for {
 		logs := proto.PacketLogs{}
@@ -84,32 +80,22 @@ func (client *Client) watchLogsQueue() {
 		}
 
 	flush:
-		// NOTE: don't use client.WithBackoffLimit as it uses the client
-		// NOTE: logger which we send its logs.
-		// NOTE: If used and sending logs fails, we may be trapped
-		// NOTE: in a deadlock because the logsQueue will be full.
-		utils.WithBackoff(
-			func() error {
-				client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
 
-				var response []byte
-				err := client.Send(proto.PacketKindLogs, logs, &response)
-				if err != nil {
-					return karma.Format(
-						err,
-						"unable to send logs packet",
-					)
-				}
+		if client.shouldSendLogs {
+			client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
+			client.Pipe(Package{
+				Kind:        proto.PacketKindLogs,
+				ExpiryTime:  utils.After(10 * time.Minute),
+				ExpiryCount: 2,
+				Priority:    9,
+				Retries:     4,
+				Data:        logs,
+			})
 
-				return nil
-			},
-			backoff,
-			nil,
-		)
-
-		if fatal {
-			client.Done(1)
-			goto done
+			if fatal {
+				client.Done(1)
+				goto done
+			}
 		}
 
 	}

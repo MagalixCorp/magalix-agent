@@ -163,7 +163,7 @@ func sendRawMetrics(client *client.Client, pipe chan RawMetrics) {
 }
 
 // SendMetrics bulk send metrics
-func sendMetricsBatch(client *client.Client, metrics []*Metrics) {
+func sendMetricsBatch(c *client.Client, metrics []*Metrics) {
 	var req proto.PacketMetricsStoreRequest
 	for _, metrics := range metrics {
 		req = append(req, proto.MetricStoreRequest{
@@ -181,12 +181,17 @@ func sendMetricsBatch(client *client.Client, metrics []*Metrics) {
 		})
 
 	}
-	client.WithBackoff(func() error {
-		var response proto.PacketMetricsStoreResponse
-		return client.Send(proto.PacketKindMetricsStoreRequest, req, &response)
+	c.Pipe(client.Package{
+		Kind:        proto.PacketKindMetricsStoreRequest,
+		ExpiryTime:  utils.After(2 * time.Hour),
+		ExpiryCount: 100,
+		Priority:    4,
+		Retries:     10,
+		Data:        req,
 	})
 }
 
+// InitMetrics init metrics source
 func InitMetrics(
 	client *client.Client,
 	scanner *scanner.Scanner,
@@ -197,7 +202,7 @@ func InitMetrics(
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
 		kubeletAddress, _ = args["--kubelet-address"].(string)
-		kubeletPort, _    = args["--kubelet-port"].(string)
+		//kubeletPort, _    = args["--kubelet-port"].(string)
 
 		metricsSources = make([]MetricsSource, 0)
 		foundErrors    = make([]error, 0)
@@ -228,7 +233,7 @@ func InitMetrics(
 				}
 			} else {
 				getNodeKubeletAddress = func(node kuber.Node) string {
-					return fmt.Sprintf("%s:%s", node.IP, kubeletPort)
+					return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
 				}
 			}
 			kubelet, err := NewKubelet(getNodeKubeletAddress, client.Logger, metricsInterval,

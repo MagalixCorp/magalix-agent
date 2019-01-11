@@ -44,6 +44,7 @@ type Client struct {
 
 	channel *channel.Client
 
+	connected  bool
 	authorized bool
 
 	shouldSendLogs  bool
@@ -57,6 +58,9 @@ type Client struct {
 	blockedM sync.Mutex
 
 	timeouts timeouts
+
+	pipe       *Pipe
+	pipeStatus *Pipe
 }
 
 // newClient creates a new client
@@ -96,6 +100,9 @@ func newClient(
 		timeouts: timeouts,
 	}
 
+	client.pipe = NewPipe(client, client.parentLogger)
+	client.pipeStatus = NewPipe(client, client.parentLogger)
+
 	client.initLogger()
 
 	return client
@@ -108,6 +115,9 @@ func newClient(
 // Example:
 //   WaitForConnection(time.Second * 10)
 func (client *Client) WaitForConnection(timeout time.Duration) bool {
+	if client.authorized {
+		return true
+	}
 	c := make(chan struct{})
 	defer func() {
 		client.blocked.Delete(c)
@@ -161,31 +171,49 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 	return err
 }
 
-// Send sends a packet to the agent-gateway
-// It tries to send it, if it failed due to the agent-gateway not connected it waits
-// for connection before trying again
+// send sends a packet to the agent-gateway
 // it uses the default proto encoding to encode and decode in/out parameters
-func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
-	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
-	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
+func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{}) error {
 	req, err := proto.Encode(in)
 	if err != nil {
 		return err
 	}
 	res, err := client.channel.Send(kind.String(), req)
 	if err != nil {
-		// TODO: define errors in the channel package
-		if err.Error() == "client not found" {
-			client.WaitForConnection(time.Minute)
-			res, err = client.channel.Send(kind.String(), req)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
+		return err
 	}
 	return proto.Decode(res, out)
+}
+
+// Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send
+func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
+	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
+	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
+	client.WaitForConnection(time.Minute)
+	return client.send(kind, in, out)
+}
+
+// PipeStatus send status packages to the agent-gateway with defined priorities and expiration rules
+// TODO remove
+func (client *Client) PipeStatus(pack Package) {
+	if client.pipeStatus == nil {
+		panic("client pipeStatus not defined")
+	}
+	i := client.pipeStatus.Send(pack)
+	if i > 0 {
+		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+	}
+}
+
+// Pipe send packages to the agent-gateway with defined priorities and expiration rules
+func (client *Client) Pipe(pack Package) {
+	if client.pipe == nil {
+		panic("client pipe not defined")
+	}
+	i := client.pipe.Send(pack)
+	if i > 0 {
+		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+	}
 }
 
 // AddListener adds a listener for a specific packet kind
@@ -195,6 +223,7 @@ func (client *Client) AddListener(kind proto.PacketKind, listener func(in []byte
 	}
 }
 
+// InitClient inits client
 func InitClient(
 	args map[string]interface{},
 	accountID, clusterID uuid.UUID,

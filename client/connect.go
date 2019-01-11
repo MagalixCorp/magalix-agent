@@ -8,8 +8,12 @@ import (
 )
 
 func (client *Client) onConnect() error {
+	client.connected = true
 	expire := time.Now().Add(time.Minute * 10)
 	for try := 0; try < 1000; try++ {
+		if !client.connected {
+			return nil
+		}
 		err := client.hello()
 		if err != nil {
 			client.Errorf(
@@ -49,6 +53,7 @@ func (client *Client) onConnect() error {
 }
 
 func (client *Client) onDisconnect() {
+	client.connected = false
 	client.authorized = false
 }
 
@@ -58,6 +63,8 @@ func (client *Client) Connect() error {
 	odc := client.onDisconnect
 	client.channel.SetHooks(&oc, &odc)
 	go client.channel.Listen()
+	client.pipe.Start(10)
+	client.pipeStatus.Start(1)
 	return nil
 }
 

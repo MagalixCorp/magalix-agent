@@ -12,6 +12,7 @@ type Node struct {
 	ID            uuid.UUID    `json:"id,omitempty"`
 	Name          string       `json:"name"`
 	IP            string       `json:"ip"`
+	KubeletPort   int32        `json:"port"`
 	Provider      string       `json:"provider,omitempty"`
 	Region        string       `json:"region,omitempty"`
 	InstanceType  string       `json:"instance_type,omitempty"`
@@ -215,6 +216,7 @@ func GetNodes(nodes []kapi.Node) []Node {
 		result = append(result, Node{
 			Name:         node.ObjectMeta.Name,
 			IP:           address,
+			KubeletPort:  node.Status.DaemonEndpoints.KubeletEndpoint.Port,
 			Region:       labels["failure-domain.beta.kubernetes.io/region"],
 			InstanceType: instanceType,
 			InstanceSize: instanceSize,

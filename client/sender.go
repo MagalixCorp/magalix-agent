@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/reconquest/karma-go"
 )
@@ -12,7 +13,7 @@ import (
 // hello Sends hello package
 func (client *Client) hello() error {
 	var hello proto.PacketHello
-	err := client.Send(proto.PacketKindHello, proto.PacketHello{
+	err := client.send(proto.PacketKindHello, proto.PacketHello{
 		Major: ProtocolMajorVersion,
 		Minor: ProtocolMinorVersion,
 	}, &hello)
@@ -35,7 +36,7 @@ func (client *Client) hello() error {
 // authorize authorizes the client
 func (client *Client) authorize() error {
 	var question proto.PacketAuthorizationQuestion
-	err := client.Send(proto.PacketKindAuthorizationRequest, proto.PacketAuthorizationRequest{
+	err := client.send(proto.PacketKindAuthorizationRequest, proto.PacketAuthorizationRequest{
 		AccountID: client.AccountID,
 		ClusterID: client.ClusterID,
 	}, &question)
@@ -59,7 +60,7 @@ func (client *Client) authorize() error {
 	}
 
 	var success proto.PacketAuthorizationSuccess
-	err = client.Send(proto.PacketKindAuthorizationAnswer, proto.PacketAuthorizationAnswer{
+	err = client.send(proto.PacketKindAuthorizationAnswer, proto.PacketAuthorizationAnswer{
 		Token: token,
 	}, &success)
 	if err != nil {
@@ -119,14 +120,12 @@ func (client *Client) SendRaw(rawResources map[string]interface{}) {
 	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}
 	context := karma.Describe("timestamp", packet)
 	client.Logger.Infof(context, "sending raw data")
-	err := client.WithBackoffLimit(func() error {
-		var response proto.PacketRawResponse
-		err := client.Send(proto.PacketKindRawStoreRequest, &packet, &response)
-		return err
-	}, 10)
-	if err == nil {
-		client.Logger.Infof(context, "raw data sent")
-	} else {
-		client.Logger.Errorf(context.Reason(err), "can't send raw data")
-	}
+	client.Pipe(Package{
+		Kind:        proto.PacketKindRawStoreRequest,
+		ExpiryTime:  utils.After(time.Hour),
+		ExpiryCount: 10,
+		Priority:    8,
+		Retries:     4,
+		Data:        &packet,
+	})
 }
