@@ -1,14 +1,14 @@
 package events
 
 import (
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/utils"
 	"sync"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/proc"
 	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixCorp/magalix-agent/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
@@ -163,7 +163,7 @@ func (eventer *Eventer) ChangeStatus(
 	status watcher.Status,
 	source *watcher.ContainerStatusSource,
 ) {
-	eventer.sendStatus(entity, id, status, source)
+	eventer.sendStatus(entity, id, status, source, time.Now())
 }
 
 // WriteEvent writes an event

@@ -224,10 +224,11 @@ type PacketEventLastValueResponse struct {
 }
 
 type PacketStatusStoreRequest struct {
-	Entity   string                         `json:"entity"`
-	EntityID uuid.UUID                      `json:"entity_id"`
-	Status   watcher.Status                 `json:"status"`
-	Source   *watcher.ContainerStatusSource `json:"source"`
+	Entity    string                         `json:"entity"`
+	EntityID  uuid.UUID                      `json:"entity_id"`
+	Status    watcher.Status                 `json:"status"`
+	Source    *watcher.ContainerStatusSource `json:"source"`
+	Timestamp time.Time                      `json:"timestamp"`
 }
 
 type PacketStatusStoreResponse struct{}

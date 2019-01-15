@@ -90,6 +90,7 @@ func (eventer *Eventer) sendStatus(
 	id uuid.UUID,
 	status watcher.Status,
 	source *watcher.ContainerStatusSource,
+	timestamp time.Time,
 ) {
 	eventer.client.Debugf(
 		karma.
@@ -108,10 +109,11 @@ func (eventer *Eventer) sendStatus(
 		Priority: 12,
 		Retries:  10,
 		Data: proto.PacketStatusStoreRequest{
-			Entity:   entity,
-			EntityID: id,
-			Status:   status,
-			Source:   source,
+			Entity:    entity,
+			EntityID:  id,
+			Status:    status,
+			Source:    source,
+			Timestamp: timestamp,
 		},
 	})
 }
