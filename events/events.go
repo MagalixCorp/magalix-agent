@@ -167,20 +167,20 @@ func (eventer *Eventer) ChangeStatus(
 }
 
 // WriteEvent writes an event
-func (eventer *Eventer) WriteEvent(event watcher.Event) error {
+func (eventer *Eventer) WriteEvent(event *watcher.Event) error {
 	eventer.client.Tracef(
 		karma.Describe("event", eventer.client.TraceJSON(event)),
 		"adding event to batch writer buffer",
 	)
 
 	// sending events to channel, batch writer is running in background
-	eventer.buffer <- event
+	eventer.buffer <- *event
 	// need to return nil because eventer implements watcher.Database interface
 	return nil
 }
 
 // WriteEvents writes batch of events
-func (eventer *Eventer) WriteEvents(events []watcher.Event) error {
+func (eventer *Eventer) WriteEvents(events []*watcher.Event) error {
 	// sending events to channel, batch writer is running in background
 	for _, event := range events {
 		_ = eventer.WriteEvent(event)
