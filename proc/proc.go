@@ -16,7 +16,7 @@ import (
 // Database eventer
 type Database interface {
 	WriteEvent(event *watcher.Event) error
-	WriteEvents(event []*watcher.Event) error
+	WriteEvents(events []*watcher.Event) error
 }
 
 // Proc events processor
