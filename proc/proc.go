@@ -15,7 +15,8 @@ import (
 
 // Database eventer
 type Database interface {
-	WriteEvent(event watcher.Event) error
+	WriteEvent(event *watcher.Event) error
+	WriteEvents(event []*watcher.Event) error
 }
 
 // Proc events processor
@@ -449,7 +450,7 @@ func (proc *Proc) writeEvent(event watcher.Event) bool {
 	if proc.database == nil {
 		return false
 	}
-	err := proc.database.WriteEvent(event)
+	err := proc.database.WriteEvent(&event)
 	if err != nil {
 		errorf(err, "unable to write event to database")
 
