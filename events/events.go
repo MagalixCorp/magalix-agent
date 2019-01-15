@@ -178,3 +178,13 @@ func (eventer *Eventer) WriteEvent(event watcher.Event) error {
 	// need to return nil because eventer implements watcher.Database interface
 	return nil
 }
+
+// WriteEvents writes batch of events
+func (eventer *Eventer) WriteEvents(events []watcher.Event) error {
+	// sending events to channel, batch writer is running in background
+	for _, event := range events {
+		_ = eventer.WriteEvent(event)
+	}
+	// need to return nil because eventer implements watcher.Database interface
+	return nil
+}
