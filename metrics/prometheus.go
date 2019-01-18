@@ -1,9 +1,9 @@
 package metrics
 
 import (
-	"github.com/MagalixCorp/magalix-agent/client"
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/prometheus/client_model/go"
 )
@@ -31,9 +31,10 @@ func ReadPrometheusMetrics(
 
 	timestamp := <-timeChan
 
-	var metrics []*MetricFamily
+	metrics := map[string]*MetricFamily{}
 	for mf := range mfChan {
-		metrics = append(metrics, toFamilies(mf, bind)...)
+		family := toMetricFamily(mf, bind)
+		metrics = appendFamily(metrics, family)
 	}
 
 	return &MetricsBatch{
@@ -42,27 +43,26 @@ func ReadPrometheusMetrics(
 	}, err
 }
 
-// NewFamily consumes a MetricFamily and transforms it to the local Family type.
-func toFamilies(
+// toMetricFamily consumes a MetricFamily and transforms it to the local Family type.
+func toMetricFamily(
 	dtoMF *io_prometheus_client.MetricFamily,
 	bind BindFunc,
-) []*MetricFamily {
+) *MetricFamily {
 
-	var mfs []*MetricFamily
+	mf := &MetricFamily{
+		//Time:    time.Now(),
+		Name: dtoMF.GetName(),
+		Help: dtoMF.GetHelp(),
+		Type: dtoMF.GetType().String(),
+
+		Values: make([]*MetricValue, len(dtoMF.Metric)),
+	}
 
 	if dtoMF.GetType() == io_prometheus_client.MetricType_SUMMARY {
 
 	} else if dtoMF.GetType() == io_prometheus_client.MetricType_HISTOGRAM {
 
 	} else {
-		mf := &MetricFamily{
-			//Time:    time.Now(),
-			Name: dtoMF.GetName(),
-			Help: dtoMF.GetHelp(),
-			Type: dtoMF.GetType().String(),
-
-			Values: make([]*MetricValue, len(dtoMF.Metric)),
-		}
 
 		uniqueTags := map[string]bool{}
 
@@ -88,11 +88,22 @@ func toFamilies(
 			i++
 		}
 		mf.Tags = metricTags
-
-		mfs = append(mfs, mf)
 	}
 
-	return mfs
+	return mf
+}
+
+func appendFamily(
+	metricFamilies map[string]*MetricFamily,
+	family *MetricFamily,
+) map[string]*MetricFamily {
+	metricName := family.Name
+	if uniqueMetric, ok := metricFamilies[metricName]; !ok {
+		metricFamilies[metricName] = family
+	} else {
+		uniqueMetric.Values = append(uniqueMetric.Values, family.Values...)
+	}
+	return metricFamilies
 }
 
 func FlattenMetricsBatches(in []*MetricsBatch) (result *MetricsBatch) {
@@ -100,26 +111,15 @@ func FlattenMetricsBatches(in []*MetricsBatch) (result *MetricsBatch) {
 		return
 	}
 
-	result = &MetricsBatch{}
-	result.Timestamp = in[0].Timestamp
-
-	unique := map[string]*MetricFamily{}
-	for _, batch := range in {
-		for _, metric := range batch.Metrics {
-			if uniqueMetric, ok := unique[metric.Name]; !ok {
-				unique[metric.Name] = metric
-			} else {
-				uniqueMetric.Values = append(uniqueMetric.Values, metric.Values...)
-			}
-		}
+	result = &MetricsBatch{
+		Timestamp: in[0].Timestamp,
+		Metrics:   map[string]*MetricFamily{},
 	}
 
-	result.Metrics = make([]*MetricFamily, len(unique))
-
-	i := 0
-	for _, item := range unique {
-		result.Metrics[i] = item
-		i++
+	for _, batch := range in {
+		for _, metric := range batch.Metrics {
+			batch.Metrics = appendFamily(batch.Metrics, metric)
+		}
 	}
 
 	return
