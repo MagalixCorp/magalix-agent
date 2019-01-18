@@ -19,6 +19,25 @@ import (
 	"github.com/reconquest/karma-go"
 )
 
+// TODO allow all cAdvisor by default.
+//  This is postponed because of the unexpected load on magalix infra
+var allowedMetrics = []string{
+	"container_cpu_usage_seconds_total",
+	"container_cpu_cfs_periods_total",
+	"container_cpu_cfs_throttled_periods_total",
+	"container_cpu_cfs_throttled_seconds_total",
+
+	"container_memory_rss",
+
+	"container_fs_usage_bytes",
+	"container_fs_limit_bytes",
+
+	"container_network_receive_bytes_total",
+	"container_network_receive_errors_total",
+	"container_network_transmit_bytes_total",
+	"container_network_transmit_errors_total",
+}
+
 // TagsValue a struct to hod tags and values
 type TagsValue struct {
 	Tags  map[string]string
@@ -231,7 +250,7 @@ func (cAdvisor *CAdvisor) GetMetrics() (*MetricsBatch, error) {
 		}
 	}
 
-	return FlattenMetricsBatches(metricsBatches), nil
+	return filterMetrics(FlattenMetricsBatches(metricsBatches)), nil
 }
 
 func (cAdvisor *CAdvisor) bind(labels map[string]string) (
@@ -298,6 +317,21 @@ func (cAdvisor *CAdvisor) bind(labels map[string]string) (
 	}
 
 	return entities, labels
+}
+
+func filterMetrics(batch *MetricsBatch) *MetricsBatch {
+	filtered := &MetricsBatch{
+		Timestamp: batch.Timestamp,
+		Metrics:   map[string]*MetricFamily{},
+	}
+
+	for _, allowedMetric := range allowedMetrics {
+		if metric, ok := batch.Metrics[allowedMetric]; ok {
+			filtered.Metrics[allowedMetric] = metric
+		}
+	}
+
+	return filtered
 }
 
 func NewCAdvisor(
