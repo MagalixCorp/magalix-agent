@@ -95,14 +95,17 @@ func toMetricFamily(
 
 func appendFamily(
 	metricFamilies map[string]*MetricFamily,
-	family *MetricFamily,
+	families ...*MetricFamily,
 ) map[string]*MetricFamily {
-	metricName := family.Name
-	if uniqueMetric, ok := metricFamilies[metricName]; !ok {
-		metricFamilies[metricName] = family
-	} else {
-		uniqueMetric.Values = append(uniqueMetric.Values, family.Values...)
+	for _, family := range families {
+		metricName := family.Name
+		if uniqueMetric, ok := metricFamilies[metricName]; !ok {
+			metricFamilies[metricName] = family
+		} else {
+			uniqueMetric.Values = append(uniqueMetric.Values, family.Values...)
+		}
 	}
+
 	return metricFamilies
 }
 
