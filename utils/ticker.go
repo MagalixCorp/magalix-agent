@@ -9,20 +9,24 @@ type Ticker struct {
 	name string
 
 	interval time.Duration
-	fn       func()
+	fn       func(tickTime time.Time)
 
 	mutex *sync.Mutex
 
-	waitChannels []chan struct{}
+	waitChannels  []chan struct{}
+	waitChannels2 map[int64][]chan interface{}
+
+	lastTick time.Time
 }
 
-func NewTicker(name string, interval time.Duration, fn func()) *Ticker {
+func NewTicker(name string, interval time.Duration, fn func(time.Time)) *Ticker {
 	return &Ticker{
 		name:     name,
 		interval: interval,
 		fn:       fn,
 
 		mutex: &sync.Mutex{},
+		waitChannels2: map[int64][]chan interface{}{},
 	}
 }
 
@@ -40,20 +44,30 @@ func (ticker *Ticker) nextTick() <-chan time.Time {
 	return time.After(interval)
 }
 
-func (ticker *Ticker) unlockWaiting() {
+func (ticker *Ticker) unlockWaiting(tick time.Time) {
 	ticker.mutex.Lock()
 	defer ticker.mutex.Unlock()
 	for _, waitChan := range ticker.waitChannels {
 		waitChan <- struct{}{}
 		close(waitChan)
 	}
+	currentTickStamp := tick.Unix()
+	for tickStamp, waitChannels := range ticker.waitChannels2 {
+		if currentTickStamp >= tickStamp {
+			for _, waitChan := range waitChannels {
+				waitChan <- struct{}{}
+				close(waitChan)
+			}
+			delete(ticker.waitChannels2, tickStamp)
+		}
+	}
 	ticker.waitChannels = make([]chan struct{}, 0)
 }
 
 func (ticker *Ticker) tick() {
-	ticker.fn()
+	ticker.fn(ticker.lastTick)
 	// unlock routines waiting for ticks
-	ticker.unlockWaiting()
+	ticker.unlockWaiting(ticker.lastTick)
 }
 
 // Start starts ticker.
@@ -76,7 +90,7 @@ func (ticker *Ticker) Start(immediate, async, block bool) {
 	tickerFn := func() {
 		tick := ticker.nextTick()
 		for {
-			<-tick
+			ticker.lastTick = <-tick
 
 			if async {
 				go ticker.tick()
@@ -90,7 +104,7 @@ func (ticker *Ticker) Start(immediate, async, block bool) {
 
 	if immediate {
 		// block for first tick
-		ticker.fn()
+		ticker.fn(time.Now())
 	}
 	if block {
 		tickerFn()
@@ -102,10 +116,26 @@ func (ticker *Ticker) Start(immediate, async, block bool) {
 // WaitForNextTick returns a signal channel that gets unblocked after the next tick
 // Example usage:
 //  <- ticker.WaitForNextTick()
-func (ticker *Ticker) WaitForNextTick() chan struct{} {
+func (ticker *Ticker) WaitForNextTick() chan interface{} {
+	return ticker.WaitForTick(ticker.lastTick.Add(ticker.interval))
+	//ticker.mutex.Lock()
+	//defer ticker.mutex.Unlock()
+	//waitChan := make(chan struct{})
+	//ticker.waitChannels = append(ticker.waitChannels, waitChan)
+	//return waitChan
+}
+
+func (ticker *Ticker) WaitForTick(tick time.Time) chan interface{} {
 	ticker.mutex.Lock()
 	defer ticker.mutex.Unlock()
-	waitChan := make(chan struct{})
-	ticker.waitChannels = append(ticker.waitChannels, waitChan)
+	waitChan := make(chan interface{})
+	var waitChannels []chan interface{}
+	waitChannels, ok := ticker.waitChannels2[tick.Unix()]
+	if !ok {
+		waitChannels = make([]chan interface{}, 0)
+	}
+	waitChannels = append(waitChannels, waitChan)
+	ticker.waitChannels2[tick.Unix()] = waitChannels
+
 	return waitChan
 }

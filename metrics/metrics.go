@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
@@ -101,8 +102,9 @@ func watchMetrics(
 	go sendMetrics(client, metricsPipe)
 	defer close(metricsPipe)
 
-	ticker := utils.NewTicker("metrics", interval, func() {
+	ticker := utils.NewTicker("metrics", interval, func(_ time.Time) {
 		metrics, raw, err := source.GetMetrics(scanner)
+
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
@@ -123,27 +125,67 @@ func watchMetrics(
 
 func watchMetricsProm(
 	c *client.Client,
-	source Source,
+	sources map[string]Source,
 	interval time.Duration,
 ) {
-	ticker := utils.NewTicker("raw-metrics", interval, func() {
-		metricsBatch, err := source.GetMetrics()
-		if err != nil {
-			c.Errorf(err, "unable to retrieve metricsBatch from sink")
-			return
-		}
 
-		packet := packetMetricsProm(metricsBatch)
+	ticker := utils.NewTicker(
+		"prom-metrics",
+		interval,
+		func(tickTime time.Time) {
+			m := sync.Mutex{}
+			metricsBatch := &MetricsBatch{
+				Timestamp: tickTime,
+				Metrics:   map[string]*MetricFamily{},
+			}
 
-		c.Pipe(client.Package{
-			Kind:        proto.PacketKindMetricsPromStoreRequest,
-			ExpiryTime:  utils.After(2 * time.Hour),
-			ExpiryCount: 100,
-			Priority:    4,
-			Retries:     10,
-			Data:        packet,
-		})
-	})
+			scrapeSource := func(sourceName string, source Source) {
+				sourceBatch, err := source.GetMetrics(tickTime)
+				if err != nil {
+					c.Errorf(err, "unable to retrieve metrics from %s source", sourceName)
+					return
+				}
+				m.Lock()
+				defer m.Unlock()
+				metricsBatch.Metrics = mergeFamilies(metricsBatch.Metrics, sourceBatch.Metrics)
+			}
+
+			wg := &sync.WaitGroup{}
+			wg.Add(len(sources))
+
+			context := karma.Describe("tick", tickTime)
+			c.Infof(
+				context,
+				"requesting metrics from prometheus sources",
+			)
+
+			for sourceName, source := range sources {
+				go func(sourceName string, source Source) {
+					scrapeSource(sourceName, source)
+					wg.Done()
+				}(sourceName, source)
+			}
+
+			wg.Wait()
+
+			c.Infof(
+				context,
+				"collected %v metrics from prometheus sources",
+				len(metricsBatch.Metrics),
+			)
+
+			packet := packetMetricsProm(metricsBatch)
+
+			c.Pipe(client.Package{
+				Kind:        proto.PacketKindMetricsPromStoreRequest,
+				ExpiryTime:  utils.After(2 * time.Hour),
+				ExpiryCount: 100,
+				Priority:    4,
+				Retries:     10,
+				Data:        packet,
+			})
+		},
+	)
 	ticker.Start(false, true, true)
 }
 
@@ -251,7 +293,7 @@ func InitMetrics(
 		metricsInterval = utils.MustParseDuration(args, "--metrics-interval")
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
-		metricsSources = make([]interface{}, 0)
+		metricsSources = map[string]interface{}{}
 		foundErrors    = make([]error, 0)
 	)
 
@@ -292,8 +334,7 @@ func InitMetrics(
 				continue
 			}
 
-			metricsSources = append(metricsSources, kubelet)
-
+			metricsSources[metricsSource] = kubelet
 
 		case "alpha-cadvisor":
 			cAdvisor, err := NewCAdvisor(
@@ -314,7 +355,12 @@ func InitMetrics(
 				continue
 			}
 
-			metricsSources = append(metricsSources, cAdvisor)
+			metricsSources[metricsSource] = cAdvisor
+
+		case "alpha-stats":
+			stats := NewStats(scanner, client.Logger)
+
+			metricsSources[metricsSource] = stats
 		}
 	}
 
@@ -322,7 +368,8 @@ func InitMetrics(
 		return karma.Format(foundErrors, "unable to init metric sources")
 	}
 
-	for _, source := range metricsSources {
+	promSources := map[string]Source{}
+	for sourceName, source := range metricsSources {
 		switch s := source.(type) {
 		case MetricsSource:
 			go watchMetrics(
@@ -333,14 +380,11 @@ func InitMetrics(
 			)
 			break
 		case Source:
-			go watchMetricsProm(
-				client,
-				s,
-				metricsInterval,
-			)
+			promSources[sourceName] = s
 			break
 		}
 	}
+	go watchMetricsProm(client, promSources, metricsInterval)
 
 	return nil
 }

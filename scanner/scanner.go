@@ -91,7 +91,9 @@ func InitScanner(
 		// noop function
 		scanner.analysisDataSender = func(args ...interface{}) {}
 	}
-	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, scanner.scan)
+	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, func(_ time.Time) {
+		scanner.scan()
+	})
 	// Note: we set immediate to true so that the scanner blocks for the first
 	// run. Other components depends on scanner having a history to function correctly.
 	// The other solution is to let the dependent components to wait for scanner

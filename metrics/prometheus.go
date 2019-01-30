@@ -55,7 +55,7 @@ func toMetricFamily(
 		Help: dtoMF.GetHelp(),
 		Type: dtoMF.GetType().String(),
 
-		Values: make([]*MetricValue, len(dtoMF.Metric)),
+		Values: make([]*MetricValue, 0),
 	}
 
 	if dtoMF.GetType() == io_prometheus_client.MetricType_SUMMARY {
@@ -66,18 +66,23 @@ func toMetricFamily(
 
 		uniqueTags := map[string]bool{}
 
-		for i, m := range dtoMF.Metric {
+		for _, m := range dtoMF.Metric {
 			labels := makeLabels(m)
 			entities, labels := bind(labels)
 			for label := range labels {
 				uniqueTags[label] = true
 			}
 
-			mf.Values[i] = &MetricValue{
-				Entities: entities,
+			if entities != nil {
+				mf.Values = append(
+					mf.Values,
+					&MetricValue{
+						Entities: entities,
 
-				Tags:  labels,
-				Value: getValue(m),
+						Tags:  labels,
+						Value: getValue(m),
+					},
+				)
 			}
 		}
 
@@ -109,6 +114,19 @@ func appendFamily(
 	return metricFamilies
 }
 
+func mergeFamilies(
+	a map[string]*MetricFamily,
+	b map[string]*MetricFamily,
+) map[string]*MetricFamily {
+	values := make([]*MetricFamily, len(b))
+	i := 0
+	for _, v := range b {
+		values[i] = v
+		i++
+	}
+	return appendFamily(a, values...)
+}
+
 func FlattenMetricsBatches(in []*MetricsBatch) (result *MetricsBatch) {
 	if len(in) == 0 {
 		return
@@ -121,7 +139,7 @@ func FlattenMetricsBatches(in []*MetricsBatch) (result *MetricsBatch) {
 
 	for _, batch := range in {
 		for _, metric := range batch.Metrics {
-			batch.Metrics = appendFamily(batch.Metrics, metric)
+			result.Metrics = appendFamily(result.Metrics, metric)
 		}
 	}
 

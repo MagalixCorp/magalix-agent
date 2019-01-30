@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
-	"github.com/MagalixTechnologies/alltogether-go"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
@@ -177,24 +177,26 @@ func (cAdvisor *CAdvisor) withBackoff(fn func() error) error {
 	return utils.WithBackoff(fn, cAdvisor.backoff, cAdvisor.Logger)
 }
 
-func (cAdvisor *CAdvisor) GetMetrics() (*MetricsBatch, error) {
+func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
 	mutex := sync.Mutex{}
 	var metricsBatches []*MetricsBatch
 
-	getNodeMetrics := func(node kuber.Node) error {
+	getNodeMetrics := func(node kuber.Node) {
 		cAdvisor.Infof(
 			nil,
 			"{cAdvisor} requesting metrics from node %s",
 			node.Name,
 		)
 
-		return cAdvisor.withBackoff(func() error {
+		err := cAdvisor.withBackoff(func() error {
 			nodeMetricsBatch, err := ReadPrometheusMetrics(
 				cAdvisor.getNodeKubeletAddress(node)+"/metrics/cadvisor",
 				"", "", true,
 				func(labels map[string]string) (entities *Entities, tags map[string]string) {
 					entities, tags = cAdvisor.bind(labels)
-					entities.Node = &node.ID
+					if entities != nil {
+						entities.Node = &node.ID
+					}
 					return entities, tags
 				},
 			)
@@ -224,33 +226,45 @@ func (cAdvisor *CAdvisor) GetMetrics() (*MetricsBatch, error) {
 			return nil
 
 		})
-	}
 
-	nodes := cAdvisor.scanner.GetNodes()
-	pr, err := alltogether.NewConcurrentProcessor(nodes, getNodeMetrics)
-	if err != nil {
-		panic(err)
-	}
-
-	errs := pr.Do()
-	if !errs.AllNil() {
-		// Note: if one node fails we fail safe to allow other node metrics to flow.
-		// Note: In cases where pods are replicated across nodes,
-		// Note: it means that the metrics are misleading. However, It is the
-		// Note: rule of consumers to validate the correctness of the metrics
-		// Note: and drop bad points
-
-		for _, err := range errs {
-			if err != nil {
-				cAdvisor.Errorf(
-					err,
-					"{cAdvisor} error while scraping nodes metrics",
-				)
-			}
+		if err != nil {
+			cAdvisor.Errorf(
+				err,
+				"{cAdvisor} error while scraping node %s metric",
+				node.Name,
+			)
 		}
 	}
 
-	return filterMetrics(FlattenMetricsBatches(metricsBatches)), nil
+	// don't wait for the tickTime and assume latest nodes definitions are good
+	nodes := cAdvisor.scanner.GetNodes()
+
+	cAdvisor.Infof(
+		nil,
+		"{cAdvisor} requesting metrics",
+	)
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(nodes))
+
+	for _, node := range nodes {
+		go func(node kuber.Node) {
+			getNodeMetrics(node)
+			wg.Done()
+		}(node)
+	}
+
+	wg.Wait()
+
+	batch := filterMetrics(FlattenMetricsBatches(metricsBatches))
+
+	cAdvisor.Infof(
+		nil,
+		"{cAdvisor} collected %v metrics from cAdvisor",
+		len(batch.Metrics),
+	)
+
+	return batch, nil
 }
 
 func (cAdvisor *CAdvisor) bind(labels map[string]string) (
@@ -293,13 +307,18 @@ func (cAdvisor *CAdvisor) bind(labels map[string]string) (
 		}
 	} else {
 		// TODO: Node level and system containers metrics?
-		idLabel, _ := labels["id"]
-		if idLabel == "/" {
-			metricType = TypePodContainer
-		} else if idLabel != "" {
-			metricType = TypeSysContainer
-		} else {
-			//	TODO: is this even possible?
+		idLabel, ok := labels["id"]
+		if ok {
+			if idLabel == "/" {
+				metricType = TypeNode
+			} else if idLabel != "" {
+				metricType = TypeSysContainer
+				return nil, labels
+			} else {
+				//	TODO: is this even possible?
+				cAdvisor.Warning(karma.Describe("labels", labels), "empty id field?")
+				return nil, labels
+			}
 		}
 	}
 

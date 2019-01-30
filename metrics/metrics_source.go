@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"github.com/MagalixCorp/magalix-agent/scanner"
+	"time"
 )
 
 // MetricsSource interface for metrics source
@@ -10,5 +11,5 @@ type MetricsSource interface {
 }
 
 type Source interface {
-	GetMetrics() (*MetricsBatch, error)
+	GetMetrics(time time.Time) (*MetricsBatch, error)
 }

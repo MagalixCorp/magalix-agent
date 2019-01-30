@@ -1,7 +1,10 @@
 package metrics
 
 import (
+	"time"
+
 	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixTechnologies/log-go"
 	"github.com/prometheus/client_model/go"
 )
 
@@ -54,25 +57,32 @@ var (
 )
 
 type Stats struct {
+	*log.Logger
+
 	scanner *scanner.Scanner
 }
 
-func NewStats(s *scanner.Scanner) *Stats {
+func NewStats(s *scanner.Scanner, logger *log.Logger) *Stats {
 	return &Stats{
+		Logger:  logger,
 		scanner: s,
 	}
 }
 
-func (stats *Stats) GetMetrics() (*MetricsBatch, error) {
-	scanner2 := stats.scanner
-
+func (stats *Stats) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
 	// wait for next scan
-	<-scanner2.WaitForNextTick()
+	<-stats.scanner.WaitForTick(tickTime)
 
-	nodes := scanner2.GetNodes()
+	stats.Infof(
+		nil,
+		"{stats} requesting metrics from scanner",
+	)
+
+	nodes := stats.scanner.GetNodes()
+	apps := stats.scanner.GetApplications()
 
 	batch := &MetricsBatch{
-		Timestamp: scanner2.NodesLastScanTime(),
+		Timestamp: stats.scanner.NodesLastScanTime(),
 		Metrics:   map[string]*MetricFamily{},
 	}
 
@@ -81,7 +91,12 @@ func (stats *Stats) GetMetrics() (*MetricsBatch, error) {
 		Help: NodesCountHelp,
 		Type: TypeGAUGE,
 
-		Values: []*MetricValue{{Value: float64(len(nodes))}},
+		Values: []*MetricValue{
+			{
+				Entities: &Entities{},
+				Value:    float64(len(nodes)),
+			},
+		},
 	}
 
 	instanceGroups := map[string]int64{}
@@ -113,6 +128,7 @@ func (stats *Stats) GetMetrics() (*MetricsBatch, error) {
 	i := 0
 	for instanceGroup, nodesCount := range instanceGroups {
 		mv := &MetricValue{
+			Entities: &Entities{},
 			Tags:  map[string]string{},
 			Value: float64(nodesCount),
 		}
@@ -221,8 +237,6 @@ func (stats *Stats) GetMetrics() (*MetricsBatch, error) {
 
 	}
 
-	apps := scanner2.GetApplications()
-
 	containersTagsNames := []string{NamespaceTag, PodTag, ContainerTag}
 
 	containersRequestsCpu := &MetricFamily{
@@ -313,6 +327,12 @@ func (stats *Stats) GetMetrics() (*MetricsBatch, error) {
 		containersLimitsCpu,
 		containersRequestsMemory,
 		containersLimitsMemory,
+	)
+
+	stats.Infof(
+		nil,
+		"{stats} collected %v metrics",
+		len(batch.Metrics),
 	)
 
 	return batch, nil
