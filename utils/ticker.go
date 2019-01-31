@@ -13,9 +13,7 @@ type Ticker struct {
 
 	mutex *sync.Mutex
 
-	waitChannels  []chan struct{}
-	waitChannels2 map[int64][]chan interface{}
-
+	waitChannels map[int64][]chan interface{}
 	lastTick time.Time
 }
 
@@ -26,7 +24,7 @@ func NewTicker(name string, interval time.Duration, fn func(time.Time)) *Ticker 
 		fn:       fn,
 
 		mutex: &sync.Mutex{},
-		waitChannels2: map[int64][]chan interface{}{},
+		waitChannels: map[int64][]chan interface{}{},
 	}
 }
 
@@ -47,21 +45,16 @@ func (ticker *Ticker) nextTick() <-chan time.Time {
 func (ticker *Ticker) unlockWaiting(tick time.Time) {
 	ticker.mutex.Lock()
 	defer ticker.mutex.Unlock()
-	for _, waitChan := range ticker.waitChannels {
-		waitChan <- struct{}{}
-		close(waitChan)
-	}
 	currentTickStamp := tick.Unix()
-	for tickStamp, waitChannels := range ticker.waitChannels2 {
+	for tickStamp, waitChannels := range ticker.waitChannels {
 		if currentTickStamp >= tickStamp {
 			for _, waitChan := range waitChannels {
 				waitChan <- struct{}{}
 				close(waitChan)
 			}
-			delete(ticker.waitChannels2, tickStamp)
+			delete(ticker.waitChannels, tickStamp)
 		}
 	}
-	ticker.waitChannels = make([]chan struct{}, 0)
 }
 
 func (ticker *Ticker) tick() {
@@ -118,11 +111,6 @@ func (ticker *Ticker) Start(immediate, async, block bool) {
 //  <- ticker.WaitForNextTick()
 func (ticker *Ticker) WaitForNextTick() chan interface{} {
 	return ticker.WaitForTick(ticker.lastTick.Add(ticker.interval))
-	//ticker.mutex.Lock()
-	//defer ticker.mutex.Unlock()
-	//waitChan := make(chan struct{})
-	//ticker.waitChannels = append(ticker.waitChannels, waitChan)
-	//return waitChan
 }
 
 func (ticker *Ticker) WaitForTick(tick time.Time) chan interface{} {
@@ -130,12 +118,12 @@ func (ticker *Ticker) WaitForTick(tick time.Time) chan interface{} {
 	defer ticker.mutex.Unlock()
 	waitChan := make(chan interface{})
 	var waitChannels []chan interface{}
-	waitChannels, ok := ticker.waitChannels2[tick.Unix()]
+	waitChannels, ok := ticker.waitChannels[tick.Unix()]
 	if !ok {
 		waitChannels = make([]chan interface{}, 0)
 	}
 	waitChannels = append(waitChannels, waitChan)
-	ticker.waitChannels2[tick.Unix()] = waitChannels
+	ticker.waitChannels[tick.Unix()] = waitChannels
 
 	return waitChan
 }
