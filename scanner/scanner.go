@@ -103,8 +103,17 @@ func InitScanner(
 }
 
 func (scanner *Scanner) scan() {
-	scanner.scanNodes()
-	scanner.scanApplications()
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		scanner.scanNodes()
+		wg.Done()
+	}()
+	go func() {
+		scanner.scanApplications()
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
 func (scanner *Scanner) scanNodes() {
