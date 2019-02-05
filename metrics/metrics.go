@@ -1,8 +1,12 @@
 package metrics
 
 import (
+	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"strings"
 	"time"
 
@@ -202,7 +206,7 @@ func InitMetrics(
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
 		kubeletAddress, _ = args["--kubelet-address"].(string)
-		//kubeletPort, _    = args["--kubelet-port"].(string)
+		kubeletPort, _    = args["--kubelet-port"].(string)
 
 		metricsSources = make([]MetricsSource, 0)
 		foundErrors    = make([]error, 0)
@@ -214,28 +218,95 @@ func InitMetrics(
 		failOnError = true
 	}
 
+	nodes := scanner.GetNodes()
+
+	testKubelet := func(getAddr func(node kuber.Node) string) (err error) {
+		testNode := nodes[0]
+		testAddress := getAddr(testNode)
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		httpClient := &http.Client{Transport: transport}
+		response, err := httpClient.Get(testAddress + "/stats/summary")
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get summary from node %q",
+				testNode.Name,
+			)
+		}
+
+		b, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to read response body",
+			)
+		} else {
+			var summary interface{}
+			err = json.Unmarshal(b, &summary)
+			if err != nil {
+				return karma.Format(
+					err,
+					"unable to unmarshal summary response: %s",
+					string(b),
+				)
+			}
+		}
+
+		return
+	}
+
+	if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
+		foundErrors = append(foundErrors, errors.New(
+			"kubelet address should not start with /",
+		))
+		failOnError = true
+	}
+
+	var getNodeKubeletAddress func(node kuber.Node) string
+	if kubeletAddress != "" {
+		getNodeKubeletAddress = func(node kuber.Node) string {
+			return kubeletAddress
+		}
+	} else {
+		if len(nodes) == 0 {
+			foundErrors = append(
+				foundErrors,
+				errors.New("can't test kubelet ports. no discovered nodes"),
+			)
+		} else {
+
+			getNodeKubeletAddress = func(node kuber.Node) string {
+				return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
+			}
+
+			err := testKubelet(getNodeKubeletAddress)
+			if err != nil {
+				//	can't use TLS port for some reason
+				client.Errorf(err, "can't use kubelet TLS port. falling back to http readonly port: ", kubeletPort)
+
+				getNodeKubeletAddress = func(node kuber.Node) string {
+					return fmt.Sprintf("http://%s:%v", node.IP, kubeletPort)
+				}
+
+				err = testKubelet(getNodeKubeletAddress)
+				if err != nil {
+					foundErrors = append(
+						foundErrors,
+						fmt.Errorf("can't use kubelet TLS port nor http readonly port %s", kubeletPort),
+					)
+					failOnError = true
+				}
+			}
+		}
+	}
+
 	for _, metricsSource := range metricsSourcesNames {
 		switch metricsSource {
 		case "kubelet":
 			client.Info("using kubelet as metrics source")
 
-			if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
-				foundErrors = append(foundErrors, errors.New(
-					"kubelet address should not start with /",
-				))
-				continue
-			}
-
-			var getNodeKubeletAddress func(node kuber.Node) string
-			if kubeletAddress != "" {
-				getNodeKubeletAddress = func(node kuber.Node) string {
-					return kubeletAddress
-				}
-			} else {
-				getNodeKubeletAddress = func(node kuber.Node) string {
-					return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
-				}
-			}
 			kubelet, err := NewKubelet(getNodeKubeletAddress, client.Logger, metricsInterval,
 				kubeletTimeouts{
 					backoff: backOff{

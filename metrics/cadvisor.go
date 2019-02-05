@@ -172,7 +172,7 @@ func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
 
 		return cAdvisor.withBackoff(func() error {
 			cAdvisorResponse, err := http.Get(
-				"http://" + cAdvisor.getNodeKubeletAddress(node) + "/metrics/cAdvisorMetrics",
+				cAdvisor.getNodeKubeletAddress(node) + "/metrics/cAdvisorMetrics",
 			)
 			now := time.Now()
 
