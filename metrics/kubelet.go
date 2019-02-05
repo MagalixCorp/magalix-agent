@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -107,17 +106,12 @@ type Kubelet struct {
 
 // NewKubelet returns new kubelet
 func NewKubelet(
+	kubeletClient *http.Client,
 	getNodeKubeletAddress func(node kuber.Node) string,
 	log *log.Logger,
 	resolution time.Duration,
 	timeouts kubeletTimeouts,
 ) (*Kubelet, error) {
-	// TODO: allow passing certificate for secure connection
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	httpClient := &http.Client{Transport: transport}
-
 	kubelet := &Kubelet{
 		Logger: log,
 
@@ -126,7 +120,7 @@ func NewKubelet(
 		previous:              map[string]KubeletValue{},
 		previousMutex:         &sync.Mutex{},
 		timeouts:              timeouts,
-		kubeletClient:         httpClient,
+		kubeletClient:         kubeletClient,
 	}
 
 	return kubelet, nil

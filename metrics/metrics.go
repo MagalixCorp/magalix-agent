@@ -17,6 +17,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
+	"k8s.io/client-go/util/cert"
 )
 
 const limit = 1000
@@ -220,14 +221,26 @@ func InitMetrics(
 
 	nodes := scanner.GetNodes()
 
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: args["--kubelet-insecure"].(bool),
+		},
+	}
+
+	if rootCAFile, ok := args["--kubelet-root-ca-cert"].(string); ok {
+		if certPool, err := cert.NewPool(rootCAFile); err != nil {
+			client.Errorf(err, "expected to load root CA config from %s, but got err: %v", rootCAFile)
+		} else {
+			transport.TLSClientConfig.RootCAs = certPool
+		}
+	}
+
+	kubeletClient := &http.Client{Transport: transport}
+
 	testKubelet := func(getAddr func(node kuber.Node) string) (err error) {
 		testNode := nodes[0]
 		testAddress := getAddr(testNode)
-		transport := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		httpClient := &http.Client{Transport: transport}
-		response, err := httpClient.Get(testAddress + "/stats/summary")
+		response, err := kubeletClient.Get(testAddress + "/stats/summary")
 		if err != nil {
 			return karma.Format(
 				err,
@@ -276,7 +289,6 @@ func InitMetrics(
 				errors.New("can't test kubelet ports. no discovered nodes"),
 			)
 		} else {
-
 			getNodeKubeletAddress = func(node kuber.Node) string {
 				return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
 			}
@@ -307,7 +319,11 @@ func InitMetrics(
 		case "kubelet":
 			client.Info("using kubelet as metrics source")
 
-			kubelet, err := NewKubelet(getNodeKubeletAddress, client.Logger, metricsInterval,
+			kubelet, err := NewKubelet(
+				kubeletClient,
+				getNodeKubeletAddress,
+				client.Logger,
+				metricsInterval,
 				kubeletTimeouts{
 					backoff: backOff{
 						sleep:      utils.MustParseDuration(args, "--kubelet-backoff-sleep"),

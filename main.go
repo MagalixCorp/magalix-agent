@@ -53,6 +53,8 @@ Options:
   --kubelet-port <port>                      Override kubelet port for
                                               automatically discovered nodes.
                                               [default: 10255]
+  --kubelet-insecure                         Insecure skip SSL verify.
+  --kubelet-root-ca-cert <filepath>          Filepath to root CA cert.
   --kubelet-backoff-sleep <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
