@@ -19,6 +19,21 @@ import (
 	"sync"
 )
 
+const noPortHelp = `
+Can't find a working kubelet address.
+-----------------------------------------
+
+Please verify that one of the following is correct:
+
+1. the agent has the sufficient permissions to access stats and metrics resources.
+Also verify that you are passing the correct --kubelet-insecure and --kubelet-root-ca-cert arguments to the agent.
+See this for more info https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-authentication-authorization/
+
+2. the cluster has the http readonly port enabled and set to the default 10255
+
+3. the cluster has http readonly port enabled and passed correctly to the agent container as argument '--kubelet-port=<your-port>'
+`
+
 func joinUrl(address, path string) string {
 	u, _ := url.Parse(address)
 	u.Path = path
@@ -31,52 +46,53 @@ type KubeletClient struct {
 	*log.Logger
 	*http.Client
 
+	httpPort          string
+	singleKubeletHost string
+
+	schema string
+	port   *string
+
 	scanner *scanner.Scanner
 
 	getNodeAddress func(node *kuber.Node) string
 }
 
-func (client *KubeletClient) init(
-	args map[string]interface{},
-) (err error) {
-	kubeletAddress, _ := args["--kubelet-address"].(string)
-	kubeletPort, _ := args["--kubelet-port"].(string)
+func (client *KubeletClient) init() (err error) {
+	getNodeAddress, schema, port, err := client.discoverNodesAddress()
 
-	if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
+	if err != nil {
+		print(noPortHelp)
 		return karma.Format(
 			nil,
-			"invalid kubelet address %s. should not start with /",
-			kubeletAddress,
+			"unable to get working kubelet address.",
 		)
 	}
 
-	getNodeAddress, err := client.discoverNodesAddress(kubeletAddress, kubeletPort)
-	if err != nil {
-		return karma.Format(
-			err,
-			"unable to get working kubelet address",
-		)
-	}
-
+	client.schema = schema
+	client.port = port
 	client.getNodeAddress = getNodeAddress
+
 	return nil
 }
 
-func (client *KubeletClient) discoverNodesAddress(
-	kubeletAddress, httpPort string,
-) (getNodeKubeletAddress NodeAddressGetter, err error) {
+func (client *KubeletClient) discoverNodesAddress() (
+	getNodeKubeletAddress NodeAddressGetter,
+	schema string,
+	port *string,
+	err error,
+) {
 
-	if kubeletAddress != "" {
+	if client.singleKubeletHost != "" {
 		getNodeKubeletAddress = func(node *kuber.Node) string {
-			return kubeletAddress
+			return client.singleKubeletHost
 		}
 
 		err = client.testNodeAccess(nil, getNodeKubeletAddress)
 
 		if err == nil {
 			client.Infof(
-				karma.Describe("address", kubeletAddress),
-				"using single forced kubeletAddress",
+				karma.Describe("address", client.singleKubeletHost),
+				"using single host kubelet",
 			)
 		}
 
@@ -85,10 +101,13 @@ func (client *KubeletClient) discoverNodesAddress(
 
 	nodes := client.scanner.GetNodes()
 	if len(nodes) == 0 {
-		return nil, karma.Format(
+		return nil,
+			"",
 			nil,
-			"can't test kubelet ports. no discovered nodes",
-		)
+			karma.Format(
+				nil,
+				"can't test kubelet ports. no discovered nodes",
+			)
 	}
 
 	ctx := context.TODO()
@@ -97,19 +116,60 @@ func (client *KubeletClient) discoverNodesAddress(
 	found := make(chan struct{}, 0)
 	done := make(chan struct{}, 0)
 
+	setResult := func(s, p *string) {
+		schema = *s
+		port = p
+
+		if p == nil {
+			client.Infof(
+				karma.
+					Describe("port", "<auto>").
+					Describe("schema", *s),
+				"using auto port discovery",
+			)
+			getNodeKubeletAddress = func(node *kuber.Node) string {
+				return fmt.Sprintf(
+					"%s://%s:%v",
+					*s,
+					node.IP,
+					node.KubeletPort,
+				)
+			}
+		} else {
+			client.Infof(
+				karma.
+					Describe("port", *p).
+					Describe("schema", *s),
+				"using specified kubelet port",
+			)
+			getNodeKubeletAddress = func(node *kuber.Node) string {
+				return fmt.Sprintf(
+					"%s://%s:%v",
+					*s,
+					node.IP,
+					*port,
+				)
+			}
+
+		}
+		close(found)
+	}
+
+	processNode := func(n kuber.Node) {
+		group.Go(func() error {
+			s, p, err := client.discoverNodeAddress(&n)
+			if err == nil {
+				once.Do(func() {
+					setResult(s, p)
+				})
+			}
+			return err
+		})
+
+	}
+
 	for _, node := range client.scanner.GetNodes() {
-		func(n kuber.Node) {
-			group.Go(func() error {
-				getNodeAddress, err := client.discoverNodeAddress(&n, httpPort)
-				if err == nil {
-					once.Do(func() {
-						getNodeKubeletAddress = getNodeAddress
-						close(found)
-					})
-				}
-				return err
-			})
-		}(node)
+		processNode(node)
 	}
 
 	go func() {
@@ -127,43 +187,55 @@ func (client *KubeletClient) discoverNodesAddress(
 }
 
 func (client *KubeletClient) discoverNodeAddress(
-	node *kuber.Node, httpPort string,
-) (getNodeKubeletAddress NodeAddressGetter, err error) {
+	node *kuber.Node,
+) (schema, port *string, err error) {
 
-	getNodeKubeletAddress = func(node *kuber.Node) string {
-		return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
-	}
-	err = client.testNodeAccess(node, getNodeKubeletAddress)
-	if err == nil {
-		client.Infof(
-			karma.Describe("port", "<auto>"),
-			"using kubelet TLS port",
-		)
-	} else {
-		//	can't use TLS port for some reason
-		client.Errorf(
-			err,
-			"can't use kubelet TLS port. "+
-				"falling back to http readonly port: %s",
-			httpPort,
-		)
-
-		getNodeKubeletAddress = func(node *kuber.Node) string {
-			return fmt.Sprintf("http://%s:%v", node.IP, httpPort)
+	getNodeKubeletAddress := func(node *kuber.Node) string {
+		p := fmt.Sprintf("%d", node.KubeletPort)
+		if port != nil {
+			p = *port
 		}
+		return fmt.Sprintf("%s://%s:%v", *schema, node.IP, p)
+	}
+
+	ctx := karma.
+		Describe("node", node.Name).
+		Describe("ip", node.IP)
+
+	schema = new(string)
+	*schema = "https"
+	err = client.testNodeAccess(node, getNodeKubeletAddress)
+	if err != nil {
+		//	can't use TLS port for some reason
+		client.Warning(
+			ctx.
+				Describe("schema", *schema).
+				Describe("port", "<auto>").
+				Format(
+					err,
+					"can't use kubelet TLS port. "+
+						"falling back to http readonly port: %s",
+					client.httpPort,
+				),
+		)
+		port = new(string)
+		*schema = "http"
+		*port = client.httpPort
+
 		err = client.testNodeAccess(node, getNodeKubeletAddress)
-		if err == nil {
-			client.Infof(
-				karma.Describe("port", httpPort),
-				"using kubelet http readonly port",
+		if err != nil {
+			client.Warning(
+				ctx.
+					Describe("schema", *schema).
+					Describe("port", *port).
+					Format(
+						err,
+						"can't use kubelet http readonly port %s",
+						port,
+					),
 			)
-		} else {
-			getNodeKubeletAddress = nil
-			client.Errorf(
-				err,
-				"can't use kubelet http readonly port %s",
-				httpPort,
-			)
+			schema = nil
+			port = nil
 		}
 	}
 
@@ -226,7 +298,10 @@ func (client *KubeletClient) getJson(url string, response interface{}) error {
 	return nil
 }
 
-func (client *KubeletClient) Get(node *kuber.Node, path string) ([]byte, error) {
+func (client *KubeletClient) Get(
+	node *kuber.Node,
+	path string,
+) ([]byte, error) {
 	u := client.getNodeUrl(node, path)
 	return client.get(u)
 }
@@ -246,8 +321,29 @@ func NewKubeletClient(
 	args map[string]interface{},
 ) (*KubeletClient, error) {
 
+	kubeletAddress, _ := args["--kubelet-address"].(string)
+	kubeletPort, _ := args["--kubelet-port"].(string)
+	insecure := args["--kubelet-insecure"].(bool)
+
+	if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
+		kubeletUrl, err := url.Parse(kubeletAddress)
+		if kubeletUrl.Scheme == "" {
+			err = karma.Format(
+				nil,
+				"kubelet address don't have schema",
+			)
+		}
+		if err != nil {
+			return nil, karma.Format(
+				nil,
+				"invalid kubelet address %s.",
+				kubeletAddress,
+			)
+		}
+	}
+
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: args["--kubelet-insecure"].(bool),
+		InsecureSkipVerify: insecure,
 	}
 
 	if rootCAFile, ok := args["--kubelet-root-ca-cert"].(string); ok {
@@ -266,10 +362,13 @@ func NewKubeletClient(
 			},
 		},
 
+		httpPort:          kubeletPort,
+		singleKubeletHost: kubeletAddress,
+
 		scanner: scanner,
 	}
 
-	err := client.init(args)
+	err := client.init()
 	if err != nil {
 		return nil, karma.Format(
 			err,
