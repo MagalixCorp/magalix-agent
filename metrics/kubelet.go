@@ -1,9 +1,8 @@
 package metrics
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
@@ -96,18 +95,16 @@ type kubeletTimeouts struct {
 type Kubelet struct {
 	*log.Logger
 
-	resolution            time.Duration
-	getNodeKubeletAddress func(node kuber.Node) string
-	previous              map[string]KubeletValue
-	previousMutex         *sync.Mutex
-	timeouts              kubeletTimeouts
-	kubeletClient         *http.Client
+	resolution    time.Duration
+	previous      map[string]KubeletValue
+	previousMutex *sync.Mutex
+	timeouts      kubeletTimeouts
+	kubeletClient *KubeletClient
 }
 
 // NewKubelet returns new kubelet
 func NewKubelet(
-	kubeletClient *http.Client,
-	getNodeKubeletAddress func(node kuber.Node) string,
+	kubeletClient *KubeletClient,
 	log *log.Logger,
 	resolution time.Duration,
 	timeouts kubeletTimeouts,
@@ -115,12 +112,12 @@ func NewKubelet(
 	kubelet := &Kubelet{
 		Logger: log,
 
-		resolution:            resolution,
-		getNodeKubeletAddress: getNodeKubeletAddress,
-		previous:              map[string]KubeletValue{},
-		previousMutex:         &sync.Mutex{},
-		timeouts:              timeouts,
-		kubeletClient:         kubeletClient,
+		kubeletClient: kubeletClient,
+
+		resolution:    resolution,
+		previous:      map[string]KubeletValue{},
+		previousMutex: &sync.Mutex{},
+		timeouts:      timeouts,
 	}
 
 	return kubelet, nil
@@ -360,15 +357,12 @@ func (kubelet *Kubelet) GetMetrics(
 			)
 
 			var (
-				summaryResponse  *http.Response
-				cadvisorResponse *http.Response
+				cadvisorResponse []byte
 				summary          KubeletSummary
 				err              error
 			)
 			err = kubelet.withBackoff(func() error {
-				summaryResponse, err = kubelet.kubeletClient.Get(
-					kubelet.getNodeKubeletAddress(node) + "/stats/summary",
-				)
+				err := kubelet.kubeletClient.GetJson(&node, "/stats/summary", &summary)
 				if err != nil {
 					return karma.Format(
 						err,
@@ -378,19 +372,6 @@ func (kubelet *Kubelet) GetMetrics(
 				}
 				return nil
 			})
-
-			if err != nil {
-				return err
-			}
-			defer summaryResponse.Body.Close()
-
-			err = json.NewDecoder(summaryResponse.Body).Decode(&summary)
-			if err != nil {
-				return karma.Format(
-					err,
-					"{kubelet} unable to unmarshal summary response",
-				)
-			}
 
 			for _, measurement := range []struct {
 				Name  string
@@ -579,7 +560,8 @@ func (kubelet *Kubelet) GetMetrics(
 
 			err = kubelet.withBackoff(func() error {
 				cadvisorResponse, err = kubelet.kubeletClient.Get(
-					kubelet.getNodeKubeletAddress(node) + "/metrics/cadvisor",
+					&node,
+					"/metrics/cadvisor",
 				)
 				if err != nil {
 					return karma.Format(
@@ -594,9 +576,8 @@ func (kubelet *Kubelet) GetMetrics(
 			if err != nil {
 				return err
 			}
-			defer cadvisorResponse.Body.Close()
 
-			cadvisor, err := decodeCAdvisorResponse(cadvisorResponse.Body)
+			cadvisor, err := decodeCAdvisorResponse(bytes.NewReader(cadvisorResponse))
 			if err != nil {
 				return karma.Format(err,
 					"{kubelet} unable to read cadvisor response",

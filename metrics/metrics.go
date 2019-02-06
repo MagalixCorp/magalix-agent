@@ -1,23 +1,14 @@
 package metrics
 
 import (
-	"crypto/tls"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io/ioutil"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
-	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
-	"k8s.io/client-go/util/cert"
 )
 
 const limit = 1000
@@ -206,9 +197,6 @@ func InitMetrics(
 		metricsInterval = utils.MustParseDuration(args, "--metrics-interval")
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
-		kubeletAddress, _ = args["--kubelet-address"].(string)
-		kubeletPort, _    = args["--kubelet-port"].(string)
-
 		metricsSources = make([]MetricsSource, 0)
 		foundErrors    = make([]error, 0)
 	)
@@ -219,99 +207,10 @@ func InitMetrics(
 		failOnError = true
 	}
 
-	nodes := scanner.GetNodes()
-
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: args["--kubelet-insecure"].(bool),
-		},
-	}
-
-	if rootCAFile, ok := args["--kubelet-root-ca-cert"].(string); ok {
-		if certPool, err := cert.NewPool(rootCAFile); err != nil {
-			client.Errorf(err, "expected to load root CA config from %s, but got err: %v", rootCAFile)
-		} else {
-			transport.TLSClientConfig.RootCAs = certPool
-		}
-	}
-
-	kubeletClient := &http.Client{Transport: transport}
-
-	testKubelet := func(getAddr func(node kuber.Node) string) (err error) {
-		testNode := nodes[0]
-		testAddress := getAddr(testNode)
-		response, err := kubeletClient.Get(testAddress + "/stats/summary")
-		if err != nil {
-			return karma.Format(
-				err,
-				"unable to get summary from node %q",
-				testNode.Name,
-			)
-		}
-
-		b, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			return karma.Format(
-				err,
-				"unable to read response body",
-			)
-		} else {
-			var summary interface{}
-			err = json.Unmarshal(b, &summary)
-			if err != nil {
-				return karma.Format(
-					err,
-					"unable to unmarshal summary response: %s",
-					string(b),
-				)
-			}
-		}
-
-		return
-	}
-
-	if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
-		foundErrors = append(foundErrors, errors.New(
-			"kubelet address should not start with /",
-		))
+	kubeletClient, err := NewKubeletClient(client.Logger, scanner, args)
+	if err != nil {
+		foundErrors = append(foundErrors, err)
 		failOnError = true
-	}
-
-	var getNodeKubeletAddress func(node kuber.Node) string
-	if kubeletAddress != "" {
-		getNodeKubeletAddress = func(node kuber.Node) string {
-			return kubeletAddress
-		}
-	} else {
-		if len(nodes) == 0 {
-			foundErrors = append(
-				foundErrors,
-				errors.New("can't test kubelet ports. no discovered nodes"),
-			)
-		} else {
-			getNodeKubeletAddress = func(node kuber.Node) string {
-				return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
-			}
-
-			err := testKubelet(getNodeKubeletAddress)
-			if err != nil {
-				//	can't use TLS port for some reason
-				client.Errorf(err, "can't use kubelet TLS port. falling back to http readonly port: ", kubeletPort)
-
-				getNodeKubeletAddress = func(node kuber.Node) string {
-					return fmt.Sprintf("http://%s:%v", node.IP, kubeletPort)
-				}
-
-				err = testKubelet(getNodeKubeletAddress)
-				if err != nil {
-					foundErrors = append(
-						foundErrors,
-						fmt.Errorf("can't use kubelet TLS port nor http readonly port %s", kubeletPort),
-					)
-					failOnError = true
-				}
-			}
-		}
 	}
 
 	for _, metricsSource := range metricsSourcesNames {
@@ -321,7 +220,6 @@ func InitMetrics(
 
 			kubelet, err := NewKubelet(
 				kubeletClient,
-				getNodeKubeletAddress,
 				client.Logger,
 				metricsInterval,
 				kubeletTimeouts{
