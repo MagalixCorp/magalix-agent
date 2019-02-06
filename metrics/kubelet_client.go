@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -9,11 +10,13 @@ import (
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
+	"golang.org/x/sync/errgroup"
 	"io/ioutil"
 	"k8s.io/client-go/util/cert"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 func joinUrl(address, path string) string {
@@ -36,11 +39,18 @@ type KubeletClient struct {
 func (client *KubeletClient) init(
 	args map[string]interface{},
 ) (err error) {
-	client.Info("Hi")
 	kubeletAddress, _ := args["--kubelet-address"].(string)
 	kubeletPort, _ := args["--kubelet-port"].(string)
 
-	getNodeAddress, err := client.discoverNodeAddress(kubeletAddress, kubeletPort)
+	if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
+		return karma.Format(
+			nil,
+			"invalid kubelet address %s. should not start with /",
+			kubeletAddress,
+		)
+	}
+
+	getNodeAddress, err := client.discoverNodesAddress(kubeletAddress, kubeletPort)
 	if err != nil {
 		return karma.Format(
 			err,
@@ -52,16 +62,25 @@ func (client *KubeletClient) init(
 	return nil
 }
 
-func (client *KubeletClient) discoverNodeAddress(
-	kubeletAddress, kubeletPort string,
+func (client *KubeletClient) discoverNodesAddress(
+	kubeletAddress, httpPort string,
 ) (getNodeKubeletAddress NodeAddressGetter, err error) {
 
-	if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
-		return nil, karma.Format(
-			nil,
-			"invalid kubelet address %s. should not start with /",
-			kubeletAddress,
-		)
+	if kubeletAddress != "" {
+		getNodeKubeletAddress = func(node *kuber.Node) string {
+			return kubeletAddress
+		}
+
+		err = client.testNodeAccess(nil, getNodeKubeletAddress)
+
+		if err == nil {
+			client.Infof(
+				karma.Describe("address", kubeletAddress),
+				"using single forced kubeletAddress",
+			)
+		}
+
+		return
 	}
 
 	nodes := client.scanner.GetNodes()
@@ -72,28 +91,49 @@ func (client *KubeletClient) discoverNodeAddress(
 		)
 	}
 
-	if kubeletAddress != "" {
-		getNodeKubeletAddress = func(node *kuber.Node) string {
-			return kubeletAddress
-		}
+	ctx := context.TODO()
+	group, ctx := errgroup.WithContext(ctx)
+	once := sync.Once{}
+	found := make(chan struct{}, 0)
+	done := make(chan struct{}, 0)
 
-		err = client.testNodesAccess(getNodeKubeletAddress)
-
-		if err == nil {
-			client.Infof(
-				karma.Describe("address", kubeletAddress),
-				"using single forced kubeletAddress",
-			)
-		}
-
-		return
-
+	for _, node := range client.scanner.GetNodes() {
+		func(n kuber.Node) {
+			group.Go(func() error {
+				getNodeAddress, err := client.discoverNodeAddress(&n, httpPort)
+				if err == nil {
+					once.Do(func() {
+						getNodeKubeletAddress = getNodeAddress
+						close(found)
+					})
+				}
+				return err
+			})
+		}(node)
 	}
+
+	go func() {
+		err = group.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-found:
+	case <-done:
+		break
+	}
+
+	return
+}
+
+func (client *KubeletClient) discoverNodeAddress(
+	node *kuber.Node, httpPort string,
+) (getNodeKubeletAddress NodeAddressGetter, err error) {
 
 	getNodeKubeletAddress = func(node *kuber.Node) string {
 		return fmt.Sprintf("https://%s:%v", node.IP, node.KubeletPort)
 	}
-	err = client.testNodesAccess(getNodeKubeletAddress)
+	err = client.testNodeAccess(node, getNodeKubeletAddress)
 	if err == nil {
 		client.Infof(
 			karma.Describe("port", "<auto>"),
@@ -105,16 +145,16 @@ func (client *KubeletClient) discoverNodeAddress(
 			err,
 			"can't use kubelet TLS port. "+
 				"falling back to http readonly port: %s",
-			kubeletPort,
+			httpPort,
 		)
 
 		getNodeKubeletAddress = func(node *kuber.Node) string {
-			return fmt.Sprintf("http://%s:%v", node.IP, kubeletPort)
+			return fmt.Sprintf("http://%s:%v", node.IP, httpPort)
 		}
-		err = client.testNodesAccess(getNodeKubeletAddress)
+		err = client.testNodeAccess(node, getNodeKubeletAddress)
 		if err == nil {
 			client.Infof(
-				karma.Describe("port", kubeletPort),
+				karma.Describe("port", httpPort),
 				"using kubelet http readonly port",
 			)
 		} else {
@@ -122,7 +162,7 @@ func (client *KubeletClient) discoverNodeAddress(
 			client.Errorf(
 				err,
 				"can't use kubelet http readonly port %s",
-				kubeletPort,
+				httpPort,
 			)
 		}
 	}
@@ -130,11 +170,10 @@ func (client *KubeletClient) discoverNodeAddress(
 	return
 }
 
-func (client *KubeletClient) testNodesAccess(
-	getAddr NodeAddressGetter,
+func (client *KubeletClient) testNodeAccess(
+	node *kuber.Node, getAddr NodeAddressGetter,
 ) error {
-	testNode := client.scanner.GetNodes()[0]
-	testAddress := getAddr(&testNode)
+	testAddress := getAddr(node)
 	testUrl := joinUrl(testAddress, "/stats/summary")
 
 	var response interface{}
