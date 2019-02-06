@@ -48,6 +48,7 @@ type KubeletClient struct {
 
 	httpPort          string
 	singleKubeletHost string
+	token             string
 
 	schema string
 	port   *string
@@ -262,8 +263,18 @@ func (client *KubeletClient) getNodeUrl(node *kuber.Node, path string) string {
 }
 
 func (client *KubeletClient) get(url string) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// add authorization header to the req (if any)
+	if client.token != "" {
+		req.Header.Add("Authorization", "Bearer "+client.token)
+	}
+
 	ctx := karma.Describe("url", url)
-	response, err := client.Client.Get(url)
+	response, err := client.Client.Do(req)
 	if err != nil {
 		return nil, ctx.Reason(err)
 	}
@@ -323,6 +334,8 @@ func NewKubeletClient(
 
 	kubeletAddress, _ := args["--kubelet-address"].(string)
 	kubeletPort, _ := args["--kubelet-port"].(string)
+	kubeletToken, _ := args["--kubelet-token"].(string)
+
 	insecure := args["--kubelet-insecure"].(bool)
 
 	if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
@@ -364,6 +377,7 @@ func NewKubeletClient(
 
 		httpPort:          kubeletPort,
 		singleKubeletHost: kubeletAddress,
+		token:             kubeletToken,
 
 		scanner: scanner,
 	}
