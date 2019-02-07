@@ -49,6 +49,9 @@ Options:
                                               automatically detected.
                                               Supported sources are:
                                               * kubelet;
+  --kubelet-port <port>                      Override kubelet port for
+                                              automatically discovered nodes.
+                                              [default: 10255]
   --kubelet-backoff-sleep <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]

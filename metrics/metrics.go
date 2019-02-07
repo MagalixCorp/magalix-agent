@@ -209,7 +209,7 @@ func InitMetrics(
 		failOnError = true
 	}
 
-	kubeletClient, err := NewKubeletClient(client.Logger, scanner, kube)
+	kubeletClient, err := NewKubeletClient(client.Logger, scanner, kube, args)
 	if err != nil {
 		foundErrors = append(foundErrors, err)
 		failOnError = true
