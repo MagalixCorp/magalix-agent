@@ -229,3 +229,14 @@ func After(d time.Duration) *time.Time {
 	t := time.Now().Add(d)
 	return &t
 }
+
+func TruncateString(str string, num int) string {
+	truncated := str
+	if len(str) > num {
+		if num > 3 {
+			num -= 3
+		}
+		truncated = str[0:num] + "..."
+	}
+	return truncated
+}

@@ -49,10 +49,6 @@ Options:
                                               automatically detected.
                                               Supported sources are:
                                               * kubelet;
-  --kubelet-address <addr>                   Override kubelet nodes address.
-  --kubelet-port <port>                      Override kubelet port for
-                                              automatically discovered nodes.
-                                              [default: 10255]
   --kubelet-backoff-sleep <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
@@ -207,7 +203,7 @@ func main() {
 	}
 
 	if metricsEnabled {
-		_, err := metrics.InitMetrics(gwClient, entityScanner, args)
+		_, err := metrics.InitMetrics(gwClient, entityScanner, kube, args)
 		if err != nil {
 			gwClient.Fatalf(err, "unable to initialize metrics sources")
 			os.Exit(1)

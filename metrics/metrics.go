@@ -1,9 +1,6 @@
 package metrics
 
 import (
-	"errors"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
@@ -195,14 +192,12 @@ func sendMetricsBatch(c *client.Client, metrics []*Metrics) {
 func InitMetrics(
 	client *client.Client,
 	scanner *scanner.Scanner,
+	kube *kuber.Kube,
 	args map[string]interface{},
 ) ([]MetricsSource, error) {
 	var (
 		metricsInterval = utils.MustParseDuration(args, "--metrics-interval")
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
-
-		kubeletAddress, _ = args["--kubelet-address"].(string)
-		kubeletPort, _    = args["--kubelet-port"].(string)
 
 		metricsSources = make([]MetricsSource, 0)
 		foundErrors    = make([]error, 0)
@@ -214,29 +209,21 @@ func InitMetrics(
 		failOnError = true
 	}
 
+	kubeletClient, err := NewKubeletClient(client.Logger, scanner, kube)
+	if err != nil {
+		foundErrors = append(foundErrors, err)
+		failOnError = true
+	}
+
 	for _, metricsSource := range metricsSourcesNames {
 		switch metricsSource {
 		case "kubelet":
 			client.Info("using kubelet as metrics source")
 
-			if kubeletAddress != "" && strings.HasPrefix(kubeletAddress, "/") {
-				foundErrors = append(foundErrors, errors.New(
-					"kubelet address should not start with /",
-				))
-				continue
-			}
-
-			var getNodeKubeletAddress func(node kuber.Node) string
-			if kubeletAddress != "" {
-				getNodeKubeletAddress = func(node kuber.Node) string {
-					return kubeletAddress
-				}
-			} else {
-				getNodeKubeletAddress = func(node kuber.Node) string {
-					return fmt.Sprintf("%s:%s", node.IP, kubeletPort)
-				}
-			}
-			kubelet, err := NewKubelet(getNodeKubeletAddress, client.Logger, metricsInterval,
+			kubelet, err := NewKubelet(
+				kubeletClient,
+				client.Logger,
+				metricsInterval,
 				kubeletTimeouts{
 					backoff: backOff{
 						sleep:      utils.MustParseDuration(args, "--kubelet-backoff-sleep"),
