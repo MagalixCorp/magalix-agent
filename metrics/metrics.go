@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
@@ -191,6 +192,7 @@ func sendMetricsBatch(c *client.Client, metrics []*Metrics) {
 func InitMetrics(
 	client *client.Client,
 	scanner *scanner.Scanner,
+	kube *kuber.Kube,
 	args map[string]interface{},
 ) ([]MetricsSource, error) {
 	var (
@@ -207,7 +209,7 @@ func InitMetrics(
 		failOnError = true
 	}
 
-	kubeletClient, err := NewKubeletClient(client.Logger, scanner, args)
+	kubeletClient, err := NewKubeletClient(client.Logger, scanner, kube)
 	if err != nil {
 		foundErrors = append(foundErrors, err)
 		failOnError = true

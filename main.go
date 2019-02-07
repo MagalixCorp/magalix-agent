@@ -49,14 +49,6 @@ Options:
                                               automatically detected.
                                               Supported sources are:
                                               * kubelet;
-  --kubelet-token <token>                    Use specified token for access to kubelet.
-  --kubelet-address <addr>                   Override kubelet nodes address.
-  --kubelet-port <port>                      Override kubelet port for
-                                              automatically discovered nodes.
-                                              [default: 10255]
-  --kubelet-insecure                         Insecure skip SSL verify.
-  --kubelet-root-ca-cert <filepath>          Filepath to root CA cert.
-                                              [default: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt]
   --kubelet-backoff-sleep <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
@@ -211,7 +203,7 @@ func main() {
 	}
 
 	if metricsEnabled {
-		_, err := metrics.InitMetrics(gwClient, entityScanner, args)
+		_, err := metrics.InitMetrics(gwClient, entityScanner, kube, args)
 		if err != nil {
 			gwClient.Fatalf(err, "unable to initialize metrics sources")
 			os.Exit(1)
