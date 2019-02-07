@@ -80,6 +80,7 @@ func watchMetrics(
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
+		client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "finished getting metrics")
 
 		for i := 0; i < len(metrics); i += limit {
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
