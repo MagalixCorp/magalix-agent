@@ -86,7 +86,7 @@ func watchMetrics(
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 		}
 	})
-	ticker.Start(false, false)
+	ticker.Start(false, true)
 }
 
 func watchRawMetrics(

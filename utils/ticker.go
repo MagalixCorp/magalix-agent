@@ -57,11 +57,7 @@ func (ticker *Ticker) Start(immediate, block bool) {
 		for {
 			<-tick
 
-			if block {
-				ticker.fn()
-			} else {
-				go ticker.fn()
-			}
+			ticker.fn()
 
 			// unlocks routines waiting for the next tick
 			ticker.unlockWaiting()
@@ -70,14 +66,14 @@ func (ticker *Ticker) Start(immediate, block bool) {
 	}
 
 	if immediate {
-		if block {
-			// block for first tick
-			ticker.fn()
-		} else {
-			go ticker.fn()
-		}
+		// block for first tick
+		ticker.fn()
 	}
-	tickerFn()
+	if block {
+		tickerFn()
+	} else {
+		go tickerFn()
+	}
 }
 
 // WaitForNextTick returns a signal channel that gets unblocked after the next tick
