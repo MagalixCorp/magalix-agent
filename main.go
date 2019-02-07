@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/events"
@@ -133,6 +135,12 @@ func main() {
 			"unable to decode base64 secret specified as --client-secret flag",
 		)
 		os.Exit(1)
+	}
+
+	// TODO: remove
+	// a hack to set default timeout for all http requests
+	http.DefaultClient = &http.Client{
+		Timeout: 20 * time.Second,
 	}
 
 	var (
