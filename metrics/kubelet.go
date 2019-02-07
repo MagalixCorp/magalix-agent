@@ -362,7 +362,7 @@ func (kubelet *Kubelet) GetMetrics(
 				err              error
 			)
 			err = kubelet.withBackoff(func() error {
-				err := kubelet.kubeletClient.GetJson(&node, "/stats/summary", &summary)
+				err := kubelet.kubeletClient.GetJson(&node, "stats/summary", &summary)
 				if err != nil {
 					return karma.Format(
 						err,
@@ -561,7 +561,7 @@ func (kubelet *Kubelet) GetMetrics(
 			err = kubelet.withBackoff(func() error {
 				cadvisorResponse, err = kubelet.kubeletClient.Get(
 					&node,
-					"/metrics/cadvisor",
+					"metrics/cadvisor",
 				)
 				if err != nil {
 					return karma.Format(
