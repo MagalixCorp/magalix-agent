@@ -91,7 +91,7 @@ func InitScanner(
 		scanner.analysisDataSender = func(args ...interface{}) {}
 	}
 	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, scanner.scan)
-	scanner.Start(true, false)
+	go scanner.Start(true, false)
 	return scanner
 }
 
