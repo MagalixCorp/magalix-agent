@@ -52,32 +52,24 @@ func (ticker *Ticker) unlockWaiting() {
 
 // Start start scanner
 func (ticker *Ticker) Start(immediate, block bool) {
-	tickerFn := func() {
-		tick := ticker.nextTick()
-		for {
+	first := true
+	tick := ticker.nextTick()
+	for {
+		if !first || !immediate {
 			<-tick
-
-			if block {
-				ticker.fn()
-			} else {
-				go ticker.fn()
-			}
-
-			// unlocks routines waiting for the next tick
-			ticker.unlockWaiting()
-			tick = ticker.nextTick()
 		}
-	}
+		first = false
 
-	if immediate {
 		if block {
-			// block for first tick
 			ticker.fn()
 		} else {
 			go ticker.fn()
 		}
+
+		// unlocks routines waiting for the next tick
+		ticker.unlockWaiting()
+		tick = ticker.nextTick()
 	}
-	tickerFn()
 }
 
 // WaitForNextTick returns a signal channel that gets unblocked after the next tick
