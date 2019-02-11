@@ -52,23 +52,27 @@ func (ticker *Ticker) unlockWaiting() {
 
 // Start start scanner
 func (ticker *Ticker) Start(immediate, block bool) {
-	first := true
-	tick := ticker.nextTick()
-	for {
-		if !first || !immediate {
+	tickerFn := func() {
+		tick := ticker.nextTick()
+		for {
 			<-tick
-		}
-		first = false
 
-		if block {
 			ticker.fn()
-		} else {
-			go ticker.fn()
-		}
 
-		// unlocks routines waiting for the next tick
-		ticker.unlockWaiting()
-		tick = ticker.nextTick()
+			// unlocks routines waiting for the next tick
+			ticker.unlockWaiting()
+			tick = ticker.nextTick()
+		}
+	}
+
+	if immediate {
+		// block for first tick
+		ticker.fn()
+	}
+	if block {
+		tickerFn()
+	} else {
+		go tickerFn()
 	}
 }
 
