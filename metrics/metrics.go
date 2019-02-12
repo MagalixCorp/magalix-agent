@@ -83,7 +83,7 @@ func watchMetrics(
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 		}
 	})
-	ticker.Start(false, false)
+	ticker.Start(false, true, false)
 }
 
 func watchRawMetrics(
@@ -105,7 +105,7 @@ func watchRawMetrics(
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 		}
 	})
-	ticker.Start(false, true)
+	ticker.Start(false, true, false)
 }
 
 func min(a, b int) int {
@@ -247,7 +247,7 @@ func InitMetrics(
 	}
 
 	for _, source := range metricsSources {
-		go watchMetrics(
+		watchMetrics(
 			client,
 			source,
 			scanner,

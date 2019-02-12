@@ -50,25 +50,52 @@ func (ticker *Ticker) unlockWaiting() {
 	ticker.waitChannels = make([]chan struct{}, 0)
 }
 
-// Start start scanner
-func (ticker *Ticker) Start(immediate, block bool) {
-	first := true
-	tick := ticker.nextTick()
-	for {
-		if !first || !immediate {
+func (ticker *Ticker) tick() {
+	ticker.fn()
+	// unlock routines waiting for ticks
+	ticker.unlockWaiting()
+}
+
+// Start start ticker.
+// If immediate is true, the ticker tick immediately and blocks for this tick.
+// If async is true, each tick firing will run in a different goroutine.
+// Else, the tick in the same goroutine as the ticker itself.
+// If block is true, Start will block the ticker forever.
+// Else, the ticker will run in a different goroutine.
+//
+// Note: when using async flag:
+// 1. if it is true, you may need to apply needed synchronization between ticks.
+// Also note that, ticks waiters may got a newer tick unlocking them.
+//
+// 2. if it is false, the ticker applies the needed synchronizations. In that
+// case the ticker don't tick the next one unless the old tick finishes.
+// So you may got inconsistent ticks intervals if a tick takes time larger than
+// the tick interval to finish. So please consider timeouts if consistent ticks
+// are needed.
+func (ticker *Ticker) Start(immediate, async, block bool) {
+	tickerFn := func() {
+		tick := ticker.nextTick()
+		for {
 			<-tick
-		}
-		first = false
 
-		if block {
-			ticker.fn()
-		} else {
-			go ticker.fn()
-		}
+			if async {
+				go ticker.tick()
+			} else {
+				ticker.tick()
+			}
 
-		// unlocks routines waiting for the next tick
-		ticker.unlockWaiting()
-		tick = ticker.nextTick()
+			tick = ticker.nextTick()
+		}
+	}
+
+	if immediate {
+		// block for first tick
+		ticker.fn()
+	}
+	if block {
+		tickerFn()
+	} else {
+		go tickerFn()
 	}
 }
 
