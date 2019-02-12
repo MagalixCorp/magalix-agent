@@ -58,7 +58,7 @@ func (client *KubeletClient) init() (err error) {
 	if err != nil {
 		print(noPortHelp)
 		return karma.Format(
-			nil,
+			err,
 			"unable to get access to kubelet apis.",
 		)
 	}

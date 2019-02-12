@@ -373,6 +373,10 @@ func (kubelet *Kubelet) GetMetrics(
 				return nil
 			})
 
+			if err != nil {
+				return err
+			}
+
 			for _, measurement := range []struct {
 				Name  string
 				Time  time.Time
