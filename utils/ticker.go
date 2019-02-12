@@ -56,7 +56,7 @@ func (ticker *Ticker) tick() {
 	ticker.unlockWaiting()
 }
 
-// Start start ticker.
+// Start starts ticker.
 // If immediate is true, the ticker tick immediately and blocks for this tick.
 // If async is true, each tick firing will run in a different goroutine.
 // Else, the tick in the same goroutine as the ticker itself.
