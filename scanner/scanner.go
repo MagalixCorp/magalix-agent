@@ -91,6 +91,10 @@ func InitScanner(
 		scanner.analysisDataSender = func(args ...interface{}) {}
 	}
 	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, scanner.scan)
+	// Note: we set immediate to true so that the scanner blocks for the first
+	// run. Other components depends on scanner having a history to function correctly.
+	// The other solution is to let the dependent components to wait for scanner
+	// ticks which will make code more coupled and complex.
 	scanner.Start(true, false, false)
 	return scanner
 }
