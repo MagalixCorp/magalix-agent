@@ -218,7 +218,7 @@ func Throttle(
 	return func(args ...interface{}) {
 		now := time.Now()
 		if now.After(nextTick) || now.Equal(nextTick) {
-			stderr.Info("{%s throttler} ticking", name)
+			stderr.Infof(nil, "{%s throttler} ticking", name)
 			fn(args...)
 
 			atomic.AddInt32(&tickFires, 1)
@@ -227,9 +227,13 @@ func Throttle(
 				nextTick = getNextTick()
 			}
 
-			stderr.Info("{%s throttler} next tick at %s", name, nextTick.Format(time.RFC3339))
+			stderr.Infof(nil,
+				"{%s throttler} next tick at %s",
+				name,
+				nextTick.Format(time.RFC3339),
+			)
 		} else {
-			stderr.Info("{%s throttler} throttled", name)
+			stderr.Infof(nil, "{%s throttler} throttled", name)
 		}
 	}
 }
