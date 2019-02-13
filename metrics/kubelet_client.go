@@ -140,11 +140,34 @@ func (client *KubeletClient) discoverNodesAddress() (
 func (client *KubeletClient) discoverNodeAddress(
 	node *kuber.Node,
 ) (nodeGet NodeGet, isApiServer *bool, err error) {
-
 	isApiServer = new(bool)
 
+	ctx := karma.
+		Describe("node", node.Name).
+		Describe("ip", node.IP)
+
+	*isApiServer = false
+	nodeGet, err = client.tryDirectAccess(ctx, node)
+	if err == nil {
+		return
+	}
+
 	*isApiServer = true
-	nodeGet = func(node *kuber.Node, path string) ([]byte, error) {
+	nodeGet, err = client.tryApiServerProxy(ctx, node)
+	if err == nil {
+		return
+	}
+
+	isApiServer = nil
+
+	return
+}
+
+func (client *KubeletClient) tryApiServerProxy(
+	ctx *karma.Context,
+	node *kuber.Node,
+) (NodeGet, error) {
+	nodeGet := func(node *kuber.Node, path string) ([]byte, error) {
 		subResources := []string{"proxy"}
 		subResources = append(subResources, strings.Split(path, "/")...)
 
@@ -159,12 +182,7 @@ func (client *KubeletClient) discoverNodeAddress(
 
 		return r, err
 	}
-
-	ctx := karma.
-		Describe("node", node.Name).
-		Describe("ip", node.IP)
-
-	err = client.testNodeAccess(node, nodeGet)
+	err := client.testNodeAccess(node, nodeGet)
 	if err != nil {
 		// can't use api-server proxy
 		client.Warning(
@@ -174,57 +192,57 @@ func (client *KubeletClient) discoverNodeAddress(
 					"can't use api-server proxy to kubelet apis.",
 				),
 		)
+		return nil, err
+	}
+	return nodeGet, nil
+}
+func (client *KubeletClient) tryDirectAccess(
+	ctx *karma.Context,
+	node *kuber.Node,
+) (NodeGet, error) {
+	nodeGet := func(node *kuber.Node, path_ string) ([]byte, error) {
+		base := fmt.Sprintf("http://%s:%v", node.IP, client.httpPort)
+		url_ := joinUrl(base, path_)
 
-		*isApiServer = false
-		nodeGet = func(node *kuber.Node, path_ string) ([]byte, error) {
-			base := fmt.Sprintf("http://%s:%v", node.IP, client.httpPort)
-			url_ := joinUrl(base, path_)
+		ctx := karma.Describe("url", url_)
 
-			ctx := karma.Describe("url", url_)
-
-			restClient, ok := client.kube.Clientset.RESTClient().(*rest.RESTClient)
-			if !ok {
-				return nil, karma.Format(
-					nil,
-					"invalid cast, please contact developers",
-				)
-			}
-
-			response, err := restClient.Client.Get(url_)
-			if err != nil {
-				return nil, ctx.Reason(err)
-			}
-
-			b, err := ioutil.ReadAll(response.Body)
-			if err != nil {
-				return nil, ctx.Format(
-					err,
-					"unable to read response body",
-				)
-			}
-			_ = response.Body.Close()
-			return b, nil
-
-		}
-
-		err = client.testNodeAccess(node, nodeGet)
-		if err != nil {
-			//	can't use direct HTTP port
-			nodeGet = nil
-			isApiServer = nil
-
-			client.Warning(
-				ctx.
-					Describe("port", client.httpPort).
-					Format(
-						err,
-						"can't use direct kubelet http port.",
-					),
+		restClient, ok := client.kube.Clientset.RESTClient().(*rest.RESTClient)
+		if !ok {
+			return nil, karma.Format(
+				nil,
+				"invalid cast, please contact developers",
 			)
 		}
-	}
 
-	return
+		response, err := restClient.Client.Get(url_)
+		if err != nil {
+			return nil, ctx.Reason(err)
+		}
+
+		b, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			return nil, ctx.Format(
+				err,
+				"unable to read response body",
+			)
+		}
+		_ = response.Body.Close()
+		return b, nil
+
+	}
+	err := client.testNodeAccess(node, nodeGet)
+	if err != nil {
+		client.Warning(
+			ctx.
+				Describe("port", client.httpPort).
+				Format(
+					err,
+					"can't use direct kubelet http port.",
+				),
+		)
+		return nil, err
+	}
+	return nodeGet, nil
 }
 
 func (client *KubeletClient) testNodeAccess(
