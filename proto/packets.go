@@ -39,6 +39,7 @@ var (
 		new(v1beta2.DeploymentList),
 
 		new(map[string]interface{}),
+		new(interface{}),
 		new([]interface{}),
 	}
 )
