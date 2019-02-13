@@ -281,10 +281,10 @@ func (kubelet *Kubelet) GetMetrics(
 
 	}
 
-	addRawResponse := func(nodeID uuid.UUID, data []byte) {
+	addRawResponse := func(nodeID uuid.UUID, data interface{}) {
 		rawMutex.Lock()
 		defer rawMutex.Unlock()
-		rawResponses[nodeID.String()] = string(data)
+		rawResponses[nodeID.String()] = data
 	}
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
@@ -393,7 +393,17 @@ func (kubelet *Kubelet) GetMetrics(
 				return err
 			}
 
-			addRawResponse(node.ID, summaryBytes)
+			var summaryInterface interface{}
+			err = json.Unmarshal(summaryBytes, &summaryInterface)
+			if err != nil {
+				kubelet.Errorf(
+					err,
+					"{kubelet} unable to unmarshal summary response to its raw interface",
+				)
+			}
+			if summaryInterface != nil {
+				addRawResponse(node.ID, &summaryInterface)
+			}
 
 			err = json.Unmarshal(summaryBytes, &summary)
 			if err != nil {
