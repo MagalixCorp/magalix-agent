@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/MagalixTechnologies/log-go"
@@ -198,6 +199,7 @@ func InSkipNamespace(skipNamespacePatterns []string, namespace string) bool {
 func Throttle(
 	name string,
 	interval time.Duration,
+	tickLimit int32,
 	fn func(args ...interface{})) func(args ...interface{},
 ) {
 	getNextTick := func() time.Time {
@@ -211,12 +213,20 @@ func Throttle(
 
 	stderr.Info("{%s throttler} next tick at %s", name, nextTick.Format(time.RFC3339))
 
+	var tickFires int32 = 0
+
 	return func(args ...interface{}) {
 		now := time.Now()
 		if now.After(nextTick) || now.Equal(nextTick) {
 			stderr.Info("{%s throttler} ticking", name)
 			fn(args...)
-			nextTick = getNextTick()
+
+			atomic.AddInt32(&tickFires, 1)
+			if tickFires >= tickLimit {
+				atomic.StoreInt32(&tickFires, 0)
+				nextTick = getNextTick()
+			}
+
 			stderr.Info("{%s throttler} next tick at %s", name, nextTick.Format(time.RFC3339))
 		} else {
 			stderr.Info("{%s throttler} throttled", name)

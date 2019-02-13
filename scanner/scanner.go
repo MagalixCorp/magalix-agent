@@ -76,6 +76,7 @@ func InitScanner(
 		scanner.analysisDataSender = utils.Throttle(
 			"analysis-data",
 			analysisDataInterval,
+			2, // we call analysisDataSender twice in each tick
 			func(args ...interface{}) {
 				if data, ok := args[0].(map[string]interface{}); ok {
 					go scanner.client.SendRaw(data)
