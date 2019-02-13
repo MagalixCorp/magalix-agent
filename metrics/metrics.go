@@ -73,7 +73,7 @@ func watchMetrics(
 	defer close(metricsPipe)
 
 	ticker := utils.NewTicker("metrics", interval, func() {
-		metrics, err := source.GetMetrics(scanner)
+		metrics, raw, err := source.GetMetrics(scanner)
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
@@ -81,6 +81,12 @@ func watchMetrics(
 
 		for i := 0; i < len(metrics); i += limit {
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
+		}
+
+		if raw != nil {
+			client.SendRaw(map[string]interface{}{
+				"metrics": raw,
+			})
 		}
 	})
 	ticker.Start(false, true, true)
@@ -194,6 +200,7 @@ func InitMetrics(
 	client *client.Client,
 	scanner *scanner.Scanner,
 	kube *kuber.Kube,
+	optInAnalysisData bool,
 	args map[string]interface{},
 ) ([]MetricsSource, error) {
 	var (
@@ -230,7 +237,9 @@ func InitMetrics(
 						sleep:      utils.MustParseDuration(args, "--kubelet-backoff-sleep"),
 						maxRetries: utils.MustParseInt(args, "--kubelet-backoff-max-retries"),
 					},
-				})
+				},
+				optInAnalysisData,
+			)
 			if err != nil {
 				foundErrors = append(foundErrors, karma.Format(
 					err,

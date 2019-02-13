@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -100,6 +101,8 @@ type Kubelet struct {
 	previousMutex *sync.Mutex
 	timeouts      kubeletTimeouts
 	kubeletClient *KubeletClient
+
+	optInAnalysisData bool
 }
 
 // NewKubelet returns new kubelet
@@ -108,6 +111,7 @@ func NewKubelet(
 	log *log.Logger,
 	resolution time.Duration,
 	timeouts kubeletTimeouts,
+	optInAnalysisData bool,
 ) (*Kubelet, error) {
 	kubelet := &Kubelet{
 		Logger: log,
@@ -118,6 +122,8 @@ func NewKubelet(
 		previous:      map[string]KubeletValue{},
 		previousMutex: &sync.Mutex{},
 		timeouts:      timeouts,
+
+		optInAnalysisData: optInAnalysisData,
 	}
 
 	return kubelet, nil
@@ -126,11 +132,14 @@ func NewKubelet(
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
 	scanner *scanner.Scanner,
-) ([]*Metrics, error) {
+) ([]*Metrics, map[string]interface{}, error) {
 	kubelet.collectGarbage()
 
 	metricsMutex := &sync.Mutex{}
 	metrics := []*Metrics{}
+
+	rawMutex := &sync.Mutex{}
+	rawResponses := map[string]interface{}{}
 
 	getKey := func(
 		entity string,
@@ -272,6 +281,12 @@ func (kubelet *Kubelet) GetMetrics(
 
 	}
 
+	addRawResponse := func(nodeID uuid.UUID, data []byte) {
+		rawMutex.Lock()
+		defer rawMutex.Unlock()
+		rawResponses[nodeID.String()] = string(data)
+	}
+
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes := scanner.GetNodes()
 	nodesScanTime := scanner.NodesLastScanTime()
@@ -358,11 +373,12 @@ func (kubelet *Kubelet) GetMetrics(
 
 			var (
 				cadvisorResponse []byte
+				summaryBytes     []byte
 				summary          KubeletSummary
-				err              error
 			)
-			err = kubelet.withBackoff(func() error {
-				err := kubelet.kubeletClient.GetJson(&node, "stats/summary", &summary)
+			err := kubelet.withBackoff(func() error {
+				var err error
+				summaryBytes, err = kubelet.kubeletClient.Get(&node, "stats/summary")
 				if err != nil {
 					return karma.Format(
 						err,
@@ -375,6 +391,16 @@ func (kubelet *Kubelet) GetMetrics(
 
 			if err != nil {
 				return err
+			}
+
+			addRawResponse(node.ID, summaryBytes)
+
+			err = json.Unmarshal(summaryBytes, &summary)
+			if err != nil {
+				return karma.Format(
+					err,
+					"{kubelet} unable to unmarshal summary response",
+				)
 			}
 
 			for _, measurement := range []struct {
@@ -713,7 +739,11 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	return result, nil
+	if !kubelet.optInAnalysisData {
+		rawResponses = nil
+	}
+
+	return result, rawResponses, nil
 }
 
 func (kubelet *Kubelet) collectGarbage() {

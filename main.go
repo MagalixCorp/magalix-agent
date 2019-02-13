@@ -76,7 +76,7 @@ Options:
   --timeout-proto-backoff <duration>         Timeout of backoff policy.
                                               Timeout will be multipled from 1 to 10.
                                               [default: 300ms]
-  --opt-in-analysis-data                     Send anonymous data for analysis.
+  --opt-out-analysis-data                    Don't send anonymous data for analysis.
   --analysis-data-interval <duration>        Analysis data send interval.
                                               [default: 5m]
   --disable-metrics                          Disable metrics collecting and sending.
@@ -172,14 +172,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	optInAnalysisData := !args["--opt-out-analysis-data"].(bool)
+	analysisDataInterval := utils.MustParseDuration(
+		args,
+		"--analysis-data-interval",
+	)
+
 	entityScanner := scanner.InitScanner(
 		gwClient,
 		kube,
 		skipNamespaces,
 		accountID,
 		clusterID,
-		args["--opt-in-analysis-data"].(bool),
-		utils.MustParseDuration(args, "--analysis-data-interval"),
+		optInAnalysisData,
+		analysisDataInterval,
 	)
 
 	oomKilled := make(chan uuid.UUID)
@@ -214,7 +220,13 @@ func main() {
 	}
 
 	if metricsEnabled {
-		_, err := metrics.InitMetrics(gwClient, entityScanner, kube, args)
+		_, err := metrics.InitMetrics(
+			gwClient,
+			entityScanner,
+			kube,
+			optInAnalysisData,
+			args,
+		)
 		if err != nil {
 			gwClient.Fatalf(err, "unable to initialize metrics sources")
 			os.Exit(1)
