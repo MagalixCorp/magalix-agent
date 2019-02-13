@@ -1,13 +1,13 @@
 package client
 
 import (
-	"errors"
-	"time"
+"errors"
+"time"
 
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/utils"
-	"github.com/MagalixTechnologies/channel"
-	"github.com/reconquest/karma-go"
+"github.com/MagalixCorp/magalix-agent/proto"
+"github.com/MagalixCorp/magalix-agent/utils"
+"github.com/MagalixTechnologies/channel"
+"github.com/reconquest/karma-go"
 )
 
 // hello Sends hello package
@@ -118,7 +118,7 @@ func (client *Client) sendBye(reason string) error {
 // SendRaw sends arbitrary raw data to be stored in magalix BE
 func (client *Client) SendRaw(rawResources map[string]interface{}) {
 	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}
-	context := karma.Describe("timestamp", packet)
+	context := karma.Describe("timestamp", packet.Timestamp)
 	client.Logger.Infof(context, "sending raw data")
 	client.Pipe(Package{
 		Kind:        proto.PacketKindRawStoreRequest,
