@@ -76,7 +76,7 @@ Options:
   --timeout-proto-backoff <duration>         Timeout of backoff policy.
                                               Timeout will be multipled from 1 to 10.
                                               [default: 300ms]
-  --opt-out-analysis-data                    Don't send anonymous data for analysis.
+  --opt-in-analysis-data                     Send anonymous data for analysis.
   --analysis-data-interval <duration>        Analysis data send interval.
                                               [default: 5m]
   --disable-metrics                          Disable metrics collecting and sending.
@@ -172,7 +172,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	optInAnalysisData := !args["--opt-out-analysis-data"].(bool)
+	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
 	analysisDataInterval := utils.MustParseDuration(
 		args,
 		"--analysis-data-interval",
