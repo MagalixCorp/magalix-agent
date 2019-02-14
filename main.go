@@ -45,6 +45,8 @@ Options:
   --kube-incluster                           Automatically determine kubernetes clientset
                                               configuration. Works only if program is
                                               running inside kubernetes cluster.
+  --kube-timeout <duration>                  Timeout of requests to kubernetes apis.
+                                              [default: 20s]
   --skip-namespace <pattern>                 Skip namespace matching a pattern (e.g. system-*),
                                               can be specified multiple times.
   --source <source>                          Specify source for metrics instead of

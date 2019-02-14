@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/MagalixCorp/magalix-agent/utils"
 
 	"os"
 	"regexp"
@@ -139,6 +140,8 @@ func InitKubernetes(
 			config.Insecure = true
 		}
 	}
+
+	config.Timeout = utils.MustParseDuration(args, "--kube-timeout")
 
 	client.Debugf(
 		karma.
