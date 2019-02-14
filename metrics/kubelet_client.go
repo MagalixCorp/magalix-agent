@@ -182,7 +182,7 @@ func (client *KubeletClient) tryApiServerProxy(
 
 		return r, err
 	}
-	err := client.testNodeAccess(node, nodeGet)
+	err := client.testNodeAccess(ctx, node, nodeGet)
 	if err != nil {
 		// can't use api-server proxy
 		client.Warning(
@@ -230,7 +230,7 @@ func (client *KubeletClient) tryDirectAccess(
 		return b, nil
 
 	}
-	err := client.testNodeAccess(node, nodeGet)
+	err := client.testNodeAccess(ctx, node, nodeGet)
 	if err != nil {
 		client.Warning(
 			ctx.
@@ -246,17 +246,20 @@ func (client *KubeletClient) tryDirectAccess(
 }
 
 func (client *KubeletClient) testNodeAccess(
-	node *kuber.Node, nodeGet NodeGet,
+	ctx *karma.Context, node *kuber.Node, nodeGet NodeGet,
 ) error {
+	ctx = ctx.
+		Describe("path", "stats/summary")
+
 	b, err := nodeGet(node, "stats/summary")
+	if err != nil {
+		return ctx.Format(err, "node access test failed")
+	}
 
 	var response interface{}
 	err = parseJSON(b, &response)
 	if err != nil {
-		return karma.
-			Describe("path", "stats/summary").
-			Describe("node", node.Name).
-			Format(err, "node access test failed")
+		return ctx.Format(err, "node access test failed")
 	}
 	return nil
 }
