@@ -146,14 +146,14 @@ func (client *KubeletClient) discoverNodeAddress(
 		Describe("node", node.Name).
 		Describe("ip", node.IP)
 
-	*isApiServer = false
-	nodeGet, err = client.tryDirectAccess(ctx, node)
+	*isApiServer = true
+	nodeGet, err = client.tryApiServerProxy(ctx, node)
 	if err == nil {
 		return
 	}
 
-	*isApiServer = true
-	nodeGet, err = client.tryApiServerProxy(ctx, node)
+	*isApiServer = false
+	nodeGet, err = client.tryDirectAccess(ctx, node)
 	if err == nil {
 		return
 	}
