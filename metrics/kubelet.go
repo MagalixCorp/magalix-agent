@@ -15,6 +15,26 @@ import (
 	"github.com/reconquest/karma-go"
 )
 
+type KubeletSummaryContainer struct {
+	Name      string
+	StartTime time.Time
+
+	CPU struct {
+		Time                 time.Time
+		UsageCoreNanoSeconds int64
+	}
+
+	Memory struct {
+		Time     time.Time
+		RSSBytes int64
+	}
+
+	RootFS struct {
+		Time      time.Time
+		UsedBytes int64
+	}
+}
+
 // KubeletSummary a struct to hold kubelet summary
 type KubeletSummary struct {
 	Node struct {
@@ -48,26 +68,8 @@ type KubeletSummary struct {
 			Namespace string
 		}
 
-		Containers []struct {
-			Name string
-
-			CPU struct {
-				Time                 time.Time
-				UsageCoreNanoSeconds int64
-			}
-
-			Memory struct {
-				Time     time.Time
-				RSSBytes int64
-			}
-
-			RootFS struct {
-				Time      time.Time
-				UsedBytes int64
-			}
-		}
-
-		Network struct {
+		Containers []KubeletSummaryContainer
+		Network    struct {
 			Time     time.Time
 			RxBytes  int64
 			RxErrors int64
@@ -535,7 +537,29 @@ func (kubelet *Kubelet) GetMetrics(
 					)
 				}
 
+				// NOTE: possible bug in cAdvisor
+				// Sometimes, when a container is restarted cAdvisor don't
+				// understand this. It don't delete old stats of the old deleted
+				// container but creates new stats for the new one.
+				// Hence, we get two stats for two containers with the same name
+				// and this lead to expected behavior.
+				// This workaround filter containers with the same name in the
+				// the same pod and take only the newer started one.
+				podContainers := map[string]KubeletSummaryContainer{}
 				for _, container := range pod.Containers {
+					if foundContainer, ok := podContainers[container.Name]; !ok {
+						// add to unique containers
+						podContainers[container.Name] = container
+					} else {
+						if container.StartTime.After(foundContainer.StartTime) {
+							// override the old container with the new started
+							// one
+							podContainers[container.Name] = container
+						}
+					}
+				}
+
+				for _, container := range podContainers {
 					applicationID, serviceID, identifiedContainer, ok := scanner.FindContainer(
 						pod.PodRef.Namespace,
 						pod.PodRef.Name,
