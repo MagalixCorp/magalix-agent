@@ -26,10 +26,10 @@ Please verify that one of the following is correct:
 
 1. the agent ClusterRole has the apiGroup ["metrics.k8s.io"] and its resources has ["nodes", "nodes/stats", "nodes/metrics", "nodes/proxy"]
 See this for more info https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-authentication-authorization/#kubelet-authorization
+You can just rerun the connect cluster command you got from Magalix console to apply those rules. If this doesn't help please contact Magalix support.
 
-2. the cluster has the http readonly port enabled and set to the default 10255
-
-3. the cluster has http readonly port enabled and passed correctly to the agent container as argument '--kubelet-port=<your-port>'
+2. the cluster has the http readonly port enabled and set to the default 10255 or the custom port is passed correctly to the agent container as argument '--kubelet-port=<your-port>'
+Note that http port is deprecated in k8s v11 and above, so please make sure to use the api-server method above for best compatibility.
 `
 
 func joinUrl(address, path string) string {
