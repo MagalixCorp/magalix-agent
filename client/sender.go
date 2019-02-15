@@ -1,21 +1,24 @@
 package client
 
 import (
-"errors"
-"time"
+	"errors"
+	"time"
 
-"github.com/MagalixCorp/magalix-agent/proto"
-"github.com/MagalixCorp/magalix-agent/utils"
-"github.com/MagalixTechnologies/channel"
-"github.com/reconquest/karma-go"
+	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixTechnologies/channel"
+	"github.com/reconquest/karma-go"
 )
 
 // hello Sends hello package
 func (client *Client) hello() error {
 	var hello proto.PacketHello
 	err := client.send(proto.PacketKindHello, proto.PacketHello{
-		Major: ProtocolMajorVersion,
-		Minor: ProtocolMinorVersion,
+		Major:     ProtocolMajorVersion,
+		Minor:     ProtocolMinorVersion,
+		AccountID: client.AccountID,
+		ClusterID: client.ClusterID,
+		Version:   client.version,
 	}, &hello)
 	if err != nil {
 		return err

@@ -395,16 +395,18 @@ func (kubelet *Kubelet) GetMetrics(
 				return err
 			}
 
-			var summaryInterface interface{}
-			err = json.Unmarshal(summaryBytes, &summaryInterface)
-			if err != nil {
-				kubelet.Errorf(
-					err,
-					"{kubelet} unable to unmarshal summary response to its raw interface",
-				)
-			}
-			if summaryInterface != nil {
-				addRawResponse(node.ID, &summaryInterface)
+			if kubelet.optInAnalysisData {
+				var summaryInterface interface{}
+				err = json.Unmarshal(summaryBytes, &summaryInterface)
+				if err != nil {
+					kubelet.Errorf(
+						err,
+						"{kubelet} unable to unmarshal summary response to its raw interface",
+					)
+				}
+				if summaryInterface != nil {
+					addRawResponse(node.ID, &summaryInterface)
+				}
 			}
 
 			err = json.Unmarshal(summaryBytes, &summary)

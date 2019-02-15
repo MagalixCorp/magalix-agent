@@ -158,7 +158,7 @@ func main() {
 		skipNamespaces = namespaces
 	}
 
-	gwClient, err := client.InitClient(args, accountID, clusterID, secret, stderr)
+	gwClient, err := client.InitClient(args, version, accountID, clusterID, secret, stderr)
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
