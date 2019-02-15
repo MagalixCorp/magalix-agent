@@ -45,8 +45,11 @@ var (
 )
 
 type PacketHello struct {
-	Major uint `json:"major"`
-	Minor uint `json:"minor"`
+	Major     uint      `json:"major"`
+	Minor     uint      `json:"minor"`
+	AccountID uuid.UUID `json:"account_id"`
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Version   string    `json:"version"`
 }
 
 type PacketAuthorizationRequest struct {

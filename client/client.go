@@ -38,6 +38,7 @@ type Client struct {
 	parentLogger *log.Logger
 
 	address   string
+	version   string
 	AccountID uuid.UUID
 	ClusterID uuid.UUID
 	secret    []byte
@@ -68,6 +69,7 @@ type Client struct {
 // newClient creates a new client
 func newClient(
 	address string,
+	version string,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
 	secret []byte,
@@ -83,6 +85,7 @@ func newClient(
 		parentLogger: parentLogger,
 
 		address:        address,
+		version:        version,
 		AccountID:      accountID,
 		ClusterID:      clusterID,
 		secret:         secret,
@@ -229,12 +232,13 @@ func (client *Client) AddListener(kind proto.PacketKind, listener func(in []byte
 // InitClient inits client
 func InitClient(
 	args map[string]interface{},
+	version string,
 	accountID, clusterID uuid.UUID,
 	secret []byte,
 	parentLogger *log.Logger,
 ) (*Client, error) {
 	client := newClient(
-		args["--gateway"].(string), accountID, clusterID, secret,
+		args["--gateway"].(string), version, accountID, clusterID, secret,
 		timeouts{
 			protoHandshake: utils.MustParseDuration(args, "--timeout-proto-handshake"),
 			protoWrite:     utils.MustParseDuration(args, "--timeout-proto-write"),
