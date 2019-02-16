@@ -176,6 +176,8 @@ func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
 			)
 			now := time.Now()
 
+			var body io.Reader
+
 			if cAdvisorResponse != nil && cAdvisorResponse.Body != nil {
 				defer func() {
 					if err := cAdvisorResponse.Body.Close(); err != nil {
@@ -188,14 +190,24 @@ func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
 			}
 
 			if err != nil {
-				return karma.Format(
-					err,
-					"{cAdvisor} unable to get cAdvisor from node %q",
-					node.Name,
-				)
+				if strings.Contains(err.Error(), "the server could not find the requested resource") {
+					cAdvisor.Warningf(err,
+						"{cAdvisor} unable to get cAdvisor from node %q",
+						node.Name,
+					)
+					body = bytes.NewReader([]byte{})
+				} else {
+					return karma.Format(
+						err,
+						"{cAdvisor} unable to get cAdvisor from node %q",
+						node.Name,
+					)
+				}
+			} else {
+				body = cAdvisorResponse.Body
 			}
 
-			cAdvisorMetrics, err := decodeCAdvisorResponse(cAdvisorResponse.Body)
+			cAdvisorMetrics, err := decodeCAdvisorResponse(body)
 
 			if err != nil {
 				return karma.Format(

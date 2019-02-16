@@ -636,6 +636,14 @@ func (kubelet *Kubelet) GetMetrics(
 					"metrics/cadvisor",
 				)
 				if err != nil {
+					if strings.Contains(err.Error(), "the server could not find the requested resource") {
+						kubelet.Warningf(err,
+							"{cAdvisor} unable to get cAdvisor from node %q",
+							node.Name,
+						)
+						cadvisorResponse = []byte{}
+						return nil
+					}
 					return karma.Format(
 						err,
 						"{kubelet} unable to get cadvisor from node %q",
