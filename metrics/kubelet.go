@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -382,6 +383,11 @@ func (kubelet *Kubelet) GetMetrics(
 				var err error
 				summaryBytes, err = kubelet.kubeletClient.Get(&node, "stats/summary")
 				if err != nil {
+					if strings.Contains(err.Error(), "the server could not find the requested resource") {
+						kubelet.Warningf(err, "unable to get summary from node %q", node.Name)
+						summaryBytes = []byte("{}")
+						return nil
+					}
 					return karma.Format(
 						err,
 						"{kubelet} unable to get summary from node %q",
