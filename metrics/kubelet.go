@@ -843,6 +843,11 @@ func (kubelet *Kubelet) withBackoff(fn func() error) error {
 				Describe("retry", try).
 				Describe("maxRetry", maxRetry).
 				Reason(err)
+			kubelet.Errorf(
+				context,
+				"unhandled error occurred, no more retrying",
+			)
+
 			return karma.Format(context, "max retries exceeded")
 		}
 
@@ -850,7 +855,7 @@ func (kubelet *Kubelet) withBackoff(fn func() error) error {
 		// 300ms -> 600ms -> [...] -> 3000ms -> 300ms
 		timeout := kubelet.timeouts.backoff.sleep * time.Duration((try-1)%10+1)
 
-		kubelet.Errorf(
+		kubelet.Warningf(
 			karma.Describe("retry", try).Reason(err),
 			"unhandled error occurred, retrying after %s",
 			timeout,
