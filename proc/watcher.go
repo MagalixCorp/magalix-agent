@@ -401,15 +401,13 @@ func (observer *Observer) handleDaemonSet(
 		)
 	}
 
-	replicas := 1
-
 	observer.replicas <- ReplicaSpec{
 		Name:          daemonset.Name,
 		ID:            id,
 		AccountID:     accountID,
 		ApplicationID: applicationID,
 		ServiceID:     serviceID,
-		Replicas:      replicas,
+		Replicas:      int(daemonset.Status.DesiredNumberScheduled),
 	}
 
 	return nil
