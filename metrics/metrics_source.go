@@ -11,5 +11,5 @@ type MetricsSource interface {
 }
 
 type Source interface {
-	GetMetrics(time time.Time) (*MetricsBatch, error)
+	GetMetrics(time time.Time) (map[string]*MetricFamily, error)
 }

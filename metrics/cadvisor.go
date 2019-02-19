@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/MagalixTechnologies/common/entities"
 	"io"
 	"regexp"
 	"strconv"
@@ -177,9 +178,9 @@ func (cAdvisor *CAdvisor) withBackoff(fn func() error) error {
 	return utils.WithBackoff(fn, cAdvisor.backoff, cAdvisor.Logger)
 }
 
-func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
+func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (map[string]*MetricFamily, error) {
 	mutex := sync.Mutex{}
-	var metricsBatches []*MetricsBatch
+	metrics := map[string]*MetricFamily{}
 
 	getNodeMetrics := func(node *kuber.Node) {
 		cAdvisor.Infof(
@@ -191,7 +192,7 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 		err := cAdvisor.withBackoff(func() error {
 			response, err := cAdvisor.kubeletClient.Get(node, "metrics/cadvisor")
 
-			nodeMetricsBatch, err := ReadPrometheusMetrics(
+			nodeMetrics, err := ReadPrometheusMetrics(
 				allowedMetrics,
 				response,
 				func(labels map[string]string) (
@@ -220,9 +221,9 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 				}
 			}
 
-			if nodeMetricsBatch != nil {
+			if len(nodeMetrics) > 0 {
 				mutex.Lock()
-				metricsBatches = append(metricsBatches, nodeMetricsBatch)
+				metrics = mergeFamilies(metrics, nodeMetrics)
 				mutex.Unlock()
 			}
 
@@ -259,15 +260,13 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 
 	wg.Wait()
 
-	batch := FlattenMetricsBatches(metricsBatches)
-
 	cAdvisor.Infof(
 		nil,
 		"{cAdvisor} collected %v metrics from cAdvisor",
-		len(batch.Metrics),
+		len(metrics),
 	)
 
-	return batch, nil
+	return metrics, nil
 }
 
 func (cAdvisor *CAdvisor) bind(labels map[string]string) (

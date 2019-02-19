@@ -20,22 +20,20 @@ func ReadPrometheusMetrics(
 	fetchOnly []string,
 	resp *http.Response,
 	bind BindFunc,
-) (result *MetricsBatch, err error) {
+) (result map[string]*MetricFamily, err error) {
 	mfChan := make(chan *io_prometheus_client.MetricFamily, 1024)
 
 	go func() {
 		err = FetchMetricFamilies(fetchOnly, resp, mfChan)
 	}()
 
-	metrics := map[string]*MetricFamily{}
+	result = map[string]*MetricFamily{}
 	for mf := range mfChan {
 		family := toMetricFamily(mf, bind)
-		metrics = appendFamily(metrics, family)
+		result = appendFamily(result, family)
 	}
 
-	return &MetricsBatch{
-		Metrics: metrics,
-	}, err
+	return
 }
 
 // toMetricFamily consumes a MetricFamily and transforms it to the local Family type.

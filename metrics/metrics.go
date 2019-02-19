@@ -140,14 +140,14 @@ func watchMetricsProm(
 			}
 
 			scrapeSource := func(sourceName string, source Source) {
-				sourceBatch, err := source.GetMetrics(tickTime)
+				sourceMetrics, err := source.GetMetrics(tickTime)
 				if err != nil {
 					c.Errorf(err, "unable to retrieve metrics from %s source", sourceName)
 					return
 				}
 				m.Lock()
 				defer m.Unlock()
-				metricsBatch.Metrics = mergeFamilies(metricsBatch.Metrics, sourceBatch.Metrics)
+				metricsBatch.Metrics = mergeFamilies(metricsBatch.Metrics, sourceMetrics)
 			}
 
 			wg := &sync.WaitGroup{}
