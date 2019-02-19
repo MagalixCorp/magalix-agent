@@ -192,6 +192,7 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 			response, err := cAdvisor.kubeletClient.Get(node, "metrics/cadvisor")
 
 			nodeMetricsBatch, err := ReadPrometheusMetrics(
+				allowedMetrics,
 				response,
 				func(labels map[string]string) (
 					entities *Entities, tags map[string]string) {
@@ -258,7 +259,7 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 
 	wg.Wait()
 
-	batch := filterMetrics(FlattenMetricsBatches(metricsBatches))
+	batch := FlattenMetricsBatches(metricsBatches)
 
 	cAdvisor.Infof(
 		nil,
@@ -338,21 +339,6 @@ func (cAdvisor *CAdvisor) bind(labels map[string]string) (
 	}
 
 	return entities, labels
-}
-
-func filterMetrics(batch *MetricsBatch) *MetricsBatch {
-	filtered := &MetricsBatch{
-		Timestamp: batch.Timestamp,
-		Metrics:   map[string]*MetricFamily{},
-	}
-
-	for _, allowedMetric := range allowedMetrics {
-		if metric, ok := batch.Metrics[allowedMetric]; ok {
-			filtered.Metrics[allowedMetric] = metric
-		}
-	}
-
-	return filtered
 }
 
 func NewCAdvisor(

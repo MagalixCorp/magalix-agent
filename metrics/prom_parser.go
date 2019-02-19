@@ -26,8 +26,6 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-const acceptHeader = `application/vnd.google.protobuf;proto=io.prometheus.client.MetricFamily;encoding=delimited;q=0.7,text/plain;version=0.0.4;q=0.3`
-
 func getValue(m *dto.Metric) float64 {
 	if m.Gauge != nil {
 		return m.GetGauge().GetValue()
@@ -68,7 +66,9 @@ func makeBuckets(m *dto.Metric) map[string]string {
 // parseResponse consumes an http.Response and pushes it to the MetricFamily
 // channel. It returns when all MetricFamilies are parsed and put on the
 // channel.
-func parseResponse(resp *http.Response, ch chan<- *dto.MetricFamily) error {
+func parseResponse(
+	fetchOnly []string, resp *http.Response, ch chan<- *dto.MetricFamily,
+) error {
 	mediatype, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err == nil && mediatype == "application/vnd.google.protobuf" &&
 		params["encoding"] == "delimited" &&
@@ -82,10 +82,14 @@ func parseResponse(resp *http.Response, ch chan<- *dto.MetricFamily) error {
 				}
 				return fmt.Errorf("reading metric family protocol buffer failed: %v", err)
 			}
-			ch <- mf
+
+			if isAllowed(fetchOnly, mf) {
+				ch <- mf
+			}
+
 		}
 	} else {
-		if err := parseReader(resp.Body, ch); err != nil {
+		if err := parseReader(fetchOnly, resp.Body, ch); err != nil {
 			defer close(ch)
 			return err
 		}
@@ -96,7 +100,9 @@ func parseResponse(resp *http.Response, ch chan<- *dto.MetricFamily) error {
 // parseReader consumes an io.Reader and pushes it to the MetricFamily
 // channel. It returns when all MetricFamilies are parsed and put on the
 // channel.
-func parseReader(in io.Reader, ch chan<- *dto.MetricFamily) error {
+func parseReader(
+	fetchOnly []string, in io.Reader, ch chan<- *dto.MetricFamily,
+) error {
 	defer close(ch)
 	// We could do further content-type checks here, but the
 	// fallback for now will anyway be the text format
@@ -107,7 +113,9 @@ func parseReader(in io.Reader, ch chan<- *dto.MetricFamily) error {
 		return fmt.Errorf("reading text format failed: %v", err)
 	}
 	for _, mf := range metricFamilies {
-		ch <- mf
+		if isAllowed(fetchOnly, mf) {
+			ch <- mf
+		}
 	}
 	return nil
 }
@@ -116,7 +124,24 @@ func parseReader(in io.Reader, ch chan<- *dto.MetricFamily) error {
 // into MetricFamily proto messages, and sends them to the provided channel. It
 // returns after all MetricFamilies have been sent.
 func FetchMetricFamilies(
-	resp *http.Response, ch chan<- *dto.MetricFamily,
+	fetchOnly []string, resp *http.Response, ch chan<- *dto.MetricFamily,
 ) error {
-	return parseResponse(resp, ch)
+	return parseResponse(fetchOnly, resp, ch)
+}
+
+func isAllowed(allowedMetrics []string, mf *dto.MetricFamily) bool {
+	if mf == nil {
+		return false
+	}
+	name := ""
+	if mf.Name != nil {
+		name = *mf.Name
+	}
+
+	for _, metric := range allowedMetrics {
+		if metric == name {
+			return true
+		}
+	}
+	return false
 }

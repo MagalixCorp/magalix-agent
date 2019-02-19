@@ -17,13 +17,14 @@ type Prometheus struct {
 }
 
 func ReadPrometheusMetrics(
+	fetchOnly []string,
 	resp *http.Response,
 	bind BindFunc,
 ) (result *MetricsBatch, err error) {
 	mfChan := make(chan *io_prometheus_client.MetricFamily, 1024)
 
 	go func() {
-		err = FetchMetricFamilies(resp, mfChan)
+		err = FetchMetricFamilies(fetchOnly, resp, mfChan)
 	}()
 
 	metrics := map[string]*MetricFamily{}
