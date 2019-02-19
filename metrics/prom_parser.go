@@ -16,15 +16,12 @@
 package metrics
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/matttproud/golang_protobuf_extensions/pbutil"
+	"github.com/prometheus/common/expfmt"
 	"io"
 	"mime"
 	"net/http"
-	"time"
-
-	"github.com/matttproud/golang_protobuf_extensions/pbutil"
-	"github.com/prometheus/common/expfmt"
 
 	dto "github.com/prometheus/client_model/go"
 )
@@ -66,28 +63,6 @@ func makeBuckets(m *dto.Metric) map[string]string {
 		result[fmt.Sprint(b.GetUpperBound())] = fmt.Sprint(b.GetCumulativeCount())
 	}
 	return result
-}
-
-func decodeContent(client *http.Client, url string, ch chan<- *dto.MetricFamily, timeChan chan<- *time.Time) error {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return fmt.Errorf("creating GET request for URL %q failed: %v", url, err)
-	}
-	req.Header.Add("Accept", acceptHeader)
-	resp, err := client.Do(req)
-	timestamp := time.Now()
-	timeChan <- &timestamp
-	defer close(timeChan)
-	if err != nil {
-		defer close(ch)
-		return fmt.Errorf("executing GET request for URL %q failed: %v", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		defer close(ch)
-		return fmt.Errorf("GET request for URL %q returned HTTP status %s", url, resp.Status)
-	}
-	return parseResponse(resp, ch)
 }
 
 // parseResponse consumes an http.Response and pushes it to the MetricFamily
@@ -141,28 +116,7 @@ func parseReader(in io.Reader, ch chan<- *dto.MetricFamily) error {
 // into MetricFamily proto messages, and sends them to the provided channel. It
 // returns after all MetricFamilies have been sent.
 func FetchMetricFamilies(
-	url string, ch chan<- *dto.MetricFamily,
-	certificate string, key string,
-	skipServerCertCheck bool,
-	timeChan chan<- *time.Time,
+	resp *http.Response, ch chan<- *dto.MetricFamily,
 ) error {
-	var transport *http.Transport
-	if certificate != "" && key != "" {
-		cert, err := tls.LoadX509KeyPair(certificate, key)
-		if err != nil {
-			return err
-		}
-		tlsConfig := &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: skipServerCertCheck,
-		}
-		tlsConfig.BuildNameToCertificate()
-		transport = &http.Transport{TLSClientConfig: tlsConfig}
-	} else {
-		transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: skipServerCertCheck},
-		}
-	}
-	client := &http.Client{Transport: transport}
-	return decodeContent(client, url, ch, timeChan)
+	return parseResponse(resp, ch)
 }

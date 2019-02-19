@@ -181,7 +181,7 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 	mutex := sync.Mutex{}
 	var metricsBatches []*MetricsBatch
 
-	getNodeMetrics := func(node kuber.Node) {
+	getNodeMetrics := func(node *kuber.Node) {
 		cAdvisor.Infof(
 			nil,
 			"{cAdvisor} requesting metrics from node %s",
@@ -189,10 +189,12 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 		)
 
 		err := cAdvisor.withBackoff(func() error {
+			response, err := cAdvisor.kubeletClient.Get(node, "metrics/cadvisor")
+
 			nodeMetricsBatch, err := ReadPrometheusMetrics(
-				cAdvisor.getNodeKubeletAddress(node)+"/metrics/cadvisor",
-				"", "", true,
-				func(labels map[string]string) (entities *Entities, tags map[string]string) {
+				response,
+				func(labels map[string]string) (
+					entities *Entities, tags map[string]string) {
 					entities, tags = cAdvisor.bind(labels)
 					if entities != nil {
 						entities.Node = &node.ID
@@ -249,7 +251,7 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (*MetricsBatch, error) 
 
 	for _, node := range nodes {
 		go func(node kuber.Node) {
-			getNodeMetrics(node)
+			getNodeMetrics(&node)
 			wg.Done()
 		}(node)
 	}

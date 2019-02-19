@@ -1,11 +1,10 @@
 package metrics
 
 import (
-	"time"
-
 	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/prometheus/client_model/go"
+	"net/http"
 )
 
 type BindFunc func(labels map[string]string) (entities *Entities, tags map[string]string)
@@ -18,18 +17,14 @@ type Prometheus struct {
 }
 
 func ReadPrometheusMetrics(
-	url string,
-	certificate string, key string, skipServerCertCheck bool,
+	resp *http.Response,
 	bind BindFunc,
 ) (result *MetricsBatch, err error) {
 	mfChan := make(chan *io_prometheus_client.MetricFamily, 1024)
-	timeChan := make(chan *time.Time)
 
 	go func() {
-		err = FetchMetricFamilies(url, mfChan, certificate, key, skipServerCertCheck, timeChan)
+		err = FetchMetricFamilies(resp, mfChan)
 	}()
-
-	timestamp := <-timeChan
 
 	metrics := map[string]*MetricFamily{}
 	for mf := range mfChan {
@@ -38,8 +33,7 @@ func ReadPrometheusMetrics(
 	}
 
 	return &MetricsBatch{
-		Timestamp: *timestamp,
-		Metrics:   metrics,
+		Metrics: metrics,
 	}, err
 }
 

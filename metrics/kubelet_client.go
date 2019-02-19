@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"golang.org/x/sync/errgroup"
+	"io"
 	"io/ioutil"
 	"k8s.io/client-go/rest"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -38,13 +40,15 @@ func joinUrl(address, path string) string {
 	return u.String()
 }
 
-type NodeGet func(node *kuber.Node, path_ string) ([]byte, error)
+type NodeGet func(node *kuber.Node, path_ string) (*http.Response, error)
 
 type KubeletClient struct {
 	*log.Logger
 
 	scanner *scanner.Scanner
-	kube    *kuber.Kube
+
+	kube       *kuber.Kube
+	restClient *rest.RESTClient
 
 	httpPort string
 
@@ -167,20 +171,21 @@ func (client *KubeletClient) tryApiServerProxy(
 	ctx *karma.Context,
 	node *kuber.Node,
 ) (NodeGet, error) {
-	nodeGet := func(node *kuber.Node, path string) ([]byte, error) {
+	nodeGet := func(node *kuber.Node, path string) (*http.Response, error) {
 		subResources := []string{"proxy"}
 		subResources = append(subResources, strings.Split(path, "/")...)
 
-		r, err := client.kube.Clientset.
+		url_ := client.kube.Clientset.
 			CoreV1().
 			RESTClient().
 			Get().
 			Resource("nodes").
 			Name(node.Name).
 			SubResource(subResources...).
-			DoRaw()
+			URL().
+			String()
 
-		return r, err
+		return client.restClient.Client.Get(url_)
 	}
 	err := client.testNodeAccess(ctx, node, nodeGet)
 	if err != nil {
@@ -196,39 +201,20 @@ func (client *KubeletClient) tryApiServerProxy(
 	}
 	return nodeGet, nil
 }
+
 func (client *KubeletClient) tryDirectAccess(
 	ctx *karma.Context,
 	node *kuber.Node,
 ) (NodeGet, error) {
-	nodeGet := func(node *kuber.Node, path_ string) ([]byte, error) {
+	nodeGet := func(node *kuber.Node, path_ string) (*http.Response, error) {
 		base := fmt.Sprintf("http://%s:%v", node.IP, client.httpPort)
 		url_ := joinUrl(base, path_)
 
-		ctx := karma.Describe("url", url_)
-
-		restClient, ok := client.kube.Clientset.RESTClient().(*rest.RESTClient)
-		if !ok {
-			return nil, karma.Format(
-				nil,
-				"invalid cast, please contact developers",
-			)
-		}
-
-		response, err := restClient.Client.Get(url_)
+		r, err := client.restClient.Client.Get(url_)
 		if err != nil {
-			return nil, ctx.Reason(err)
+			return nil, karma.Describe("url", url_).Reason(err)
 		}
-
-		b, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			return nil, ctx.Format(
-				err,
-				"unable to read response body",
-			)
-		}
-		_ = response.Body.Close()
-		return b, nil
-
+		return r, nil
 	}
 	err := client.testNodeAccess(ctx, node, nodeGet)
 	if err != nil {
@@ -251,10 +237,20 @@ func (client *KubeletClient) testNodeAccess(
 	ctx = ctx.
 		Describe("path", "stats/summary")
 
-	b, err := nodeGet(node, "stats/summary")
+	resp, err := nodeGet(node, "stats/summary")
 	if err != nil {
 		return ctx.Format(err, "node access test failed")
 	}
+	// TODO: check status code
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return ctx.Format(
+			err,
+			"unable to read response body",
+		)
+	}
+	_ = resp.Body.Close()
 
 	var response interface{}
 	err = parseJSON(b, &response)
@@ -264,11 +260,35 @@ func (client *KubeletClient) testNodeAccess(
 	return nil
 }
 
-func (client *KubeletClient) Get(
+func (client *KubeletClient) GetBytes(
 	node *kuber.Node,
 	path string,
 ) ([]byte, error) {
-	return client.nodeGet(node, path)
+	resp, err := client.Get(node, path)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.readResponseBytes(resp)
+}
+
+func (client *KubeletClient) Get(
+	node *kuber.Node,
+	path string,
+) (*http.Response, error) {
+	resp, err := client.nodeGet(node, path)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, karma.Format(
+			"GET request for URL %q returned HTTP status %s",
+			resp.Request.URL.String(),
+			resp.Status,
+		)
+	}
+
+	return resp, nil
 }
 
 func (client *KubeletClient) GetJson(
@@ -276,7 +296,7 @@ func (client *KubeletClient) GetJson(
 	path string,
 	response interface{},
 ) error {
-	b, err := client.Get(node, path)
+	b, err := client.GetBytes(node, path)
 	if err != nil {
 		return err
 	}
@@ -291,11 +311,19 @@ func NewKubeletClient(
 	args map[string]interface{},
 ) (*KubeletClient, error) {
 
+	restClient, ok := kube.Clientset.RESTClient().(*rest.RESTClient)
+	if !ok {
+		return nil, karma.Format(
+			nil,
+			"invalid cast, please contact developers",
+		)
+	}
+
 	client := &KubeletClient{
 		Logger: logger,
 
-		scanner: scanner,
-		kube:    kube,
+		scanner:    scanner,
+		restClient: restClient,
 
 		httpPort: args["--kubelet-port"].(string),
 	}
@@ -319,4 +347,28 @@ func parseJSON(b []byte, response interface{}) (err error) {
 			)
 	}
 	return nil
+}
+
+func parseJSONReader(body io.Reader, response interface{}) (err error) {
+	err = json.NewDecoder(body).Decode(&response)
+	if err != nil {
+		return karma.
+			Format(
+				err,
+				"unable to unmarshal response to json",
+			)
+	}
+	return nil
+}
+
+func (client *KubeletClient) readResponseBytes(
+	resp *http.Response,
+) ([]byte, error) {
+	if resp.Body != nil {
+		defer func() {
+			err := resp.Body.Close()
+			client.Errorf(err, "error while closing body")
+		}()
+	}
+	return ioutil.ReadAll(resp.Body)
 }

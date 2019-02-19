@@ -381,7 +381,7 @@ func (kubelet *Kubelet) GetMetrics(
 			)
 			err := kubelet.withBackoff(func() error {
 				var err error
-				summaryBytes, err = kubelet.kubeletClient.Get(&node, "stats/summary")
+				summaryBytes, err = kubelet.kubeletClient.GetBytes(&node, "stats/summary")
 				if err != nil {
 					if strings.Contains(err.Error(), "the server could not find the requested resource") {
 						kubelet.Warningf(err, "unable to get summary from node %q", node.Name)
@@ -631,7 +631,7 @@ func (kubelet *Kubelet) GetMetrics(
 			}
 
 			err = kubelet.withBackoff(func() error {
-				cadvisorResponse, err = kubelet.kubeletClient.Get(
+				cadvisorResponse, err = kubelet.kubeletClient.GetBytes(
 					&node,
 					"metrics/cadvisor",
 				)
