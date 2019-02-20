@@ -18,7 +18,7 @@ func (client *Client) hello() error {
 		Minor:     ProtocolMinorVersion,
 		AccountID: client.AccountID,
 		ClusterID: client.ClusterID,
-		Version:   client.version,
+		Build:     client.version,
 	}, &hello)
 	if err != nil {
 		return err
