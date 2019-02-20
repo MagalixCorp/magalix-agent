@@ -95,6 +95,8 @@ Options:
 
 var version = "[manual build]"
 
+var startID string
+
 func getVersion() string {
 	return strings.Join([]string{
 		"magalix agent " + version,
@@ -104,6 +106,7 @@ func getVersion() string {
 }
 
 func main() {
+	startID = uuid.NewV4().String()
 	args, err := docopt.ParseArgs(usage, nil, getVersion())
 	if err != nil {
 		panic(err)
@@ -158,7 +161,7 @@ func main() {
 		skipNamespaces = namespaces
 	}
 
-	gwClient, err := client.InitClient(args, version, accountID, clusterID, secret, stderr)
+	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, stderr)
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()

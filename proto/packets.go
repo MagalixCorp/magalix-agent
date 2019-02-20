@@ -48,6 +48,7 @@ type PacketHello struct {
 	Major     uint      `json:"major"`
 	Minor     uint      `json:"minor"`
 	Build     string    `json:"build"`
+	StartID   string    `json:"start_id"`
 	AccountID uuid.UUID `json:"account_id"`
 	ClusterID uuid.UUID `json:"cluster_id"`
 }

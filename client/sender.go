@@ -16,9 +16,10 @@ func (client *Client) hello() error {
 	err := client.send(proto.PacketKindHello, proto.PacketHello{
 		Major:     ProtocolMajorVersion,
 		Minor:     ProtocolMinorVersion,
+		Build:     client.version,
+		StartID:   client.startID,
 		AccountID: client.AccountID,
 		ClusterID: client.ClusterID,
-		Build:     client.version,
 	}, &hello)
 	if err != nil {
 		return err
