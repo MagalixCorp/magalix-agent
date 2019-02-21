@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/MagalixTechnologies/common/entities"
 	"io"
 	"regexp"
 	"strconv"

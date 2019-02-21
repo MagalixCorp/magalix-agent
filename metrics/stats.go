@@ -3,9 +3,11 @@ package metrics
 import (
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/prometheus/client_model/go"
+	"github.com/reconquest/karma-go"
 )
 
 const (
@@ -34,19 +36,19 @@ const (
 	NodeAllocatablePodsName = "kube_node_status_allocatable_pods"
 	NodeAllocatablePodsHelp = "The pod resources of a node that are available for scheduling."
 
-	ContainerRequestsCpuName = "kube_pod_container_resource_requests_cpu_cores"
-	ContainerRequestsCpuHelp = "The number of requested cpu cores by a container."
+	ContainerRequestsCpuName = "stats_container_resource_requests_cpu_cores"
+	ContainerRequestsCpuHelp = "The number of requested cpu cores by a magalix container."
 
-	ContainerLimitsCpuName = "kube_pod_container_resource_limits_cpu_cores"
-	ContainerLimitsCpuHelp = "The limit on cpu cores to be used by a container."
+	ContainerLimitsCpuName = "stats_container_resource_limits_cpu_cores"
+	ContainerLimitsCpuHelp = "The limit on cpu cores to be used by a magalix container."
 
-	ContainerRequestsMemoryName = "kube_pod_container_resource_requests_memory_bytes"
-	ContainerRequestsMemoryHelp = "The number of requested memory bytes by a container."
+	ContainerRequestsMemoryName = "stats_container_resource_requests_memory_bytes"
+	ContainerRequestsMemoryHelp = "The number of requested memory bytes by a magalix container."
 
-	ContainerLimitsMemoryName = "kube_pod_container_resource_limits_memory_bytes"
-	ContainerLimitsMemoryHelp = "The limit on memory to be used by a container in bytes."
+	ContainerLimitsMemoryName = "stats_container_resource_limits_memory_bytes"
+	ContainerLimitsMemoryHelp = "The limit on memory to be used by a magalix container in bytes."
 
-	NodeTag      = "node"
+	NodeTag      = "nodename"
 	NamespaceTag = "namespace"
 	PodTag       = "pod_name"
 	ContainerTag = "container_name"
@@ -69,36 +71,143 @@ func NewStats(s *scanner.Scanner, logger *log.Logger) *Stats {
 	}
 }
 
-func (stats *Stats) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
-	// wait for next scan
+func (stats *Stats) GetMetrics(tickTime time.Time) (
+	map[string]*MetricFamily,
+	error,
+) {
+	// wait for the same tickTime
 	<-stats.scanner.WaitForTick(tickTime)
 
+	ctx := karma.Describe("tick_time", tickTime.Format(time.RFC3339))
+
 	stats.Infof(
-		nil,
+		ctx,
 		"{stats} requesting metrics from scanner",
 	)
 
 	nodes := stats.scanner.GetNodes()
 	apps := stats.scanner.GetApplications()
 
-	batch := &MetricsBatch{
-		Timestamp: stats.scanner.NodesLastScanTime(),
-		Metrics:   map[string]*MetricFamily{},
+	metrics := map[string]*MetricFamily{}
+
+	metrics = appendFamily(
+		metrics,
+		nodesCount(nodes),
+		instanceGroups(nodes),
+	)
+
+	metrics = mergeFamilies(metrics, nodesResources(nodes))
+	metrics = mergeFamilies(metrics, containersResources(apps))
+
+	stats.Infof(
+		ctx,
+		"{stats} collected %v metrics",
+		len(metrics),
+	)
+
+	return metrics, nil
+}
+
+func containersResources(apps []*scanner.Application) map[string]*MetricFamily {
+	containerResources := map[string]*MetricFamily{}
+
+	// TODO: track the host node of the container
+	// TODO per replica tracking
+	containersTagsNames := []string{NamespaceTag, PodTag, ContainerTag}
+	containersRequestsCpu := &MetricFamily{
+		Name:   ContainerRequestsCpuName,
+		Help:   ContainerRequestsCpuHelp,
+		Type:   TypeGAUGE,
+		Tags:   containersTagsNames,
+		Values: []*MetricValue{},
+	}
+	containersLimitsCpu := &MetricFamily{
+		Name:   ContainerLimitsCpuName,
+		Help:   ContainerLimitsCpuHelp,
+		Type:   TypeGAUGE,
+		Tags:   containersTagsNames,
+		Values: []*MetricValue{},
+	}
+	containersRequestsMemory := &MetricFamily{
+		Name:   ContainerRequestsMemoryName,
+		Help:   ContainerRequestsMemoryHelp,
+		Type:   TypeGAUGE,
+		Tags:   containersTagsNames,
+		Values: []*MetricValue{},
+	}
+	containersLimitsMemory := &MetricFamily{
+		Name:   ContainerLimitsMemoryName,
+		Help:   ContainerLimitsMemoryHelp,
+		Type:   TypeGAUGE,
+		Tags:   containersTagsNames,
+		Values: []*MetricValue{},
+	}
+	for _, app := range apps {
+		for _, service := range app.Services {
+			for _, container := range service.Containers {
+				containerEntities := &Entities{
+					Application: &app.ID,
+					Service:     &service.ID,
+					Container:   &container.ID,
+				}
+				containerTags := map[string]string{}
+				containerTags[NamespaceTag] = app.Name
+				containerTags[PodTag] = service.Name
+				containerTags[ContainerTag] = container.Name
+
+				containersRequestsCpu.Values = append(
+					containersRequestsCpu.Values,
+					&MetricValue{
+						Entities: containerEntities,
+						Tags:     containerTags,
+						Value:    float64(container.Resources.Requests.Cpu().MilliValue() / 1000),
+					},
+				)
+
+				containersLimitsCpu.Values = append(
+					containersLimitsCpu.Values,
+					&MetricValue{
+						Entities: containerEntities,
+						Tags:     containerTags,
+						Value:    float64(container.Resources.Limits.Cpu().MilliValue() / 1000),
+					},
+				)
+
+				containersRequestsMemory.Values = append(
+					containersRequestsMemory.Values,
+					&MetricValue{
+						Entities: containerEntities,
+						Tags:     containerTags,
+						Value:    float64(container.Resources.Requests.Memory().Value()),
+					},
+				)
+				containersLimitsMemory.Values = append(
+					containersLimitsMemory.Values,
+					&MetricValue{
+						Entities: containerEntities,
+						Tags:     containerTags,
+						Value:    float64(container.Resources.Limits.Memory().Value()),
+					},
+				)
+
+			}
+
+		}
 	}
 
-	batch.Metrics[NodesCountName] = &MetricFamily{
-		Name: NodesCountName,
-		Help: NodesCountHelp,
-		Type: TypeGAUGE,
+	containerResources = appendFamily(
+		containerResources,
 
-		Values: []*MetricValue{
-			{
-				Entities: &Entities{},
-				Value:    float64(len(nodes)),
-			},
-		},
-	}
+		containersRequestsCpu,
+		containersLimitsCpu,
+		containersRequestsMemory,
+		containersLimitsMemory,
+	)
 
+	return containerResources
+}
+
+func instanceGroups(nodes []kuber.Node) *MetricFamily {
 	instanceGroups := map[string]int64{}
 	for _, node := range nodes {
 		instanceGroup := ""
@@ -115,7 +224,6 @@ func (stats *Stats) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
 
 		instanceGroups[instanceGroup] = instanceGroups[instanceGroup] + 1
 	}
-
 	instanceGroupsMetric := &MetricFamily{
 		Name: InstanceGroupsName,
 		Help: InstanceGroupsHelp,
@@ -124,24 +232,37 @@ func (stats *Stats) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
 
 		Values: make([]*MetricValue, len(instanceGroups)),
 	}
-
 	i := 0
 	for instanceGroup, nodesCount := range instanceGroups {
 		mv := &MetricValue{
 			Entities: &Entities{},
-			Tags:  map[string]string{},
-			Value: float64(nodesCount),
+			Tags:     map[string]string{},
+			Value:    float64(nodesCount),
 		}
 		mv.Tags[InstanceGroupTag] = instanceGroup
 		instanceGroupsMetric.Values[i] = mv
 		i++
 	}
+	return instanceGroupsMetric
+}
 
-	batch.Metrics = appendFamily(
-		batch.Metrics,
-		instanceGroupsMetric,
-	)
+func nodesCount(nodes []kuber.Node) *MetricFamily {
+	return &MetricFamily{
+		Name: NodesCountName,
+		Help: NodesCountHelp,
+		Type: TypeGAUGE,
 
+		Values: []*MetricValue{
+			{
+				Entities: &Entities{},
+				Value:    float64(len(nodes)),
+			},
+		},
+	}
+}
+
+func nodesResources(nodes []kuber.Node) map[string]*MetricFamily {
+	nodeMetrics := map[string]*MetricFamily{}
 	nodesTagsNames := []string{NodeTag}
 	for _, node := range nodes {
 		nodeEntities := &Entities{
@@ -150,8 +271,8 @@ func (stats *Stats) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
 		nodeTags := map[string]string{}
 		nodeTags[NodeTag] = node.Name
 
-		batch.Metrics = appendFamily(
-			batch.Metrics,
+		nodeMetrics = appendFamily(
+			nodeMetrics,
 
 			&MetricFamily{
 				Name: NodeCapacityCpuName,
@@ -237,103 +358,5 @@ func (stats *Stats) GetMetrics(tickTime time.Time) (*MetricsBatch, error) {
 
 	}
 
-	containersTagsNames := []string{NamespaceTag, PodTag, ContainerTag}
-
-	containersRequestsCpu := &MetricFamily{
-		Name:   ContainerRequestsCpuName,
-		Help:   ContainerRequestsCpuHelp,
-		Type:   TypeGAUGE,
-		Tags:   containersTagsNames,
-		Values: []*MetricValue{},
-	}
-	containersLimitsCpu := &MetricFamily{
-		Name:   ContainerLimitsCpuName,
-		Help:   ContainerLimitsCpuHelp,
-		Type:   TypeGAUGE,
-		Tags:   containersTagsNames,
-		Values: []*MetricValue{},
-	}
-	containersRequestsMemory := &MetricFamily{
-		Name:   ContainerRequestsMemoryName,
-		Help:   ContainerRequestsMemoryHelp,
-		Type:   TypeGAUGE,
-		Tags:   containersTagsNames,
-		Values: []*MetricValue{},
-	}
-	containersLimitsMemory := &MetricFamily{
-		Name:   ContainerLimitsMemoryName,
-		Help:   ContainerLimitsMemoryHelp,
-		Type:   TypeGAUGE,
-		Tags:   containersTagsNames,
-		Values: []*MetricValue{},
-	}
-
-	for _, app := range apps {
-		for _, service := range app.Services {
-			for _, container := range service.Containers {
-				containerEntities := &Entities{
-					Application: &app.ID,
-					Service:     &service.ID,
-					Container:   &container.ID,
-				}
-				containerTags := map[string]string{}
-				containerTags[NamespaceTag] = app.Name
-				containerTags[PodTag] = service.Name
-				containerTags[ContainerTag] = container.Name
-
-				containersRequestsCpu.Values = append(
-					containersRequestsCpu.Values,
-					&MetricValue{
-						Entities: containerEntities,
-						Tags:     containerTags,
-						Value:    float64(container.Resources.Requests.Cpu().MilliValue() / 1000),
-					},
-				)
-
-				containersLimitsCpu.Values = append(
-					containersLimitsCpu.Values,
-					&MetricValue{
-						Entities: containerEntities,
-						Tags:     containerTags,
-						Value:    float64(container.Resources.Limits.Cpu().MilliValue() / 1000),
-					},
-				)
-
-				containersRequestsMemory.Values = append(
-					containersRequestsMemory.Values,
-					&MetricValue{
-						Entities: containerEntities,
-						Tags:     containerTags,
-						Value:    float64(container.Resources.Requests.Memory().Value()),
-					},
-				)
-				containersLimitsMemory.Values = append(
-					containersLimitsMemory.Values,
-					&MetricValue{
-						Entities: containerEntities,
-						Tags:     containerTags,
-						Value:    float64(container.Resources.Limits.Memory().Value()),
-					},
-				)
-
-			}
-
-		}
-	}
-
-	batch.Metrics = appendFamily(
-		batch.Metrics,
-		containersRequestsCpu,
-		containersLimitsCpu,
-		containersRequestsMemory,
-		containersLimitsMemory,
-	)
-
-	stats.Infof(
-		nil,
-		"{stats} collected %v metrics",
-		len(batch.Metrics),
-	)
-
-	return batch, nil
+	return nodeMetrics
 }
