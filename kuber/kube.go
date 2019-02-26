@@ -208,294 +208,327 @@ func (kube *Kube) GetResources() (
 	resources []Resource,
 	rawResources map[string]interface{},
 ) {
+	rawResources = map[string]interface{}{}
+
+	m := sync.Mutex{}
 	wg := sync.WaitGroup{}
-	do := func(fn func()) {
-		wg.Add(1)
-		fn()
-		wg.Done()
-	}
 
-	var (
-		controllers    *kv1.ReplicationControllerList
-		podList        *kv1.PodList
-		deployments    *kbeta2.DeploymentList
-		statefulSets   *kbeta2.StatefulSetList
-		daemonSets     *kbeta2.DaemonSetList
-		replicaSets    *kbeta2.ReplicaSetList
-		cronJobs       *kbeta1.CronJobList
-		limitRangeList *kv1.LimitRangeList
-	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	do(func() {
-		var err error
-		controllers, err = kube.GetReplicationControllers()
+		controllers, err := kube.GetReplicationControllers()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get replication controllers",
 			)
 		}
-	})
 
-	do(func() {
-		var err error
-		podList, err = kube.GetPods()
+		if controllers != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["controllers"] = controllers
+
+			for _, controller := range controllers.Items {
+				resources = append(resources, Resource{
+					Kind:        "ReplicationController",
+					Annotations: controller.Annotations,
+					Namespace:   controller.Namespace,
+					Name:        controller.Name,
+					Containers:  controller.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+$",
+							regexp.QuoteMeta(controller.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(controller.Status.Replicas),
+						Ready:     newInt32Pointer(controller.Status.ReadyReplicas),
+						Available: newInt32Pointer(controller.Status.AvailableReplicas),
+					},
+				})
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		podList, err := kube.GetPods()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get pods",
 			)
 		}
-	})
 
-	do(func() {
-		var err error
-		deployments, err = kube.GetDeployments()
+		if podList != nil {
+			pods = podList.Items
+
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["pods"] = podList
+
+			for _, pod := range pods {
+				if len(pod.OwnerReferences) > 0 {
+					continue
+				}
+				resources = append(resources, Resource{
+					Kind:       "OrphanPod",
+					Namespace:  pod.Namespace,
+					Name:       pod.Name,
+					Containers: pod.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s$",
+							regexp.QuoteMeta(pod.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(1),
+						Ready:     newInt32Pointer(1),
+						Available: newInt32Pointer(1),
+					},
+				})
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		deployments, err := kube.GetDeployments()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get deployments",
 			)
 		}
-	})
 
-	do(func() {
-		var err error
-		statefulSets, err = kube.GetStatefulSets()
+		if deployments != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["deployments"] = deployments
+
+			for _, deployment := range deployments.Items {
+				resources = append(resources, Resource{
+					Kind:        "Deployment",
+					Annotations: deployment.Annotations,
+					Namespace:   deployment.Namespace,
+					Name:        deployment.Name,
+					Containers:  deployment.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+-[^-]+$",
+							regexp.QuoteMeta(deployment.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(deployment.Status.Replicas),
+						Ready:     newInt32Pointer(deployment.Status.ReadyReplicas),
+						Available: newInt32Pointer(deployment.Status.AvailableReplicas),
+					},
+				})
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		statefulSets, err := kube.GetStatefulSets()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get statefulSets",
 			)
 		}
-	})
 
-	do(func() {
-		var err error
-		daemonSets, err = kube.GetDaemonSets()
+		if statefulSets != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["statefulSets"] = statefulSets
+
+			for _, set := range statefulSets.Items {
+				resources = append(resources, Resource{
+					Kind:        "StatefulSet",
+					Annotations: set.Annotations,
+					Namespace:   set.Namespace,
+					Name:        set.Name,
+					Containers:  set.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-([0-9]+)$",
+							regexp.QuoteMeta(set.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(set.Status.Replicas),
+						Ready:     newInt32Pointer(set.Status.ReadyReplicas),
+						Available: newInt32Pointer(set.Status.CurrentReplicas),
+					},
+				})
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		daemonSets, err := kube.GetDaemonSets()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get daemonSets",
 			)
 		}
-	})
 
-	do(func() {
-		var err error
-		replicaSets, err = kube.GetReplicaSets()
+		if daemonSets != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["daemonSets"] = daemonSets
+
+			for _, daemon := range daemonSets.Items {
+				resources = append(resources, Resource{
+					Kind:        "DaemonSet",
+					Annotations: daemon.Annotations,
+					Namespace:   daemon.Namespace,
+					Name:        daemon.Name,
+					Containers:  daemon.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+$",
+							regexp.QuoteMeta(daemon.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(daemon.Status.DesiredNumberScheduled),
+						Ready:     newInt32Pointer(daemon.Status.NumberReady),
+						Available: newInt32Pointer(daemon.Status.NumberAvailable),
+					},
+				})
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		replicaSets, err := kube.GetReplicaSets()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get replicasets",
 			)
 		}
-	})
 
-	do(func() {
-		var err error
-		cronJobs, err = kube.GetCronJobs()
+		if replicaSets != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["replicaSets"] = replicaSets
+
+			for _, replicaSet := range replicaSets.Items {
+				// skipping when it is a part of another service
+				if len(replicaSet.GetOwnerReferences()) > 0 {
+					continue
+				}
+				resources = append(resources, Resource{
+					Kind:        "ReplicaSet",
+					Annotations: replicaSet.Annotations,
+					Namespace:   replicaSet.Namespace,
+					Name:        replicaSet.Name,
+					Containers:  replicaSet.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+$",
+							regexp.QuoteMeta(replicaSet.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(replicaSet.Status.Replicas),
+						Ready:     newInt32Pointer(replicaSet.Status.ReadyReplicas),
+						Available: newInt32Pointer(replicaSet.Status.AvailableReplicas),
+					},
+				})
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		cronJobs, err := kube.GetCronJobs()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get cron jobs",
 			)
 		}
-	})
 
-	do(func() {
-		var err error
-		limitRangeList, err = kube.GetLimitRanges()
+		if cronJobs != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["cronJobs"] = cronJobs
+
+			for _, cronJob := range cronJobs.Items {
+				activeCount := int32(len(cronJob.Status.Active))
+				resources = append(resources, Resource{
+					Kind:        "CronJob",
+					Annotations: cronJob.Annotations,
+					Namespace:   cronJob.Namespace,
+					Name:        cronJob.Name,
+					Containers:  cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+-[^-]+$",
+							regexp.QuoteMeta(cronJob.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Ready: newInt32Pointer(activeCount),
+					},
+				})
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		limitRangeList, err := kube.GetLimitRanges()
 		if err != nil {
 			kube.logger.Errorf(
 				err,
 				"unable to get limitRanges",
 			)
 		}
-	})
+		if limitRangeList != nil {
+			limitRanges = limitRangeList.Items
+
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["limitRanges"] = limitRangeList
+		}
+	}()
 
 	wg.Wait()
-
-	rawResources = map[string]interface{}{
-		"pods":         podList,
-		"deployments":  deployments,
-		"statefulSets": statefulSets,
-		"daemonSets":   daemonSets,
-		"replicaSets":  replicaSets,
-		"cronJobs":     cronJobs,
-		"limitRanges":  limitRangeList,
-	}
-
-	if podList != nil {
-		pods = podList.Items
-		for _, pod := range pods {
-			if len(pod.OwnerReferences) > 0 {
-				continue
-			}
-			resources = append(resources, Resource{
-				Kind:       "OrphanPod",
-				Namespace:  pod.Namespace,
-				Name:       pod.Name,
-				Containers: pod.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s$",
-						regexp.QuoteMeta(pod.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(1),
-					Ready:     newInt32Pointer(1),
-					Available: newInt32Pointer(1),
-				},
-			})
-		}
-	}
-
-	if controllers != nil {
-		for _, controller := range controllers.Items {
-			resources = append(resources, Resource{
-				Kind:        "ReplicationController",
-				Annotations: controller.Annotations,
-				Namespace:   controller.Namespace,
-				Name:        controller.Name,
-				Containers:  controller.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+$",
-						regexp.QuoteMeta(controller.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(controller.Status.Replicas),
-					Ready:     newInt32Pointer(controller.Status.ReadyReplicas),
-					Available: newInt32Pointer(controller.Status.AvailableReplicas),
-				},
-			})
-		}
-	}
-
-	if deployments != nil {
-		for _, deployment := range deployments.Items {
-			resources = append(resources, Resource{
-				Kind:        "Deployment",
-				Annotations: deployment.Annotations,
-				Namespace:   deployment.Namespace,
-				Name:        deployment.Name,
-				Containers:  deployment.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+-[^-]+$",
-						regexp.QuoteMeta(deployment.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(deployment.Status.Replicas),
-					Ready:     newInt32Pointer(deployment.Status.ReadyReplicas),
-					Available: newInt32Pointer(deployment.Status.AvailableReplicas),
-				},
-			})
-		}
-	}
-
-	if statefulSets != nil {
-		for _, set := range statefulSets.Items {
-			resources = append(resources, Resource{
-				Kind:        "StatefulSet",
-				Annotations: set.Annotations,
-				Namespace:   set.Namespace,
-				Name:        set.Name,
-				Containers:  set.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-([0-9]+)$",
-						regexp.QuoteMeta(set.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(set.Status.Replicas),
-					Ready:     newInt32Pointer(set.Status.ReadyReplicas),
-					Available: newInt32Pointer(set.Status.CurrentReplicas),
-				},
-			})
-		}
-	}
-
-	if daemonSets != nil {
-		for _, daemon := range daemonSets.Items {
-			resources = append(resources, Resource{
-				Kind:        "DaemonSet",
-				Annotations: daemon.Annotations,
-				Namespace:   daemon.Namespace,
-				Name:        daemon.Name,
-				Containers:  daemon.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+$",
-						regexp.QuoteMeta(daemon.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(daemon.Status.DesiredNumberScheduled),
-					Ready:     newInt32Pointer(daemon.Status.NumberReady),
-					Available: newInt32Pointer(daemon.Status.NumberAvailable),
-				},
-			})
-		}
-	}
-
-	if replicaSets != nil {
-		for _, replicaSet := range replicaSets.Items {
-			// skipping when it is a part of another service
-			if len(replicaSet.GetOwnerReferences()) > 0 {
-				continue
-			}
-			resources = append(resources, Resource{
-				Kind:        "ReplicaSet",
-				Annotations: replicaSet.Annotations,
-				Namespace:   replicaSet.Namespace,
-				Name:        replicaSet.Name,
-				Containers:  replicaSet.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+$",
-						regexp.QuoteMeta(replicaSet.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(replicaSet.Status.Replicas),
-					Ready:     newInt32Pointer(replicaSet.Status.ReadyReplicas),
-					Available: newInt32Pointer(replicaSet.Status.AvailableReplicas),
-				},
-			})
-		}
-	}
-
-	if cronJobs != nil {
-		for _, cronJob := range cronJobs.Items {
-			activeCount := int32(len(cronJob.Status.Active))
-			resources = append(resources, Resource{
-				Kind:        "CronJob",
-				Annotations: cronJob.Annotations,
-				Namespace:   cronJob.Namespace,
-				Name:        cronJob.Name,
-				Containers:  cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+-[^-]+$",
-						regexp.QuoteMeta(cronJob.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Ready: newInt32Pointer(activeCount),
-				},
-			})
-		}
-	}
-
-	if limitRangeList != nil {
-		limitRanges = limitRangeList.Items
-	}
 
 	return
 }
