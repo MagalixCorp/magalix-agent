@@ -41,7 +41,6 @@ func toMetricFamily(
 	dtoMF *io_prometheus_client.MetricFamily,
 	bind BindFunc,
 ) *MetricFamily {
-
 	mf := &MetricFamily{
 		//Time:    time.Now(),
 		Name: dtoMF.GetName(),
@@ -51,11 +50,15 @@ func toMetricFamily(
 		Values: make([]*MetricValue, 0),
 	}
 
-	if dtoMF.GetType() == io_prometheus_client.MetricType_SUMMARY {
-
-	} else if dtoMF.GetType() == io_prometheus_client.MetricType_HISTOGRAM {
-
-	} else {
+	switch dtoMF.GetType() {
+	case io_prometheus_client.MetricType_SUMMARY:
+		// TODO: implement summary type converter
+	case io_prometheus_client.MetricType_HISTOGRAM:
+		// TODO: implement histogram type converter
+	case
+		io_prometheus_client.MetricType_GAUGE,
+		io_prometheus_client.MetricType_COUNTER,
+		io_prometheus_client.MetricType_UNTYPED:
 
 		uniqueTags := map[string]bool{}
 
@@ -121,23 +124,4 @@ func mergeFamilies(
 	}
 
 	return a
-}
-
-func FlattenMetricsBatches(in []*MetricsBatch) (result *MetricsBatch) {
-	if len(in) == 0 {
-		return
-	}
-
-	result = &MetricsBatch{
-		Timestamp: in[0].Timestamp,
-		Metrics:   map[string]*MetricFamily{},
-	}
-
-	for _, batch := range in {
-		for _, metric := range batch.Metrics {
-			result.Metrics = appendFamily(result.Metrics, metric)
-		}
-	}
-
-	return
 }
