@@ -72,40 +72,59 @@ func NewStats(s *scanner.Scanner, logger *log.Logger) *Stats {
 }
 
 func (stats *Stats) GetMetrics(tickTime time.Time) (
-	map[string]*MetricFamily,
+	chan *MetricsBatch,
 	error,
 ) {
-	// wait for the same tickTime
-	<-stats.scanner.WaitForTick(tickTime)
+	batchPipe := make(chan *MetricsBatch, 0)
 
-	ctx := karma.Describe("tick_time", tickTime.Format(time.RFC3339))
+	go func() {
+		defer close(batchPipe)
 
-	stats.Infof(
-		ctx,
-		"{stats} requesting metrics from scanner",
-	)
+		// wait for the same tickTime
+		<-stats.scanner.WaitForTick(tickTime)
 
-	nodes := stats.scanner.GetNodes()
-	apps := stats.scanner.GetApplications()
+		ctx := karma.Describe("tick_time", tickTime.Format(time.RFC3339))
 
-	metrics := map[string]*MetricFamily{}
+		stats.Infof(
+			ctx,
+			"{stats} requesting metrics from scanner",
+		)
 
-	metrics = appendFamily(
-		metrics,
-		nodesCount(nodes),
-		instanceGroups(nodes),
-	)
+		nodes := stats.scanner.GetNodes()
 
-	metrics = mergeFamilies(metrics, nodesResources(nodes))
-	metrics = mergeFamilies(metrics, containersResources(apps))
+		nodesMetrics := appendFamily(
+			map[string]*MetricFamily{},
 
-	stats.Infof(
-		ctx,
-		"{stats} collected %v metrics",
-		len(metrics),
-	)
+			nodesCount(nodes),
+			instanceGroups(nodes),
+		)
+		nodesMetrics = mergeFamilies(nodesMetrics, nodesResources(nodes))
+		nodesBatch := &MetricsBatch{
+			Timestamp: tickTime,
+			Metrics:   nodesMetrics,
+		}
+		batchPipe <- nodesBatch
 
-	return metrics, nil
+		apps := stats.scanner.GetApplications()
+
+		appsMetrics := mergeFamilies(
+			map[string]*MetricFamily{},
+			containersResources(apps),
+		)
+		appsBatch := &MetricsBatch{
+			Timestamp: tickTime,
+			Metrics:   appsMetrics,
+		}
+		batchPipe <- appsBatch
+
+		stats.Infof(
+			ctx,
+			"{stats} collected %v metrics",
+			len(nodesBatch.Metrics)+len(appsBatch.Metrics),
+		)
+	}()
+
+	return batchPipe, nil
 }
 
 func containersResources(apps []*scanner.Application) map[string]*MetricFamily {
@@ -262,7 +281,7 @@ func nodesCount(nodes []kuber.Node) *MetricFamily {
 }
 
 func nodesResources(nodes []kuber.Node) map[string]*MetricFamily {
-	nodeMetrics := map[string]*MetricFamily{}
+	nodesResources := map[string]*MetricFamily{}
 	nodesTagsNames := []string{NodeTag}
 	for _, node := range nodes {
 		nodeEntities := &Entities{
@@ -271,8 +290,8 @@ func nodesResources(nodes []kuber.Node) map[string]*MetricFamily {
 		nodeTags := map[string]string{}
 		nodeTags[NodeTag] = node.Name
 
-		nodeMetrics = appendFamily(
-			nodeMetrics,
+		nodesResources = appendFamily(
+			nodesResources,
 
 			&MetricFamily{
 				Name: NodeCapacityCpuName,
@@ -358,5 +377,5 @@ func nodesResources(nodes []kuber.Node) map[string]*MetricFamily {
 
 	}
 
-	return nodeMetrics
+	return nodesResources
 }

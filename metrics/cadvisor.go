@@ -177,25 +177,36 @@ func (cAdvisor *CAdvisor) withBackoff(fn func() error) error {
 	return utils.WithBackoff(fn, cAdvisor.backoff, cAdvisor.Logger)
 }
 
-func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (map[string]*MetricFamily, error) {
-	mutex := sync.Mutex{}
-	metrics := map[string]*MetricFamily{}
+func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (
+	chan *MetricsBatch,
+	error,
+) {
+	batchPipe := make(chan *MetricsBatch, 0)
 
-	getNodeMetrics := func(node *kuber.Node) {
+	scrapeNodeMetrics := func(node *kuber.Node) {
+		ctx := karma.
+			Describe("node", node.Name).
+			Describe("tick_time", tickTime.Format(time.RFC3339))
+
 		cAdvisor.Infof(
-			nil,
+			ctx,
 			"{cAdvisor} requesting metrics from node %s",
 			node.Name,
 		)
 
+		var nodeMetrics map[string]*MetricFamily
+		var metricsTimestamp time.Time
+
 		err := cAdvisor.withBackoff(func() error {
 			response, err := cAdvisor.kubeletClient.Get(node, "metrics/cadvisor")
+			metricsTimestamp = time.Now().UTC()
 
-			nodeMetrics, err := ReadPrometheusMetrics(
+			nodeMetrics, err = ReadPrometheusMetrics(
 				allowedMetrics,
 				response,
 				func(labels map[string]string) (
-					entities *Entities, tags map[string]string) {
+					entities *Entities, tags map[string]string,
+				) {
 					entities, tags = cAdvisor.bind(labels)
 					if entities != nil {
 						entities.Node = &node.ID
@@ -206,24 +217,18 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (map[string]*MetricFami
 
 			if err != nil {
 				if strings.Contains(err.Error(), "the server could not find the requested resource") {
-					cAdvisor.Warningf(err,
+					cAdvisor.Warningf(ctx.Reason(err),
 						"{cAdvisor} unable to get cAdvisor from node %q",
 						node.Name,
 					)
 					return nil
 				} else {
-					return karma.Format(
+					return ctx.Format(
 						err,
 						"{cAdvisor} unable to read cAdvisor metrics from node %q",
 						node.Name,
 					)
 				}
-			}
-
-			if len(nodeMetrics) > 0 {
-				mutex.Lock()
-				metrics = mergeFamilies(metrics, nodeMetrics)
-				mutex.Unlock()
 			}
 
 			return nil
@@ -232,40 +237,64 @@ func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (map[string]*MetricFami
 
 		if err != nil {
 			cAdvisor.Errorf(
-				err,
+				ctx.Reason(err),
 				"{cAdvisor} error while scraping node %s metric",
 				node.Name,
 			)
+			return
 		}
+
+		ctx = ctx.
+			Describe("timestamp", metricsTimestamp.Format(time.RFC3339)).
+			Describe("metrics_count", len(nodeMetrics))
+
+		cAdvisor.Infof(
+			ctx,
+			"{cAdvisor} collected %%v metrics from node %s",
+			len(nodeMetrics),
+			node.Name,
+		)
+
+		if len(nodeMetrics) > 0 {
+			batchPipe <- &MetricsBatch{
+				Timestamp: metricsTimestamp,
+				Metrics:   nodeMetrics,
+			}
+		}
+
 	}
 
-	// don't wait for the tickTime and assume latest nodes definitions are good
-	nodes := cAdvisor.scanner.GetNodes()
+	go func() {
+		defer close(batchPipe)
 
-	cAdvisor.Infof(
-		nil,
-		"{cAdvisor} requesting metrics",
-	)
+		// don't wait for the tickTime and assume latest nodes definitions are good
+		nodes := cAdvisor.scanner.GetNodes()
 
-	wg := sync.WaitGroup{}
-	wg.Add(len(nodes))
+		ctx := karma.Describe("tick_time", tickTime.Format(time.RFC3339))
+		cAdvisor.Infof(
+			ctx,
+			"{cAdvisor} requesting metrics",
+		)
 
-	for _, node := range nodes {
-		go func(node kuber.Node) {
-			getNodeMetrics(&node)
-			wg.Done()
-		}(node)
-	}
+		wg := sync.WaitGroup{}
+		wg.Add(len(nodes))
 
-	wg.Wait()
+		for _, node := range nodes {
+			go func(node kuber.Node) {
+				scrapeNodeMetrics(&node)
+				wg.Done()
+			}(node)
+		}
 
-	cAdvisor.Infof(
-		nil,
-		"{cAdvisor} collected %v metrics from cAdvisor",
-		len(metrics),
-	)
+		wg.Wait()
 
-	return metrics, nil
+		cAdvisor.Infof(
+			ctx,
+			"{cAdvisor} collected metrics",
+		)
+	}()
+
+	return batchPipe, nil
 }
 
 func (cAdvisor *CAdvisor) bind(labels map[string]string) (

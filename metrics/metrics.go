@@ -130,53 +130,18 @@ func watchMetricsProm(
 	sources map[string]Source,
 	interval time.Duration,
 ) {
-
-	ticker := utils.NewTicker(
-		"prom-metrics",
-		interval,
-		func(tickTime time.Time) {
-			m := sync.Mutex{}
-			metricsBatch := &MetricsBatch{
-				Timestamp: tickTime,
-				Metrics:   map[string]*MetricFamily{},
-			}
-
-			scrapeSource := func(sourceName string, source Source) {
-				sourceMetrics, err := source.GetMetrics(tickTime)
-				if err != nil {
-					c.Errorf(err, "unable to retrieve metrics from %s source", sourceName)
-					return
-				}
-				m.Lock()
-				defer m.Unlock()
-				metricsBatch.Metrics = mergeFamilies(metricsBatch.Metrics, sourceMetrics)
-			}
-
-			wg := &sync.WaitGroup{}
-			wg.Add(len(sources))
-
-			context := karma.Describe("tick", tickTime)
-			c.Infof(
-				context,
-				"requesting metrics from prometheus sources",
+	scrapeSource := func(tickTime time.Time, sourceName string, source Source) {
+		batches, err := source.GetMetrics(tickTime)
+		if err != nil {
+			c.Errorf(err,
+				"unable to retrieve metrics from %s source",
+				sourceName,
 			)
+			return
+		}
 
-			for sourceName, source := range sources {
-				go func(sourceName string, source Source) {
-					scrapeSource(sourceName, source)
-					wg.Done()
-				}(sourceName, source)
-			}
-
-			wg.Wait()
-
-			c.Infof(
-				context,
-				"collected %v metrics from prometheus sources",
-				len(metricsBatch.Metrics),
-			)
-
-			packet := packetMetricsProm(metricsBatch)
+		for batch := range batches {
+			packet := packetMetricsProm(batch)
 
 			c.Pipe(client.Package{
 				Kind:        proto.PacketKindMetricsPromStoreRequest,
@@ -186,6 +151,35 @@ func watchMetricsProm(
 				Retries:     10,
 				Data:        packet,
 			})
+		}
+	}
+
+	ticker := utils.NewTicker(
+		"prom-metrics",
+		interval,
+		func(tickTime time.Time) {
+			ctx := karma.Describe("tick", tickTime.Format(time.RFC3339))
+			c.Infof(
+				ctx,
+				"requesting metrics from prometheus sources",
+			)
+
+			wg := &sync.WaitGroup{}
+			wg.Add(len(sources))
+
+			for sourceName, source := range sources {
+				go func(sourceName string, source Source) {
+					scrapeSource(tickTime, sourceName, source)
+					wg.Done()
+				}(sourceName, source)
+			}
+
+			wg.Wait()
+
+			c.Infof(
+				ctx,
+				"collected metrics from prometheus sources",
+			)
 		},
 	)
 	ticker.Start(false, true, true)

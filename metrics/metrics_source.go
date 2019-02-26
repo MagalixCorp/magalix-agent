@@ -14,5 +14,5 @@ type MetricsSource interface {
 
 // Source interface is to be implemented by metrics sources
 type Source interface {
-	GetMetrics(time time.Time) (map[string]*MetricFamily, error)
+	GetMetrics(time time.Time) (chan *MetricsBatch, error)
 }
