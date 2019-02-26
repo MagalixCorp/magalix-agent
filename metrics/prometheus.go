@@ -17,7 +17,7 @@ type Prometheus struct {
 }
 
 func ReadPrometheusMetrics(
-	allowedMetrics []string,
+	allowedMetrics map[string]struct{},
 	resp *http.Response,
 	bind BindFunc,
 ) (result map[string]*MetricFamily, err error) {

@@ -67,7 +67,7 @@ func makeBuckets(m *dto.Metric) map[string]string {
 // channel iff it is in allowedMetrics. It returns when all MetricFamilies
 // are parsed and put on the channel.
 func parseReader(
-	allowedMetrics []string, in io.Reader, ch chan<- *dto.MetricFamily,
+	allowedMetrics map[string]struct{}, in io.Reader, ch chan<- *dto.MetricFamily,
 ) error {
 	// We could do further content-type checks here, but the
 	// fallback for now will anyway be the text format
@@ -85,7 +85,7 @@ func parseReader(
 	return nil
 }
 
-func isAllowed(allowedMetrics []string, mf *dto.MetricFamily) bool {
+func isAllowed(allowedMetrics map[string]struct{}, mf *dto.MetricFamily) bool {
 	if mf == nil {
 		return false
 	}
@@ -94,19 +94,16 @@ func isAllowed(allowedMetrics []string, mf *dto.MetricFamily) bool {
 		name = *mf.Name
 	}
 
-	for _, metric := range allowedMetrics {
-		if metric == name {
-			return true
-		}
-	}
-	return false
+	_, found := allowedMetrics[name]
+
+	return found
 }
 
 // ParseResponse consumes an http.Response and pushes it to the MetricFamily
 // channel iff it is in allowedMetrics. It returns when all MetricFamilies
 // are parsed and put on the channel.
 func ParseResponse(
-	allowedMetrics []string, resp *http.Response, ch chan<- *dto.MetricFamily,
+	allowedMetrics map[string]struct{}, resp *http.Response, ch chan<- *dto.MetricFamily,
 ) error {
 	mediatype, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err == nil && mediatype == "application/vnd.google.protobuf" &&
