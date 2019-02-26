@@ -13,7 +13,7 @@ type Ticker struct {
 
 	mutex *sync.Mutex
 
-	waitChannels map[int64][]chan interface{}
+	waitChannels map[int64][]chan struct{}
 	lastTick time.Time
 }
 
@@ -24,7 +24,7 @@ func NewTicker(name string, interval time.Duration, fn func(time.Time)) *Ticker 
 		fn:       fn,
 
 		mutex: &sync.Mutex{},
-		waitChannels: map[int64][]chan interface{}{},
+		waitChannels: map[int64][]chan struct{}{},
 	}
 }
 
@@ -109,18 +109,18 @@ func (ticker *Ticker) Start(immediate, async, block bool) {
 // WaitForNextTick returns a signal channel that gets unblocked after the next tick
 // Example usage:
 //  <- ticker.WaitForNextTick()
-func (ticker *Ticker) WaitForNextTick() chan interface{} {
+func (ticker *Ticker) WaitForNextTick() chan struct{} {
 	return ticker.WaitForTick(ticker.lastTick.Add(ticker.interval))
 }
 
-func (ticker *Ticker) WaitForTick(tick time.Time) chan interface{} {
+func (ticker *Ticker) WaitForTick(tick time.Time) chan struct{} {
 	ticker.mutex.Lock()
 	defer ticker.mutex.Unlock()
-	waitChan := make(chan interface{})
-	var waitChannels []chan interface{}
+	waitChan := make(chan struct{})
+	var waitChannels []chan struct{}
 	waitChannels, ok := ticker.waitChannels[tick.Unix()]
 	if !ok {
-		waitChannels = make([]chan interface{}, 0)
+		waitChannels = make([]chan struct{}, 0)
 	}
 	waitChannels = append(waitChannels, waitChan)
 	ticker.waitChannels[tick.Unix()] = waitChannels
