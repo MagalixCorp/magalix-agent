@@ -92,6 +92,8 @@ const (
 	TypeSysContainer = "sys_container"
 )
 
+// Deprecated: watchMetrics is deprecated and will be removed in future releases.
+// Please consider using watchMetricsProm instead.
 func watchMetrics(
 	client *client.Client,
 	source MetricsSource,
@@ -297,7 +299,7 @@ func InitMetrics(
 		foundErrors    = make([]error, 0)
 	)
 
-	metricsSourcesNames := []string{"alpha-cadvisor", "kubelet"}
+	metricsSourcesNames := []string{"alpha-cadvisor", "alpha-stats", "kubelet"}
 	if names, ok := args["--source"].([]string); ok && len(names) > 0 {
 		metricsSourcesNames = names
 		failOnError = true
