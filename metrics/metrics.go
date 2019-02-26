@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
@@ -13,6 +14,13 @@ import (
 )
 
 const limit = 1000
+
+type Entities struct {
+	Node        *uuid.UUID
+	Application *uuid.UUID
+	Service     *uuid.UUID
+	Container   *uuid.UUID
+}
 
 type RawMetric struct {
 	Metric string
@@ -29,6 +37,28 @@ type RawMetric struct {
 	Value float64
 
 	Timestamp time.Time
+}
+
+type MetricFamily struct {
+	Name string
+	Help string
+	Type string
+	Tags []string
+
+	Values []*MetricValue
+}
+
+type MetricValue struct {
+	*Entities
+
+	Tags  map[string]string
+	Value float64
+}
+
+type MetricsBatch struct {
+	Timestamp time.Time
+
+	Metrics map[string]*MetricFamily
 }
 
 // map of metric_name:list of metric points
@@ -62,6 +92,8 @@ const (
 	TypeSysContainer = "sys_container"
 )
 
+// Deprecated: watchMetrics is deprecated and will be removed in future releases.
+// Please consider using watchMetricsProm instead.
 func watchMetrics(
 	client *client.Client,
 	source MetricsSource,
@@ -72,8 +104,9 @@ func watchMetrics(
 	go sendMetrics(client, metricsPipe)
 	defer close(metricsPipe)
 
-	ticker := utils.NewTicker("metrics", interval, func() {
+	ticker := utils.NewTicker("metrics", interval, func(_ time.Time) {
 		metrics, raw, err := source.GetMetrics(scanner)
+
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
@@ -92,26 +125,98 @@ func watchMetrics(
 	ticker.Start(false, true, true)
 }
 
-func watchRawMetrics(
-	client *client.Client,
-	source RawSource,
+func watchMetricsProm(
+	c *client.Client,
+	sources map[string]Source,
 	interval time.Duration,
 ) {
-	metricsPipe := make(chan RawMetrics)
-	go sendRawMetrics(client, metricsPipe)
-	defer close(metricsPipe)
-
-	ticker := utils.NewTicker("raw-metrics", interval, func() {
-		metrics, err := source.GetRawMetrics()
+	scrapeSource := func(tickTime time.Time, sourceName string, source Source) {
+		batches, err := source.GetMetrics(tickTime)
 		if err != nil {
-			client.Errorf(err, "unable to retrieve metrics from sink")
+			c.Errorf(err,
+				"unable to retrieve metrics from %s source",
+				sourceName,
+			)
+			return
 		}
 
-		for i := 0; i < len(metrics); i += limit {
-			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
+		for batch := range batches {
+			packet := packetMetricsProm(batch)
+
+			c.Pipe(client.Package{
+				Kind:        proto.PacketKindMetricsPromStoreRequest,
+				ExpiryTime:  utils.After(2 * time.Hour),
+				ExpiryCount: 100,
+				Priority:    4,
+				Retries:     10,
+				Data:        packet,
+			})
 		}
-	})
+	}
+
+	ticker := utils.NewTicker(
+		"prom-metrics",
+		interval,
+		func(tickTime time.Time) {
+			ctx := karma.Describe("tick", tickTime.Format(time.RFC3339))
+			c.Infof(
+				ctx,
+				"requesting metrics from prometheus sources",
+			)
+
+			wg := &sync.WaitGroup{}
+			wg.Add(len(sources))
+
+			for sourceName, source := range sources {
+				go func(sourceName string, source Source) {
+					scrapeSource(tickTime, sourceName, source)
+					wg.Done()
+				}(sourceName, source)
+			}
+
+			wg.Wait()
+
+			c.Infof(
+				ctx,
+				"collected metrics from prometheus sources",
+			)
+		},
+	)
 	ticker.Start(false, true, true)
+}
+
+func packetMetricsProm(metricsBatch *MetricsBatch) *proto.PacketMetricsPromStoreRequest {
+	packet := &proto.PacketMetricsPromStoreRequest{
+		Timestamp: metricsBatch.Timestamp,
+		Metrics:   make([]*proto.PacketMetricFamilyItem, len(metricsBatch.Metrics)),
+	}
+
+	i := 0
+	for _, metricFamily := range metricsBatch.Metrics {
+		familyItem := &proto.PacketMetricFamilyItem{
+			Name:   metricFamily.Name,
+			Type:   metricFamily.Type,
+			Help:   metricFamily.Help,
+			Tags:   metricFamily.Tags,
+			Values: make([]*proto.PacketMetricValueItem, len(metricFamily.Values)),
+		}
+		for j, metricValue := range metricFamily.Values {
+			familyItem.Values[j] = &proto.PacketMetricValueItem{
+				Node:        metricValue.Node,
+				Application: metricValue.Application,
+				Service:     metricValue.Service,
+				Container:   metricValue.Container,
+
+				Tags:  metricValue.Tags,
+				Value: metricValue.Value,
+			}
+		}
+
+		packet.Metrics[i] = familyItem
+		i++
+	}
+
+	return packet
 }
 
 func min(a, b int) int {
@@ -140,29 +245,6 @@ func sendMetrics(client *client.Client, pipe chan []*Metrics) {
 			<-queue
 		}
 		queue <- metrics
-	}
-}
-
-func sendRawMetrics(client *client.Client, pipe chan RawMetrics) {
-	queueLimit := 100
-	queue := make(chan *RawMetrics, queueLimit)
-	defer close(queue)
-	go func() {
-		for rawMetrics := range queue {
-			if rawMetrics == nil {
-				continue
-			}
-			client.SendRaw(map[string]interface{}{
-				"metrics": rawMetrics,
-			})
-		}
-	}()
-	for raw := range pipe {
-		if len(queue) >= queueLimit-1 {
-			// Discard the oldest value
-			<-queue
-		}
-		queue <- &raw
 	}
 }
 
@@ -202,16 +284,16 @@ func InitMetrics(
 	kube *kuber.Kube,
 	optInAnalysisData bool,
 	args map[string]interface{},
-) ([]MetricsSource, error) {
+) error {
 	var (
 		metricsInterval = utils.MustParseDuration(args, "--metrics-interval")
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
-		metricsSources = make([]MetricsSource, 0)
+		metricsSources = map[string]interface{}{}
 		foundErrors    = make([]error, 0)
 	)
 
-	metricsSourcesNames := []string{"influx", "kubelet"}
+	metricsSourcesNames := []string{"alpha-cadvisor", "alpha-stats", "kubelet"}
 	if names, ok := args["--source"].([]string); ok && len(names) > 0 {
 		metricsSourcesNames = names
 		failOnError = true
@@ -248,21 +330,57 @@ func InitMetrics(
 				continue
 			}
 
-			metricsSources = append(metricsSources, kubelet)
+			metricsSources[metricsSource] = kubelet
+
+		case "alpha-cadvisor":
+			cAdvisor, err := NewCAdvisor(
+				kubeletClient,
+				client.Logger,
+				scanner,
+				utils.Backoff{
+					Sleep:      utils.MustParseDuration(args, "--kubelet-backoff-sleep"),
+					MaxRetries: utils.MustParseInt(args, "--kubelet-backoff-max-retries"),
+				},
+			)
+
+			if err != nil {
+				foundErrors = append(foundErrors, karma.Format(
+					err,
+					"unable to initialize cAdvisor source",
+				))
+				continue
+			}
+
+			metricsSources[metricsSource] = cAdvisor
+
+		case "alpha-stats":
+			stats := NewStats(scanner, client.Logger)
+
+			metricsSources[metricsSource] = stats
 		}
 	}
+
 	if len(foundErrors) > 0 && (failOnError || len(metricsSources) == 0) {
-		return nil, karma.Format(foundErrors, "unable to init metric sources")
+		return karma.Format(foundErrors, "unable to init metric sources")
 	}
 
-	for _, source := range metricsSources {
-		go watchMetrics(
-			client,
-			source,
-			scanner,
-			metricsInterval,
-		)
+	promSources := map[string]Source{}
+	for sourceName, source := range metricsSources {
+		switch s := source.(type) {
+		case MetricsSource:
+			go watchMetrics(
+				client,
+				s,
+				scanner,
+				metricsInterval,
+			)
+			break
+		case Source:
+			promSources[sourceName] = s
+			break
+		}
 	}
+	go watchMetricsProm(client, promSources, metricsInterval)
 
-	return metricsSources, nil
+	return nil
 }

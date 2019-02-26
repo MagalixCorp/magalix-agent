@@ -225,7 +225,7 @@ func main() {
 	}
 
 	if metricsEnabled {
-		_, err := metrics.InitMetrics(
+		err := metrics.InitMetrics(
 			gwClient,
 			entityScanner,
 			kube,

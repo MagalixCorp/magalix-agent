@@ -91,7 +91,9 @@ func InitScanner(
 		// noop function
 		scanner.analysisDataSender = func(args ...interface{}) {}
 	}
-	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, scanner.scan)
+	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, func(_ time.Time) {
+		scanner.scan()
+	})
 	// Note: we set immediate to true so that the scanner blocks for the first
 	// run. Other components depends on scanner having a history to function correctly.
 	// The other solution is to let the dependent components to wait for scanner
@@ -101,8 +103,17 @@ func InitScanner(
 }
 
 func (scanner *Scanner) scan() {
-	scanner.scanNodes()
-	scanner.scanApplications()
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		scanner.scanNodes()
+		wg.Done()
+	}()
+	go func() {
+		scanner.scanApplications()
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
 func (scanner *Scanner) scanNodes() {
@@ -212,7 +223,14 @@ func (scanner *Scanner) scanApplications() {
 func (scanner *Scanner) getApplications() (
 	[]*Application, map[string]interface{}, error,
 ) {
-	pods, limitRanges, resources, rawResources := scanner.kube.GetResources()
+	pods, limitRanges, resources, rawResources, err := scanner.kube.GetResources()
+	if err != nil {
+		return nil, nil, karma.Format(
+			err,
+			"can't get kube resources",
+		)
+	}
+
 	scanner.pods = pods
 
 	var apps []*Application
@@ -297,7 +315,7 @@ func (scanner *Scanner) getApplications() (
 		app.Services = append(app.Services, service)
 	}
 
-	err := identifyApplications(apps, scanner.clusterID)
+	err = identifyApplications(apps, scanner.clusterID)
 	if err != nil {
 		return nil, nil, karma.Format(
 			err,

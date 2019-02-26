@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,11 +14,29 @@ import (
 	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
-	"github.com/MagalixTechnologies/alltogether-go"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 )
+
+// TODO allow all cAdvisor by default.
+//  This is postponed because of the unexpected load on Magalix infra
+var allowedMetrics = map[string]struct{}{
+	"container_cpu_usage_seconds_total":         {},
+	"container_cpu_cfs_periods_total":           {},
+	"container_cpu_cfs_throttled_periods_total": {},
+	"container_cpu_cfs_throttled_seconds_total": {},
+
+	"container_memory_rss": {},
+
+	"container_fs_usage_bytes": {},
+	"container_fs_limit_bytes": {},
+
+	"container_network_receive_bytes_total":   {},
+	"container_network_receive_errors_total":  {},
+	"container_network_transmit_bytes_total":  {},
+	"container_network_transmit_errors_total": {},
+}
 
 // TagsValue a struct to hod tags and values
 type TagsValue struct {
@@ -33,6 +50,7 @@ type CAdvisorMetrics map[string][]TagsValue
 type CAdvisor struct {
 	*log.Logger
 
+	kubeletClient         *KubeletClient
 	scanner               *scanner.Scanner
 	backoff               utils.Backoff
 	getNodeKubeletAddress func(node kuber.Node) string
@@ -159,142 +177,211 @@ func (cAdvisor *CAdvisor) withBackoff(fn func() error) error {
 	return utils.WithBackoff(fn, cAdvisor.backoff, cAdvisor.Logger)
 }
 
-func (cAdvisor *CAdvisor) GetRawMetrics() (RawMetrics, error) {
-	mutex := sync.Mutex{}
-	rawMetrics := RawMetrics{}
+func (cAdvisor *CAdvisor) GetMetrics(tickTime time.Time) (
+	chan *MetricsBatch,
+	error,
+) {
+	batchPipe := make(chan *MetricsBatch, 0)
 
-	getNodeMetrics := func(node kuber.Node) error {
+	scrapeNodeMetrics := func(node *kuber.Node) {
+		ctx := karma.
+			Describe("node", node.Name).
+			Describe("tick_time", tickTime.Format(time.RFC3339))
+
 		cAdvisor.Infof(
-			nil,
+			ctx,
 			"{cAdvisor} requesting metrics from node %s",
 			node.Name,
 		)
 
-		return cAdvisor.withBackoff(func() error {
-			cAdvisorResponse, err := http.Get(
-				cAdvisor.getNodeKubeletAddress(node) + "/metrics/cAdvisorMetrics",
-			)
-			now := time.Now()
+		var nodeMetrics map[string]*MetricFamily
+		var metricsTimestamp time.Time
 
-			var body io.Reader
+		err := cAdvisor.withBackoff(func() error {
+			response, err := cAdvisor.kubeletClient.Get(node, "metrics/cadvisor")
+			metricsTimestamp = time.Now().UTC()
 
-			if cAdvisorResponse != nil && cAdvisorResponse.Body != nil {
-				defer func() {
-					if err := cAdvisorResponse.Body.Close(); err != nil {
-						cAdvisor.Errorf(
-							err,
-							"unable to close cAdvisorResponse.Body",
-						)
+			nodeMetrics, err = ReadPrometheusMetrics(
+				allowedMetrics,
+				response,
+				func(labels map[string]string) (
+					entities *Entities, tags map[string]string,
+				) {
+					entities, tags = cAdvisor.bind(labels)
+					if entities != nil {
+						entities.Node = &node.ID
 					}
-				}()
-			}
+					return entities, tags
+				},
+			)
 
 			if err != nil {
 				if strings.Contains(err.Error(), "the server could not find the requested resource") {
-					cAdvisor.Warningf(err,
+					cAdvisor.Warningf(ctx.Reason(err),
 						"{cAdvisor} unable to get cAdvisor from node %q",
 						node.Name,
 					)
-					body = bytes.NewReader([]byte{})
+					return nil
 				} else {
-					return karma.Format(
+					return ctx.Format(
 						err,
-						"{cAdvisor} unable to get cAdvisor from node %q",
+						"{cAdvisor} unable to read cAdvisor metrics from node %q",
 						node.Name,
 					)
-				}
-			} else {
-				body = cAdvisorResponse.Body
-			}
-
-			cAdvisorMetrics, err := decodeCAdvisorResponse(body)
-
-			if err != nil {
-				return karma.Format(
-					err,
-					"{cAdvisor} unable to decode cAdvisor response from node %q",
-					node.Name,
-				)
-			}
-
-			for metric, values := range cAdvisorMetrics {
-				for _, val := range values {
-
-					var containerName, podName, namespace string
-					var applicationID, serviceID, containerID uuid.UUID
-
-					containerName, _ = val.Tags["container_name"]
-					podName, _ = val.Tags["pod_name"]
-					namespace, _ = val.Tags["namespace"]
-
-					// NOTE: we still add metrics with no bounded entities
-					if containerName != "" {
-						var container *scanner.Container
-						applicationID, serviceID, container, _ = cAdvisor.scanner.FindContainer(namespace, podName,
-							containerName)
-						containerID = container.ID
-					} else if podName != "" {
-						applicationID, serviceID, _ = cAdvisor.scanner.FindService(namespace, podName)
-					}
-
-					var applicationTag, serviceTag, containerTag *uuid.UUID
-					if !applicationID.IsNil() {
-						applicationTag = &applicationID
-					}
-					if !serviceID.IsNil() {
-						serviceTag = &serviceID
-					}
-					if !containerID.IsNil() {
-						containerTag = &containerID
-					}
-
-					mutex.Lock()
-					rawMetrics = append(rawMetrics, &RawMetric{
-						Metric: metric,
-
-						Node: node.ID,
-
-						Application: applicationTag,
-						Service:     serviceTag,
-						Container:   containerTag,
-
-						Tags:  val.Tags,
-						Value: val.Value,
-
-						Timestamp: now,
-					})
-					mutex.Unlock()
 				}
 			}
 
 			return nil
 
 		})
+
+		if err != nil {
+			cAdvisor.Errorf(
+				ctx.Reason(err),
+				"{cAdvisor} error while scraping node %s metric",
+				node.Name,
+			)
+			return
+		}
+
+		ctx = ctx.
+			Describe("timestamp", metricsTimestamp.Format(time.RFC3339)).
+			Describe("metrics_count", len(nodeMetrics))
+
+		cAdvisor.Infof(
+			ctx,
+			"{cAdvisor} collected %%v metrics from node %s",
+			len(nodeMetrics),
+			node.Name,
+		)
+
+		if len(nodeMetrics) > 0 {
+			batchPipe <- &MetricsBatch{
+				Timestamp: metricsTimestamp,
+				Metrics:   nodeMetrics,
+			}
+		}
+
 	}
 
-	nodes := cAdvisor.scanner.GetNodes()
-	pr, err := alltogether.NewConcurrentProcessor(nodes, getNodeMetrics)
-	if err != nil {
-		panic(err)
+	go func() {
+		defer close(batchPipe)
+
+		// don't wait for the tickTime and assume latest nodes definitions are good
+		nodes := cAdvisor.scanner.GetNodes()
+
+		ctx := karma.Describe("tick_time", tickTime.Format(time.RFC3339))
+		cAdvisor.Infof(
+			ctx,
+			"{cAdvisor} requesting metrics",
+		)
+
+		wg := sync.WaitGroup{}
+		wg.Add(len(nodes))
+
+		for _, node := range nodes {
+			go func(node kuber.Node) {
+				scrapeNodeMetrics(&node)
+				wg.Done()
+			}(node)
+		}
+
+		wg.Wait()
+
+		cAdvisor.Infof(
+			ctx,
+			"{cAdvisor} collected metrics",
+		)
+	}()
+
+	return batchPipe, nil
+}
+
+func (cAdvisor *CAdvisor) bind(labels map[string]string) (
+	entities *Entities, tags map[string]string,
+) {
+	var ok bool
+	var containerName, podName, namespace string
+	var applicationID, serviceID, containerID uuid.UUID
+
+	if containerName, ok = labels["container_name"]; ok {
+		delete(labels, "container_name")
+	}
+	if podName, ok = labels["pod_name"]; ok {
+		delete(labels, "pod_name")
+	}
+	if namespace, ok = labels["namespace"]; ok {
+		delete(labels, "namespace")
 	}
 
-	errs := pr.Do()
-	if !errs.AllNil() {
-		// Note: if one node fails we fail safe to allow other node metrics to flow.
-		// Note: In cases where pods are replicated across nodes,
-		// Note: it means that the metrics are misleading. However, It is the
-		// Note: rule of consumers to validate the correctness of the metrics
-		// Note: and drop bad points
+	// reset flag
+	ok = false
 
-		for _, err := range errs {
-			if err != nil {
-				cAdvisor.Errorf(
-					err,
-					"{cAdvisor} error while scraping nodes metrics",
-				)
+	var metricType string
+
+	// NOTE: we still add metrics with no bounded entities!
+	if namespace != "" {
+		if containerName != "" && containerName != "POD" {
+			metricType = TypePodContainer
+
+			var container *scanner.Container
+			applicationID, serviceID, container, ok = cAdvisor.scanner.FindContainer(
+				namespace, podName, containerName,
+			)
+			if ok {
+				containerID = container.ID
+			}
+		} else if podName != "" && containerName == "POD" {
+			metricType = TypePod
+			applicationID, serviceID, ok = cAdvisor.scanner.FindService(namespace, podName)
+		}
+	} else {
+		// TODO: Node level and system containers metrics?
+		idLabel, ok := labels["id"]
+		if ok {
+			if idLabel == "/" {
+				metricType = TypeNode
+			} else if idLabel != "" {
+				metricType = TypeSysContainer
+				return nil, labels
+			} else {
+				//	TODO: is this even possible?
+				cAdvisor.Warning(karma.Describe("labels", labels), "empty id field?")
+				return nil, labels
 			}
 		}
 	}
 
-	return rawMetrics, nil
+	labels["type"] = metricType
+
+	entities = &Entities{}
+	if !applicationID.IsNil() {
+		entities.Application = &applicationID
+	}
+	if !serviceID.IsNil() {
+		entities.Service = &serviceID
+	}
+	if !containerID.IsNil() {
+		entities.Container = &containerID
+	}
+
+	return entities, labels
+}
+
+func NewCAdvisor(
+	kubeletClient *KubeletClient,
+	logger *log.Logger,
+	scanner *scanner.Scanner,
+	backoff utils.Backoff,
+) (*CAdvisor, error) {
+	cAdvisor := &CAdvisor{
+		Logger: logger,
+
+		kubeletClient: kubeletClient,
+
+		scanner: scanner,
+		backoff: backoff,
+	}
+
+	return cAdvisor, nil
 }
