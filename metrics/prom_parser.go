@@ -63,47 +63,12 @@ func makeBuckets(m *dto.Metric) map[string]string {
 	return result
 }
 
-// parseResponse consumes an http.Response and pushes it to the MetricFamily
-// channel. It returns when all MetricFamilies are parsed and put on the
-// channel.
-func parseResponse(
-	fetchOnly []string, resp *http.Response, ch chan<- *dto.MetricFamily,
-) error {
-	mediatype, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if err == nil && mediatype == "application/vnd.google.protobuf" &&
-		params["encoding"] == "delimited" &&
-		params["proto"] == "io.prometheus.client.MetricFamily" {
-		defer close(ch)
-		for {
-			mf := &dto.MetricFamily{}
-			if _, err = pbutil.ReadDelimited(resp.Body, mf); err != nil {
-				if err == io.EOF {
-					break
-				}
-				return fmt.Errorf("reading metric family protocol buffer failed: %v", err)
-			}
-
-			if isAllowed(fetchOnly, mf) {
-				ch <- mf
-			}
-
-		}
-	} else {
-		if err := parseReader(fetchOnly, resp.Body, ch); err != nil {
-			defer close(ch)
-			return err
-		}
-	}
-	return nil
-}
-
 // parseReader consumes an io.Reader and pushes it to the MetricFamily
-// channel. It returns when all MetricFamilies are parsed and put on the
-// channel.
+// channel iff it is in allowedMetrics. It returns when all MetricFamilies
+// are parsed and put on the channel.
 func parseReader(
-	fetchOnly []string, in io.Reader, ch chan<- *dto.MetricFamily,
+	allowedMetrics []string, in io.Reader, ch chan<- *dto.MetricFamily,
 ) error {
-	defer close(ch)
 	// We could do further content-type checks here, but the
 	// fallback for now will anyway be the text format
 	// version 0.0.4, so just go for it and see if it works.
@@ -113,20 +78,11 @@ func parseReader(
 		return fmt.Errorf("reading text format failed: %v", err)
 	}
 	for _, mf := range metricFamilies {
-		if isAllowed(fetchOnly, mf) {
+		if isAllowed(allowedMetrics, mf) {
 			ch <- mf
 		}
 	}
 	return nil
-}
-
-// FetchMetricFamilies retrieves metrics from the provided URL, decodes them
-// into MetricFamily proto messages, and sends them to the provided channel. It
-// returns after all MetricFamilies have been sent.
-func FetchMetricFamilies(
-	fetchOnly []string, resp *http.Response, ch chan<- *dto.MetricFamily,
-) error {
-	return parseResponse(fetchOnly, resp, ch)
 }
 
 func isAllowed(allowedMetrics []string, mf *dto.MetricFamily) bool {
@@ -144,4 +100,36 @@ func isAllowed(allowedMetrics []string, mf *dto.MetricFamily) bool {
 		}
 	}
 	return false
+}
+
+// ParseResponse consumes an http.Response and pushes it to the MetricFamily
+// channel iff it is in allowedMetrics. It returns when all MetricFamilies
+// are parsed and put on the channel.
+func ParseResponse(
+	allowedMetrics []string, resp *http.Response, ch chan<- *dto.MetricFamily,
+) error {
+	mediatype, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err == nil && mediatype == "application/vnd.google.protobuf" &&
+		params["encoding"] == "delimited" &&
+		params["proto"] == "io.prometheus.client.MetricFamily" {
+		for {
+			mf := &dto.MetricFamily{}
+			if _, err = pbutil.ReadDelimited(resp.Body, mf); err != nil {
+				if err == io.EOF {
+					break
+				}
+				return fmt.Errorf("reading metric family protocol buffer failed: %v", err)
+			}
+
+			if isAllowed(allowedMetrics, mf) {
+				ch <- mf
+			}
+
+		}
+	} else {
+		if err := parseReader(allowedMetrics, resp.Body, ch); err != nil {
+			return err
+		}
+	}
+	return nil
 }
