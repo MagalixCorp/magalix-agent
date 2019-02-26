@@ -111,13 +111,16 @@ func mergeFamilies(
 	a map[string]*MetricFamily,
 	b map[string]*MetricFamily,
 ) map[string]*MetricFamily {
-	values := make([]*MetricFamily, len(b))
-	i := 0
-	for _, v := range b {
-		values[i] = v
-		i++
+	for _, family := range b {
+		metricName := family.Name
+		if uniqueMetric, ok := a[metricName]; !ok {
+			a[metricName] = family
+		} else {
+			uniqueMetric.Values = append(uniqueMetric.Values, family.Values...)
+		}
 	}
-	return appendFamily(a, values...)
+
+	return a
 }
 
 func FlattenMetricsBatches(in []*MetricsBatch) (result *MetricsBatch) {
