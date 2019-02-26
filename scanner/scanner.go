@@ -223,7 +223,14 @@ func (scanner *Scanner) scanApplications() {
 func (scanner *Scanner) getApplications() (
 	[]*Application, map[string]interface{}, error,
 ) {
-	pods, limitRanges, resources, rawResources := scanner.kube.GetResources()
+	pods, limitRanges, resources, rawResources, err := scanner.kube.GetResources()
+	if err != nil {
+		return nil, nil, karma.Format(
+			err,
+			"can't get kube resources",
+		)
+	}
+
 	scanner.pods = pods
 
 	var apps []*Application
@@ -308,7 +315,7 @@ func (scanner *Scanner) getApplications() (
 		app.Services = append(app.Services, service)
 	}
 
-	err := identifyApplications(apps, scanner.clusterID)
+	err = identifyApplications(apps, scanner.clusterID)
 	if err != nil {
 		return nil, nil, karma.Format(
 			err,

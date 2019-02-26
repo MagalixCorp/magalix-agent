@@ -11,6 +11,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
+	"golang.org/x/sync/errgroup"
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
@@ -207,19 +208,17 @@ func (kube *Kube) GetResources() (
 	limitRanges []kv1.LimitRange,
 	resources []Resource,
 	rawResources map[string]interface{},
+	err error,
 ) {
 	rawResources = map[string]interface{}{}
 
 	m := sync.Mutex{}
-	wg := sync.WaitGroup{}
+	group := errgroup.Group{}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	group.Go(func() error {
 		controllers, err := kube.GetReplicationControllers()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get replication controllers",
 			)
@@ -252,15 +251,13 @@ func (kube *Kube) GetResources() (
 				})
 			}
 		}
-	}()
+		return nil
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	group.Go(func() error {
 		podList, err := kube.GetPods()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get pods",
 			)
@@ -297,15 +294,14 @@ func (kube *Kube) GetResources() (
 				})
 			}
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	group.Go(func() error {
 		deployments, err := kube.GetDeployments()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get deployments",
 			)
@@ -338,15 +334,14 @@ func (kube *Kube) GetResources() (
 				})
 			}
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	group.Go(func() error {
 		statefulSets, err := kube.GetStatefulSets()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get statefulSets",
 			)
@@ -379,15 +374,14 @@ func (kube *Kube) GetResources() (
 				})
 			}
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	group.Go(func() error {
 		daemonSets, err := kube.GetDaemonSets()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get daemonSets",
 			)
@@ -420,15 +414,14 @@ func (kube *Kube) GetResources() (
 				})
 			}
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	group.Go(func() error {
 		replicaSets, err := kube.GetReplicaSets()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get replicasets",
 			)
@@ -465,15 +458,14 @@ func (kube *Kube) GetResources() (
 				})
 			}
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	group.Go(func() error {
 		cronJobs, err := kube.GetCronJobs()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get cron jobs",
 			)
@@ -505,19 +497,19 @@ func (kube *Kube) GetResources() (
 				})
 			}
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	group.Go(func() error {
 		limitRangeList, err := kube.GetLimitRanges()
 		if err != nil {
-			kube.logger.Errorf(
+			return karma.Format(
 				err,
 				"unable to get limitRanges",
 			)
 		}
+
 		if limitRangeList != nil {
 			limitRanges = limitRangeList.Items
 
@@ -526,9 +518,11 @@ func (kube *Kube) GetResources() (
 
 			rawResources["limitRanges"] = limitRangeList
 		}
-	}()
 
-	wg.Wait()
+		return nil
+	})
+
+	err = group.Wait()
 
 	return
 }
