@@ -747,13 +747,18 @@ func (kube *Kube) SetResources(kind string, name string, namespace string, total
 	body := map[string]interface{}{
 		"kind": kind,
 		"spec": map[string]interface{}{
-			"replicas": totalResources.Replicas,
 			"template": map[string]interface{}{
 				"spec": map[string]interface{}{
 					"containers": containerSpecs,
 				},
 			},
 		},
+	}
+
+	// setting replicas=nil makes k8s set the replicas to 1
+	if totalResources.Replicas != nil && *totalResources.Replicas > 0 {
+		spec := body["spec"].(map[string]interface{})
+		spec["replicas"] = totalResources.Replicas
 	}
 
 	b, err := json.Marshal(body)
