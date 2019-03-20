@@ -276,10 +276,11 @@ func (kube *Kube) GetResources() (
 					continue
 				}
 				resources = append(resources, Resource{
-					Kind:       "OrphanPod",
-					Namespace:  pod.Namespace,
-					Name:       pod.Name,
-					Containers: pod.Spec.Containers,
+					Kind:        "OrphanPod",
+					Annotations: pod.Annotations,
+					Namespace:   pod.Namespace,
+					Name:        pod.Name,
+					Containers:  pod.Spec.Containers,
 					PodRegexp: regexp.MustCompile(
 						fmt.Sprintf(
 							"^%s$",
