@@ -653,7 +653,6 @@ func (kubelet *Kubelet) GetMetrics(
 				return nil
 			})
 
-
 			if err != nil {
 				return err
 			}
@@ -665,6 +664,8 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 
+			now := time.Now().UTC()
+
 			for _, metric := range []struct {
 				Name string
 				Ref  string
@@ -673,9 +674,9 @@ func (kubelet *Kubelet) GetMetrics(
 				{"container_cpu_cfs_throttled/seconds_total", "container_cpu_cfs_throttled_seconds_total"},
 			} {
 				for _, val := range cadvisor[metric.Ref] {
-					podUID, cantainerName, value, ok := getCAdvisorContainerValue(val)
+					podUID, containerName, namespace, value, ok := getCAdvisorContainerValue(val)
 					if ok {
-						applicationID, serviceID, containerID, podName, ok := scanner.FindContainerByPodUIDContainerName(podUID, cantainerName)
+						applicationID, serviceID, containerID, podName, ok := scanner.FindContainerByPodUIDContainerName(podUID, containerName)
 						if ok {
 							addMetricValue(
 								TypePodContainer,
@@ -688,6 +689,21 @@ func (kubelet *Kubelet) GetMetrics(
 								summary.Node.CPU.Time,
 								// TODO: send as float
 								int64(value),
+							)
+
+							addMetricValueRate(
+								TypePodContainer,
+								fmt.Sprintf("%s:%s", namespace, podName),
+								containerName,
+								metric.Name+"_rate",
+								node.ID,
+								applicationID,
+								serviceID,
+								containerID,
+								podName,
+								now,
+								int64(value),
+								1e9,
 							)
 						}
 					}

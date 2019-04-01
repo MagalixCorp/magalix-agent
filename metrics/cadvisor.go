@@ -81,13 +81,18 @@ func scanTokens(data []byte, atEOF bool) (advance int, token []byte, err error) 
 	return 0, nil, nil
 }
 
-func getCAdvisorContainerValue(t TagsValue) (podUID string, containerName string, value float64, ok bool) {
+func getCAdvisorContainerValue(t TagsValue) (podUID string, containerName string, namespace string, value float64, ok bool) {
 	// container name is empty if not existent
 	containerName, _ = t.Tags["container_name"]
 	id, ok := t.Tags["id"]
 	if !ok {
 		return
 	}
+	namespace, ok = t.Tags["namespace"]
+	if !ok {
+		return
+	}
+
 	if !strings.HasPrefix(id, "/kubepods") {
 		return
 	}
