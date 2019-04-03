@@ -691,6 +691,12 @@ func (kubelet *Kubelet) GetMetrics(
 								int64(value),
 							)
 
+							// TODO: cleanup when values are sent as floats
+							// covert seconds to milliseconds
+							if strings.Contains(metric.Name, "seconds") {
+								value = 1000 * value
+							}
+
 							addMetricValueRate(
 								TypePodContainer,
 								fmt.Sprintf("%s:%s", namespace, podName),
