@@ -640,6 +640,7 @@ func (kubelet *Kubelet) GetMetrics(
 						1000, // cpu_rate is in millicore
 					)
 
+					throttleMetrics[identifiedContainer.ID] = map[string]*containerMetricStore{}
 					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/seconds_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
 					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/periods_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
 				}
