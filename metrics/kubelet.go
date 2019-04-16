@@ -16,6 +16,16 @@ import (
 	"github.com/reconquest/karma-go"
 )
 
+// used internally to set default values for some metrics.
+// ex: throttling metrics, which won't exist in response if there is no throttle
+// and we want default value of zero
+type containerMetricStore struct {
+	ApplicationID, ServiceID, ContainerID uuid.UUID
+	Namespace, PodName, ContainerName     string
+	Timestamp                             time.Time
+	Value                                 float64
+}
+
 type KubeletSummaryContainer struct {
 	Name      string
 	StartTime time.Time
@@ -480,6 +490,8 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 
+			throttleMetrics := map[uuid.UUID]map[string]*containerMetricStore{}
+
 			for _, pod := range summary.Pods {
 				applicationID, serviceID, ok := scanner.FindService(
 					pod.PodRef.Namespace, pod.PodRef.Name,
@@ -627,6 +639,9 @@ func (kubelet *Kubelet) GetMetrics(
 						container.CPU.UsageCoreNanoSeconds,
 						1000, // cpu_rate is in millicore
 					)
+
+					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/seconds_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
+					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/periods_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
 				}
 			}
 
@@ -674,45 +689,60 @@ func (kubelet *Kubelet) GetMetrics(
 				{"container_cpu_cfs_throttled/seconds_total", "container_cpu_cfs_throttled_seconds_total"},
 			} {
 				for _, val := range cadvisor[metric.Ref] {
-					podUID, containerName, namespace, value, ok := getCAdvisorContainerValue(val)
+					podUID, containerName, _, value, ok := getCAdvisorContainerValue(val)
 					if ok {
-						applicationID, serviceID, containerID, podName, ok := scanner.FindContainerByPodUIDContainerName(podUID, containerName)
+						_, _, containerID, _, ok := scanner.FindContainerByPodUIDContainerName(podUID, containerName)
 						if ok {
-							addMetricValue(
-								TypePodContainer,
-								metric.Name,
-								node.ID,
-								applicationID,
-								serviceID,
-								containerID,
-								podName,
-								summary.Node.CPU.Time,
-								// TODO: send as float
-								int64(value),
-							)
-
-							// TODO: cleanup when values are sent as floats
-							// covert seconds to milliseconds
-							if strings.Contains(metric.Name, "seconds") {
-								value = 1000 * value
+							if storedMetrics, ok := throttleMetrics[containerID]; ok {
+								if storedMetric, ok := storedMetrics[metric.Name]; ok {
+									storedMetric.Value = value
+								} else {
+									kubelet.Error("no stored metric with name: %s", metric.Name)
+								}
+							} else {
+								kubelet.Warning("found a container: %s in cAdvisor response that don't exist at summary response", containerName)
 							}
-
-							addMetricValueRate(
-								TypePodContainer,
-								fmt.Sprintf("%s:%s", namespace, podName),
-								containerName,
-								metric.Name+"_rate",
-								node.ID,
-								applicationID,
-								serviceID,
-								containerID,
-								podName,
-								now,
-								int64(value),
-								1e9,
-							)
 						}
 					}
+				}
+			}
+
+			for _, storedMetrics := range throttleMetrics {
+				for metricName, storedMetric := range storedMetrics {
+					addMetricValue(
+						TypePodContainer,
+						metricName,
+						node.ID,
+						storedMetric.ApplicationID,
+						storedMetric.ServiceID,
+						storedMetric.ContainerID,
+						storedMetric.PodName,
+						summary.Node.CPU.Time,
+						// TODO: send as float
+						int64(storedMetric.Value),
+					)
+
+					rateValue := storedMetric.Value
+					// TODO: cleanup when values are sent as floats
+					// covert seconds to milliseconds
+					if strings.Contains(metricName, "seconds") {
+						rateValue *= 1000
+					}
+
+					addMetricValueRate(
+						TypePodContainer,
+						fmt.Sprintf("%s:%s", storedMetric.Namespace, storedMetric.PodName),
+						storedMetric.ContainerName,
+						metricName+"_rate",
+						node.ID,
+						storedMetric.ApplicationID,
+						storedMetric.ServiceID,
+						storedMetric.ContainerID,
+						storedMetric.PodName,
+						now,
+						int64(rateValue),
+						1e9,
+					)
 				}
 			}
 
@@ -817,6 +847,23 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	return result, rawResponses, nil
+}
+
+func defaultMetricStore(
+	applicationID uuid.UUID, serviceID uuid.UUID,
+	identifiedContainer *scanner.Container, namespace, podName string,
+	container KubeletSummaryContainer,
+) *containerMetricStore {
+	return &containerMetricStore{
+		ApplicationID: applicationID,
+		ServiceID:     serviceID,
+		ContainerID:   identifiedContainer.ID,
+		Namespace:     namespace,
+		PodName:       podName,
+		ContainerName: container.Name,
+		Timestamp:     container.CPU.Time,
+		Value:         0,
+	}
 }
 
 func (kubelet *Kubelet) collectGarbage() {
