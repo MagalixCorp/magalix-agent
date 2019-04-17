@@ -641,6 +641,7 @@ func (kubelet *Kubelet) GetMetrics(
 					)
 
 					throttleMetrics[identifiedContainer.ID] = map[string]*containerMetricStore{}
+					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs/periods_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
 					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/seconds_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
 					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/periods_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
 				}
@@ -686,6 +687,7 @@ func (kubelet *Kubelet) GetMetrics(
 				Name string
 				Ref  string
 			}{
+				{"container_cpu_cfs/periods_total", "container_cpu_cfs_periods_total"},
 				{"container_cpu_cfs_throttled/periods_total", "container_cpu_cfs_throttled_periods_total"},
 				{"container_cpu_cfs_throttled/seconds_total", "container_cpu_cfs_throttled_seconds_total"},
 			} {
