@@ -6,6 +6,7 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixTechnologies/log-go"
+	"github.com/reconquest/karma-go"
 )
 
 // PipeSender interface for sender
@@ -60,13 +61,22 @@ func (p *Pipe) start() {
 				continue
 			}
 			p.cond.L.Unlock()
-			p.logger.Printf("sending packet %s, diff: %s, remaining: %d", pack.Kind, time.Now().Sub(pack.time), p.storage.Len())
+
+			ctx := karma.Describe("kind", pack.Kind).
+				Describe("diff", time.Now().Sub(pack.time)).
+				Describe("remaining", p.storage.Len())
+
+			p.logger.Debugf(ctx, "sending packet")
+
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
+			ctx = ctx.Describe("diff", time.Now().Sub(pack.time))
 			if err != nil {
-				p.logger.Printf("error sending packet %s, diff: %s, err: %s", pack.Kind, time.Now().Sub(pack.time), err)
 				p.storage.Add(pack)
+				ctx = ctx.Describe("remaining", p.storage.Len())
+				p.logger.Errorf(ctx.Reason(err), "error sending packet")
 			} else {
-				p.logger.Printf("completed sending packet %s, diff: %s", pack.Kind, time.Now().Sub(pack.time))
+				ctx = ctx.Describe("remaining", p.storage.Len())
+				p.logger.Infof(ctx, "completed sending packet")
 			}
 		}
 	}()
