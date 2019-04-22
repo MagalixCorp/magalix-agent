@@ -104,8 +104,8 @@ func watchMetrics(
 	go sendMetrics(client, metricsPipe)
 	defer close(metricsPipe)
 
-	ticker := utils.NewTicker("metrics", interval, func(_ time.Time) {
-		metrics, raw, err := source.GetMetrics(scanner)
+	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
+		metrics, raw, err := source.GetMetrics(scanner, tickTime)
 
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")

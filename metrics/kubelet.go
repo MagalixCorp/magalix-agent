@@ -144,7 +144,7 @@ func NewKubelet(
 
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
-	scanner *scanner.Scanner,
+	scanner *scanner.Scanner, tickTime time.Time,
 ) ([]*Metrics, map[string]interface{}, error) {
 	kubelet.collectGarbage()
 
@@ -215,6 +215,17 @@ func (kubelet *Kubelet) GetMetrics(
 	) {
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
+		if timestamp.Equal(time.Time{}) {
+			kubelet.Errorf(
+				karma.Describe("metric", measurement).
+					Describe("type", measurementType).
+					Describe("timestamp", timestamp).
+					Reason(fmt.Errorf("invalid timestamp")),
+				"invalid timestamp detect. defaulting to tickTime",
+			)
+			timestamp = tickTime
+		}
+
 		metrics = append(metrics, &Metrics{
 			Name:        measurement,
 			Type:        measurementType,
@@ -272,20 +283,27 @@ func (kubelet *Kubelet) GetMetrics(
 	) {
 		key := getKey(measurementType, parentKey, entityKey, measurement)
 		rate, err := calcRate(key, timestamp, value, multiplier)
-		if err == nil {
-			// TODO: Yasser 2018-08-13, should we notify developers somehow if there is err?
-			addMetricValue(
-				measurementType,
-				measurement,
-				nodeID,
-				applicationID,
-				serviceID,
-				containerID,
-				pod,
-				timestamp,
-				rate,
+		if err != nil {
+			kubelet.Warningf(
+				karma.Describe("metric", measurement).
+					Describe("type", measurementType).
+					Describe("timestamp", timestamp).
+					Reason(err),
+				"can't calculate rate",
 			)
+			return
 		}
+		addMetricValue(
+			measurementType,
+			measurement,
+			nodeID,
+			applicationID,
+			serviceID,
+			containerID,
+			pod,
+			timestamp,
+			rate,
+		)
 
 		kubelet.updatePreviousValue(key, &KubeletValue{
 			Timestamp: timestamp,

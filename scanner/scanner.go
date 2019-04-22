@@ -134,7 +134,7 @@ func (scanner *Scanner) scanNodes() {
 		)
 
 		scanner.nodes = nodes
-		scanner.nodesLastScan = time.Now()
+		scanner.nodesLastScan = time.Now().UTC()
 
 		scanner.SendNodes(nodes)
 		scanner.SendAnalysisData(map[string]interface{}{
@@ -207,7 +207,7 @@ func (scanner *Scanner) scanApplications() {
 		)
 
 		scanner.apps = apps
-		scanner.appsLastScan = time.Now()
+		scanner.appsLastScan = time.Now().UTC()
 
 		scanner.SendApplications(apps)
 		scanner.SendAnalysisData(rawResources)
