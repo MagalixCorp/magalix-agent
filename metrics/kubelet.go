@@ -281,8 +281,24 @@ func (kubelet *Kubelet) GetMetrics(
 		value int64,
 		multiplier int64,
 	) {
+		if timestamp.Equal(time.Time{}) {
+			kubelet.Errorf(
+				karma.Describe("metric", measurement).
+					Describe("type", measurementType).
+					Describe("timestamp", timestamp).
+					Reason(fmt.Errorf("invalid timestamp")),
+				"{rate} invalid timestamp detect. defaulting to tickTime",
+			)
+			timestamp = tickTime
+		}
+
 		key := getKey(measurementType, parentKey, entityKey, measurement)
 		rate, err := calcRate(key, timestamp, value, multiplier)
+		kubelet.updatePreviousValue(key, &KubeletValue{
+			Timestamp: timestamp,
+			Value:     value,
+		})
+
 		if err != nil {
 			kubelet.Warningf(
 				karma.Describe("metric", measurement).
@@ -304,11 +320,6 @@ func (kubelet *Kubelet) GetMetrics(
 			timestamp,
 			rate,
 		)
-
-		kubelet.updatePreviousValue(key, &KubeletValue{
-			Timestamp: timestamp,
-			Value:     value,
-		})
 
 	}
 
