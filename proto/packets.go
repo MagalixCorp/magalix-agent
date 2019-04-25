@@ -288,10 +288,22 @@ type Decision struct {
 
 type PacketDecisions []Decision
 
-type PacketDecisionsResponse struct {
-	Executed int `json:"executed"`
-	Failed   int `json:"failed"`
+type DecisionExecutionStatus string
+
+const (
+	DecisionExecutionStatusSucceed DecisionExecutionStatus = "succeed"
+	DecisionExecutionStatusFailed  DecisionExecutionStatus = "failed"
+	DecisionExecutionStatusSkipped DecisionExecutionStatus = "skipped"
+)
+
+type DecisionExecutionResponse struct {
+	ID          uuid.UUID               `json:"id"`
+	Status      DecisionExecutionStatus `json:"status"`
+	Message     string                  `json:"message"`
+	ContainerId *uuid.UUID              `json:"container_id"`
 }
+
+type PacketDecisionsResponse []DecisionExecutionResponse
 
 type PacketRestart struct {
 	Staus int `json:"status"`

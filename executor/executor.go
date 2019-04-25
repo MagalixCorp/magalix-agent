@@ -3,6 +3,7 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/kuber"
@@ -11,6 +12,7 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
+	"k8s.io/api/apps/v1"
 )
 
 // Executor decision executor
@@ -61,89 +63,157 @@ func NewExecutor(
 	return executor
 }
 
+func (executor *Executor) handleExecutionError(
+	ctx *karma.Context, decision proto.Decision, err error, containerId *uuid.UUID,
+) *proto.DecisionExecutionResponse {
+	executor.logger.Errorf(ctx.Reason(err), "unable to execute decision")
+
+	return &proto.DecisionExecutionResponse{
+		ID:          decision.ID,
+		Status:      proto.DecisionExecutionStatusFailed,
+		Message:     err.Error(),
+		ContainerId: containerId,
+	}
+}
+func (executor *Executor) handleExecutionSkipping(
+	ctx *karma.Context, decision proto.Decision, msg string,
+) *proto.DecisionExecutionResponse {
+
+	executor.logger.Infof(ctx, "skipping execution: %s", msg)
+
+	return &proto.DecisionExecutionResponse{
+		ID:      decision.ID,
+		Status:  proto.DecisionExecutionStatusSkipped,
+		Message: msg,
+	}
+}
+
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	var decisions proto.PacketDecisions
 	if err = proto.Decode(in, &decisions); err != nil {
 		return
 	}
 
-	failed := 0
-
-	var errs []error
+	var responses []proto.DecisionExecutionResponse
 	for _, decision := range decisions {
-		var err error
+		ctx := karma.Describe("decision-id", decision.ID)
+
 		namespace, name, kind, err := executor.getServiceDetails(decision.ID)
 		if err != nil {
-			errs = append(errs, err)
-			goto err
+			response := executor.handleExecutionError(ctx, decision, err, nil)
+			responses = append(responses, *response)
+			continue
 		}
-		{
-			totalResources := kuber.TotalResources{
-				Replicas:   decision.TotalResources.Replicas,
-				Containers: make([]kuber.ContainerResourcesRequirements, 0, len(decision.TotalResources.Containers)),
+
+		ctx = ctx.Describe("namespace", namespace).
+			Describe("service-name", name).
+			Describe("kind", kind)
+
+		if strings.ToLower(kind) == "statefulset" {
+			statefulSet, err := executor.kube.GetStatefulSet(namespace, name)
+			if err != nil {
+				response := executor.handleExecutionError(ctx, decision, err, nil)
+				responses = append(responses, *response)
+				continue
 			}
-			for _, container := range decision.TotalResources.Containers {
-				executor.changed[container.ID] = struct{}{}
-				containerName, err := executor.getContainerDetails(container.ID)
-				if err != nil {
-					errs = append(errs, err)
-					goto err
-				}
-				totalResources.Containers = append(totalResources.Containers, kuber.ContainerResourcesRequirements{
-					Name: containerName,
-					Limits: kuber.RequestLimit{
-						Memory: container.Limits.Memory,
-						CPU:    container.Limits.CPU,
-					},
-					Requests: kuber.RequestLimit{
-						Memory: container.Requests.Memory,
-						CPU:    container.Requests.CPU,
-					},
-				})
-			}
-			{
-				// TODO: debug
-				trace, _ := json.Marshal(totalResources)
-				msg := "decision executed"
-				if executor.dryRun {
-					msg += " (dry run)"
-				}
-				executor.logger.Infof(
-					karma.
-						Describe("dry run", executor.dryRun).
-						Describe("cpu unit", "milliCore").
-						Describe("memory unit", "mibiByte").
-						Describe("decision", string(trace)),
-					msg,
-				)
-			}
-			if !executor.dryRun {
-				err = executor.kube.SetResources(kind, name, namespace, totalResources)
-				if err != nil {
-					errs = append(errs, err)
-					goto err
+
+			ctx = ctx.
+				Describe("replicas", statefulSet.Spec.Replicas)
+
+			if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas > 1 {
+				msg := fmt.Sprintf("sts replicas %v > 1", statefulSet.Spec.Replicas)
+
+				updateStrategy := statefulSet.Spec.UpdateStrategy.String()
+				ctx = ctx.
+					Describe("update-strategy", updateStrategy)
+
+				if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
+
+					rollingUpdatePartition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
+					ctx = ctx.
+						Describe("rolling-update-partition", rollingUpdatePartition)
+
+					if rollingUpdatePartition != nil && *rollingUpdatePartition != 0 {
+						response := executor.handleExecutionSkipping(
+							ctx, decision,
+							msg+" and Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
+						)
+						responses = append(responses, *response)
+						continue
+					}
+
+				} else {
+					response := executor.handleExecutionSkipping(
+						ctx, decision,
+						msg+" and Spec.UpdateStrategy not equal 'RollingUpdate'",
+					)
+					responses = append(responses, *response)
+					continue
 				}
 			}
 		}
-		continue
-	err:
-		failed++
-	}
-	if len(errs) > 0 {
-		executor.logger.Errorf(errs[0], "unable execute decisions %#+v", decisions)
-		err = fmt.Errorf("unable to execute some of the decisions: %s", errs)
-	}
-	executor.logger.Infof(karma.Describe("decisions", decisions), "decisions executed")
-	resp := proto.PacketDecisionsResponse{
-		Executed: len(decisions) - failed,
-		Failed:   failed,
+
+		totalResources := kuber.TotalResources{
+			Replicas:   decision.TotalResources.Replicas,
+			Containers: make([]kuber.ContainerResourcesRequirements, 0, len(decision.TotalResources.Containers)),
+		}
+		for _, container := range decision.TotalResources.Containers {
+			executor.changed[container.ID] = struct{}{}
+			containerName, err := executor.getContainerDetails(container.ID)
+			if err != nil {
+				containerCtx := ctx.Describe("container-name", containerName)
+				response := executor.handleExecutionError(containerCtx, decision, err, &container.ID)
+				responses = append(responses, *response)
+				continue
+			}
+			totalResources.Containers = append(totalResources.Containers, kuber.ContainerResourcesRequirements{
+				Name: containerName,
+				Limits: kuber.RequestLimit{
+					Memory: container.Limits.Memory,
+					CPU:    container.Limits.CPU,
+				},
+				Requests: kuber.RequestLimit{
+					Memory: container.Requests.Memory,
+					CPU:    container.Requests.CPU,
+				},
+			})
+		}
+
+		trace, _ := json.Marshal(totalResources)
+		executor.logger.Debugf(
+			ctx.
+				Describe("dry run", executor.dryRun).
+				Describe("cpu unit", "milliCore").
+				Describe("memory unit", "mibiByte").
+				Describe("trace", string(trace)),
+			"executing decision",
+		)
+
+		if executor.dryRun {
+			response := executor.handleExecutionSkipping(ctx, decision, "dry run enabled")
+			responses = append(responses, *response)
+			continue
+		} else {
+			err = executor.kube.SetResources(kind, name, namespace, totalResources)
+			if err != nil {
+				response := executor.handleExecutionError(ctx, decision, err, nil)
+				responses = append(responses, *response)
+				continue
+			}
+			msg := "decision executed successfully"
+
+			executor.logger.Infof(ctx, msg)
+
+			responses = append(responses, proto.DecisionExecutionResponse{
+				ID:      decision.ID,
+				Status:  proto.DecisionExecutionStatusSucceed,
+				Message: msg,
+			})
+		}
+
 	}
 
-	out, encodeErr := proto.Encode(resp)
-	if err == nil {
-		err = encodeErr
-	}
-	return
+	return proto.Encode(responses)
 }
 
 // Init adds decision listener and starts oom watcher
@@ -226,7 +296,8 @@ func (executor *Executor) watchOOM() {
 func (executor *Executor) getServiceDetails(serviceID uuid.UUID) (namespace, name, kind string, err error) {
 	namespace, name, kind, ok := executor.scanner.FindServiceByID(executor.scanner.GetApplications(), serviceID)
 	if !ok {
-		err = fmt.Errorf("service not found")
+		err = karma.Describe("id", serviceID).
+			Reason("service not found")
 	}
 	return
 }
@@ -234,7 +305,8 @@ func (executor *Executor) getServiceDetails(serviceID uuid.UUID) (namespace, nam
 func (executor *Executor) getContainerDetails(containerID uuid.UUID) (name string, err error) {
 	name, ok := executor.scanner.FindContainerNameByID(executor.scanner.GetApplications(), containerID)
 	if !ok {
-		err = fmt.Errorf("container not found")
+		err = karma.Describe("id", containerID).
+			Reason("container not found")
 	}
 	return
 }

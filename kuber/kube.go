@@ -12,6 +12,7 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/api/apps/v1"
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
@@ -702,6 +703,27 @@ func (kube *Kube) GetLimitRanges() (
 	}
 
 	return limitRanges, nil
+}
+
+func (kube *Kube) GetStatefulSet(namespace, name string) (
+	*v1.StatefulSet, error,
+) {
+	statefulSet, err := kube.Clientset.AppsV1().
+		StatefulSets(namespace).
+		Get(name, kmeta.GetOptions{})
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to retrieve statefulset %s/%s",
+			namespace, name,
+		)
+	}
+
+	if statefulSet != nil {
+		maskPodSpec(&statefulSet.Spec.Template.Spec)
+	}
+
+	return statefulSet, nil
 }
 
 // SetResources set resources for a service
