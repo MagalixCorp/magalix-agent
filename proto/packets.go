@@ -271,9 +271,9 @@ type RequestLimit struct {
 }
 
 type ContainerResources struct {
-	ID       uuid.UUID    `json:"id"`
-	Requests RequestLimit `json:"requests,omitempty"`
-	Limits   RequestLimit `json:"limits,omitempty"`
+	ContainerId uuid.UUID    `json:"container_id"`
+	Requests    RequestLimit `json:"requests,omitempty"`
+	Limits      RequestLimit `json:"limits,omitempty"`
 }
 
 type TotalResources struct {
@@ -282,8 +282,9 @@ type TotalResources struct {
 }
 
 type Decision struct {
-	TotalResources TotalResources `json:"total_resources"`
 	ID             uuid.UUID      `json:"id"`
+	ServiceId      uuid.UUID      `json:"service_id"`
+	TotalResources TotalResources `json:"total_resources"`
 }
 
 type PacketDecisions []Decision
@@ -300,6 +301,7 @@ type DecisionExecutionResponse struct {
 	ID          uuid.UUID               `json:"id"`
 	Status      DecisionExecutionStatus `json:"status"`
 	Message     string                  `json:"message"`
+	ServiceId   uuid.UUID               `json:"service_id"`
 	ContainerId *uuid.UUID              `json:"container_id"`
 }
 

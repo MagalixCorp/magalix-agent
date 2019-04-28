@@ -72,6 +72,7 @@ func (executor *Executor) handleExecutionError(
 		ID:          decision.ID,
 		Status:      proto.DecisionExecutionStatusFailed,
 		Message:     err.Error(),
+		ServiceId:   decision.ServiceId,
 		ContainerId: containerId,
 	}
 }
@@ -82,9 +83,10 @@ func (executor *Executor) handleExecutionSkipping(
 	executor.logger.Infof(ctx, "skipping execution: %s", msg)
 
 	return &proto.DecisionExecutionResponse{
-		ID:      decision.ID,
-		Status:  proto.DecisionExecutionStatusSkipped,
-		Message: msg,
+		ID:        decision.ID,
+		ServiceId: decision.ServiceId,
+		Status:    proto.DecisionExecutionStatusSkipped,
+		Message:   msg,
 	}
 }
 
@@ -96,9 +98,11 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 
 	var responses proto.PacketDecisionsResponse
 	for _, decision := range decisions {
-		ctx := karma.Describe("decision-id", decision.ID)
+		ctx := karma.
+			Describe("decision-id", decision.ID).
+			Describe("service-id", decision.ServiceId)
 
-		namespace, name, kind, err := executor.getServiceDetails(decision.ID)
+		namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 		if err != nil {
 			response := executor.handleExecutionError(ctx, decision, err, nil)
 			responses = append(responses, *response)
@@ -161,11 +165,11 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 			Containers: make([]kuber.ContainerResourcesRequirements, 0, len(decision.TotalResources.Containers)),
 		}
 		for _, container := range decision.TotalResources.Containers {
-			executor.changed[container.ID] = struct{}{}
-			containerName, err := executor.getContainerDetails(container.ID)
+			executor.changed[container.ContainerId] = struct{}{}
+			containerName, err := executor.getContainerDetails(container.ContainerId)
 			if err != nil {
 				containerCtx := ctx.Describe("container-name", containerName)
-				response := executor.handleExecutionError(containerCtx, decision, err, &container.ID)
+				response := executor.handleExecutionError(containerCtx, decision, err, &container.ContainerId)
 				responses = append(responses, *response)
 				continue
 			}
@@ -208,9 +212,10 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 			executor.logger.Infof(ctx, msg)
 
 			responses = append(responses, proto.DecisionExecutionResponse{
-				ID:      decision.ID,
-				Status:  proto.DecisionExecutionStatusSucceed,
-				Message: msg,
+				ID:        decision.ID,
+				ServiceId: decision.ServiceId,
+				Status:    proto.DecisionExecutionStatusSucceed,
+				Message:   msg,
 			})
 		}
 
