@@ -94,7 +94,7 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 		return
 	}
 
-	var responses []proto.DecisionExecutionResponse
+	var responses proto.PacketDecisionsResponse
 	for _, decision := range decisions {
 		ctx := karma.Describe("decision-id", decision.ID)
 
@@ -123,23 +123,26 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 			if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas > 1 {
 				msg := fmt.Sprintf("sts replicas %v > 1", statefulSet.Spec.Replicas)
 
-				updateStrategy := statefulSet.Spec.UpdateStrategy.String()
+				updateStrategy := statefulSet.Spec.UpdateStrategy.Type
 				ctx = ctx.
 					Describe("update-strategy", updateStrategy)
 
 				if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
 
-					rollingUpdatePartition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
-					ctx = ctx.
-						Describe("rolling-update-partition", rollingUpdatePartition)
+					// no rollingUpdate spec, then Partition = 0
+					if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil {
+						partition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
+						ctx = ctx.
+							Describe("rolling-update-partition", partition)
 
-					if rollingUpdatePartition != nil && *rollingUpdatePartition != 0 {
-						response := executor.handleExecutionSkipping(
-							ctx, decision,
-							msg+" and Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
-						)
-						responses = append(responses, *response)
-						continue
+						if partition != nil && *partition != 0 {
+							response := executor.handleExecutionSkipping(
+								ctx, decision,
+								msg+" and Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
+							)
+							responses = append(responses, *response)
+							continue
+						}
 					}
 
 				} else {
