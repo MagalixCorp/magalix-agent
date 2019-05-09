@@ -48,12 +48,11 @@ func InitEvents(
 	kube *kuber.Kube,
 	skipNamespaces []string,
 	scanner *scanner.Scanner,
-	oomKilled chan uuid.UUID,
 	args map[string]interface{},
 ) *Eventer {
 	eventsBufferFlushInterval := utils.MustParseDuration(args, "--events-buffer-flush-interval")
 	eventsBufferSize := utils.MustParseInt(args, "--events-buffer-size")
-	eventer := NewEventer(client, kube, skipNamespaces, scanner, eventsBufferFlushInterval, eventsBufferSize, oomKilled)
+	eventer := NewEventer(client, kube, skipNamespaces, scanner, eventsBufferFlushInterval, eventsBufferSize)
 	eventer.Start()
 	return eventer
 }
@@ -66,7 +65,6 @@ func NewEventer(
 	scanner *scanner.Scanner,
 	bufferFlushInterval time.Duration,
 	bufferSize int,
-	oomKilled chan uuid.UUID,
 ) *Eventer {
 	eventer := &Eventer{
 		client:              client,
@@ -77,7 +75,6 @@ func NewEventer(
 
 		skipNamespaces: skipNamespaces,
 		scanner:        scanner,
-		oomKilled:      oomKilled,
 
 		m: sync.Mutex{},
 	}
@@ -121,7 +118,7 @@ func NewEventer(
 // Start starts the eventer
 func (eventer *Eventer) Start() {
 	go eventer.observer.Start()
-	eventer.proc.Start(eventer.oomKilled)
+	eventer.proc.Start()
 	eventer.startBatchWriter()
 }
 

@@ -734,54 +734,72 @@ func (kube *Kube) GetStatefulSet(namespace, name string) (
 
 // SetResources set resources for a service
 func (kube *Kube) SetResources(kind string, name string, namespace string, totalResources TotalResources) error {
-	containerSpecs := []map[string]interface{}{}
-	for containerIndex := range totalResources.Containers {
-		container := totalResources.Containers[containerIndex]
+	if len(totalResources.Containers) == 0 && totalResources.Replicas == nil {
+		return fmt.Errorf("invalid resources passed, nothing to change")
+	}
 
-		var memoryLimits *string
+	var containerSpecs = make([]map[string]interface{}, len(totalResources.Containers))
+	for i := range totalResources.Containers {
+
+		container := totalResources.Containers[i]
+		resources := map[string]map[string]interface{}{}
+
 		if container.Limits.Memory != nil {
-			tmp := fmt.Sprintf("%dMi", *container.Limits.Memory)
-			memoryLimits = &tmp
+			memoryLimits := fmt.Sprintf("%dMi", *container.Limits.Memory)
+			if _, ok := resources["limits"]; !ok {
+				resources["limits"] = map[string]interface{}{}
+			}
+			resources["limits"]["memory"] = memoryLimits
 		}
-		var memoryRequests *string
-		if container.Requests.Memory != nil {
-			tmp := fmt.Sprintf("%dMi", *container.Requests.Memory)
-			memoryRequests = &tmp
-		}
-		var cpuLimits float64
 		if container.Limits.CPU != nil {
-			cpuLimits = float64(*container.Limits.CPU) / milliCore
+			cpuLimits := float64(*container.Limits.CPU) / milliCore
+			if _, ok := resources["limits"]; !ok {
+				resources["limits"] = map[string]interface{}{}
+			}
+			resources["limits"]["cpi"] = cpuLimits
 		}
-		var cpuRequests float64
+
+		if container.Requests.Memory != nil {
+			memoryRequests := fmt.Sprintf("%dMi", *container.Requests.Memory)
+			if _, ok := resources["requests"]; !ok {
+				resources["requests"] = map[string]interface{}{}
+			}
+			resources["requests"]["memory"] = memoryRequests
+		}
 		if container.Requests.CPU != nil {
-			cpuRequests = float64(*container.Requests.CPU) / milliCore
+			cpuRequests := float64(*container.Requests.CPU) / milliCore
+			if _, ok := resources["requests"]; !ok {
+				resources["requests"] = map[string]interface{}{}
+			}
+			resources["requests"]["cpu"] = cpuRequests
 		}
-		limits := map[string]interface{}{}
-		limits["memory"] = memoryLimits
-		limits["cpu"] = cpuLimits
-		requests := map[string]interface{}{}
-		requests["memory"] = memoryRequests
-		requests["cpu"] = cpuRequests
+
+		if len(resources) == 0 {
+			return fmt.Errorf(
+				"invalid resources for container: %s",
+				container.Name,
+			)
+		}
 
 		spec := map[string]interface{}{
-			"name": container.Name,
-			"resources": map[string]interface{}{
-				"limits":   limits,
-				"requests": requests,
-			},
+			"name":      container.Name,
+			"resources": resources,
 		}
-		containerSpecs = append(containerSpecs, spec)
+		containerSpecs[i] = spec
 	}
 
 	body := map[string]interface{}{
 		"kind": kind,
-		"spec": map[string]interface{}{
-			"template": map[string]interface{}{
-				"spec": map[string]interface{}{
-					"containers": containerSpecs,
-				},
+		"spec": map[string]interface{}{},
+	}
+
+	if len(containerSpecs) > 0 {
+		spec := body["spec"].(map[string]interface{})
+		spec["template"] = map[string]interface{}{
+			"spec": map[string]interface{}{
+				"containers": containerSpecs,
 			},
-		},
+		}
 	}
 
 	// setting replicas=nil makes k8s set the replicas to 1

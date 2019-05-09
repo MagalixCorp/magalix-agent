@@ -33,12 +33,9 @@ func InitExecutor(
 	client *client.Client,
 	kube *kuber.Kube,
 	scanner *scanner.Scanner,
-	oomKilled chan uuid.UUID,
-	args map[string]interface{},
+	dryRun bool,
 ) *Executor {
-	executor := NewExecutor(client, kube, scanner, args["--dry-run"].(bool), oomKilled)
-	executor.Init()
-	return executor
+	return NewExecutor(client, kube, scanner, dryRun)
 }
 
 // NewExecutor creates a new excecutor
@@ -47,15 +44,13 @@ func NewExecutor(
 	kube *kuber.Kube,
 	scanner *scanner.Scanner,
 	dryRun bool,
-	oomKilled chan uuid.UUID,
 ) *Executor {
 	executor := &Executor{
-		client:    client,
-		logger:    client.Logger,
-		kube:      kube,
-		scanner:   scanner,
-		dryRun:    dryRun,
-		oomKilled: oomKilled,
+		client:  client,
+		logger:  client.Logger,
+		kube:    kube,
+		scanner: scanner,
+		dryRun:  dryRun,
 
 		changed: map[uuid.UUID]struct{}{},
 	}
@@ -222,83 +217,6 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	}
 
 	return proto.Encode(responses)
-}
-
-// Init adds decision listener and starts oom watcher
-func (executor *Executor) Init() {
-	go executor.watchOOM()
-}
-
-func (executor *Executor) watchOOM() {
-	stopped := false
-	scanner := executor.scanner.WaitForNextTick()
-	// a set of uuids
-	uuids := make(map[uuid.UUID]struct{})
-	for !stopped {
-		select {
-		case oomKilled := <-executor.oomKilled:
-			uuids[oomKilled] = struct{}{}
-		case <-scanner:
-			scanner = executor.scanner.WaitForNextTick()
-			for oomKilled := range uuids {
-				uuid := oomKilled
-				if container, service, application, ok := executor.scanner.FindContainerByID(
-					executor.scanner.GetApplications(), uuid,
-				); ok {
-					newValue := container.Resources.Limits.Memory().Value() * 3 / 2 / 1024 / 1024
-					executor.logger.Infof(karma.
-						Describe("conatainer", container.Name).
-						Describe("service", service.Name).
-						Describe("application", application.Name).
-						Describe("old value", container.Resources.Limits.Memory()).
-						Describe("new value (Mi)", newValue).
-						Describe("dry run", executor.dryRun),
-						"executing oom handler",
-					)
-					if !executor.dryRun {
-						// TODO: remove
-						// skip if not changed
-						if _, ok := executor.changed[uuid]; !ok {
-							continue
-						}
-						cpuLimits := container.Resources.Limits.Cpu().MilliValue()
-
-						cpuRequests := container.Resources.Requests.Cpu().MilliValue()
-						memoryRequests := container.Resources.Requests.Memory().Value() / 1024 / 1024
-
-						err := executor.kube.SetResources(service.Kind, service.Name, application.Name, kuber.TotalResources{
-							Containers: []kuber.ContainerResourcesRequirements{kuber.ContainerResourcesRequirements{
-								Name: container.Name,
-								Limits: kuber.RequestLimit{
-									Memory: &newValue,
-									CPU:    &cpuLimits,
-								},
-								Requests: kuber.RequestLimit{
-									Memory: &memoryRequests,
-									CPU:    &cpuRequests,
-								},
-							}},
-						})
-						if err != nil {
-							executor.logger.Errorf(err, "unable to execute oom hadnler")
-						} else {
-							executor.logger.Infof(karma.
-								Describe("conatainer", container.Name).
-								Describe("service", service.Name).
-								Describe("application", application.Name).
-								Describe("old value", container.Resources.Limits.Memory()).
-								Describe("new value", newValue).
-								Describe("dry run", executor.dryRun),
-								"oom handler executed",
-							)
-						}
-					}
-				}
-			}
-			uuids = make(map[uuid.UUID]struct{})
-		}
-
-	}
 }
 
 func (executor *Executor) getServiceDetails(serviceID uuid.UUID) (namespace, name, kind string, err error) {

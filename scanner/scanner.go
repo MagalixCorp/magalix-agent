@@ -586,6 +586,17 @@ func (scanner *Scanner) GetNodes() []kuber.Node {
 	return nodes
 }
 
+// GetPods get scanned pods
+func (scanner *Scanner) GetPods() []kv1.Pod {
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
+
+	pods := make([]kv1.Pod, len(scanner.pods))
+	copy(pods, scanner.pods)
+
+	return pods
+}
+
 // FindService find app and service id from pod name and namespace
 func (scanner *Scanner) FindService(
 	namespace string,
@@ -722,6 +733,37 @@ func (scanner *Scanner) FindContainerNameByID(
 			}
 		}
 	}
+	return
+}
+
+// FindContainerByID returns container, service and application from container name
+func (scanner *Scanner) FindContainerWithParents(
+	namespace string,
+	podName string,
+	containerName string,
+) (c *Container, s *Service, a *Application, found bool) {
+	appID, serviceID, container, found := scanner.FindContainer(namespace, podName, containerName)
+	if !found {
+		return
+	}
+
+	c = container
+
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
+	found = false
+	for _, app := range scanner.apps {
+		if app.ID == appID {
+			for _, service := range app.Services {
+				if service.ID == serviceID {
+					found = true
+					a = app
+					s = service
+				}
+			}
+		}
+	}
+
 	return
 }
 

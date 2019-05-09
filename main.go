@@ -14,6 +14,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/metrics"
 	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/scalar"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -83,6 +84,7 @@ Options:
                                               [default: 5m]
   --disable-metrics                          Disable metrics collecting and sending.
   --disable-events                           Disable events collecting and sending.
+  --disable-scalar                           Disable in-agent scalar.
   --dry-run                                  Disable decision execution.
   --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
@@ -153,6 +155,8 @@ func main() {
 
 		metricsEnabled = !args["--disable-metrics"].(bool)
 		eventsEnabled  = !args["--disable-events"].(bool)
+		scalarEnabled  = !args["--disable-scalar"].(bool)
+		dryRun         = args["--dry-run"].(bool)
 
 		skipNamespaces []string
 	)
@@ -193,14 +197,11 @@ func main() {
 		analysisDataInterval,
 	)
 
-	oomKilled := make(chan uuid.UUID)
-
 	e := executor.InitExecutor(
 		gwClient,
 		kube,
 		entityScanner,
-		oomKilled,
-		args,
+		dryRun,
 	)
 
 	gwClient.AddListener(proto.PacketKindDecision, e.Listener)
@@ -219,7 +220,6 @@ func main() {
 			kube,
 			skipNamespaces,
 			entityScanner,
-			oomKilled,
 			args,
 		)
 	}
@@ -236,6 +236,10 @@ func main() {
 			gwClient.Fatalf(err, "unable to initialize metrics sources")
 			os.Exit(1)
 		}
+	}
+
+	if scalarEnabled {
+		scalar.InitScalars(stderr, entityScanner, kube, dryRun)
 	}
 
 }
