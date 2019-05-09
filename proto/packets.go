@@ -113,6 +113,7 @@ type PacketRegisterServiceItem struct {
 
 type ReplicasStatus struct {
 	Desired   *int32 `json:"desired,omitempty"`
+	Current   *int32 `json:"current,omitempty"`
 	Ready     *int32 `json:"ready,omitempty"`
 	Available *int32 `json:"available,omitempty"`
 }

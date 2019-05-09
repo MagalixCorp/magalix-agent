@@ -283,10 +283,10 @@ func (scanner *Scanner) getApplications() (
 
 		// NOTE: we consider the default value is the neutral multiplier `1`
 		var replicas int64 = 1
-		if resource.ReplicasStatus.Ready != nil {
-			// NOTE: we consider the Ready replicas count as it represent the running pods
+		if resource.ReplicasStatus.Current != nil {
+			// NOTE: we consider the Current replicas count as it represent the running pods
 			// NOTE: that reserve actual resources
-			replicas = int64(*resource.ReplicasStatus.Ready)
+			replicas = int64(*resource.ReplicasStatus.Current)
 		}
 
 		for _, container := range resource.Containers {

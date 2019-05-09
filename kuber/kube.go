@@ -245,7 +245,8 @@ func (kube *Kube) GetResources() (
 						),
 					),
 					ReplicasStatus: proto.ReplicasStatus{
-						Desired:   newInt32Pointer(controller.Status.Replicas),
+						Desired:   controller.Spec.Replicas,
+						Current:   newInt32Pointer(controller.Status.Replicas),
 						Ready:     newInt32Pointer(controller.Status.ReadyReplicas),
 						Available: newInt32Pointer(controller.Status.AvailableReplicas),
 					},
@@ -290,6 +291,7 @@ func (kube *Kube) GetResources() (
 					),
 					ReplicasStatus: proto.ReplicasStatus{
 						Desired:   newInt32Pointer(1),
+						Current:   newInt32Pointer(1),
 						Ready:     newInt32Pointer(1),
 						Available: newInt32Pointer(1),
 					},
@@ -329,7 +331,8 @@ func (kube *Kube) GetResources() (
 						),
 					),
 					ReplicasStatus: proto.ReplicasStatus{
-						Desired:   newInt32Pointer(deployment.Status.Replicas),
+						Desired:   deployment.Spec.Replicas,
+						Current:   newInt32Pointer(deployment.Status.Replicas),
 						Ready:     newInt32Pointer(deployment.Status.ReadyReplicas),
 						Available: newInt32Pointer(deployment.Status.AvailableReplicas),
 					},
@@ -369,7 +372,8 @@ func (kube *Kube) GetResources() (
 						),
 					),
 					ReplicasStatus: proto.ReplicasStatus{
-						Desired:   newInt32Pointer(set.Status.Replicas),
+						Desired:   set.Spec.Replicas,
+						Current:   newInt32Pointer(set.Status.Replicas),
 						Ready:     newInt32Pointer(set.Status.ReadyReplicas),
 						Available: newInt32Pointer(set.Status.CurrentReplicas),
 					},
@@ -410,6 +414,7 @@ func (kube *Kube) GetResources() (
 					),
 					ReplicasStatus: proto.ReplicasStatus{
 						Desired:   newInt32Pointer(daemon.Status.DesiredNumberScheduled),
+						Current:   newInt32Pointer(daemon.Status.CurrentNumberScheduled),
 						Ready:     newInt32Pointer(daemon.Status.NumberReady),
 						Available: newInt32Pointer(daemon.Status.NumberAvailable),
 					},
@@ -453,7 +458,8 @@ func (kube *Kube) GetResources() (
 						),
 					),
 					ReplicasStatus: proto.ReplicasStatus{
-						Desired:   newInt32Pointer(replicaSet.Status.Replicas),
+						Desired:   replicaSet.Spec.Replicas,
+						Current:   newInt32Pointer(replicaSet.Status.Replicas),
 						Ready:     newInt32Pointer(replicaSet.Status.ReadyReplicas),
 						Available: newInt32Pointer(replicaSet.Status.AvailableReplicas),
 					},
@@ -494,7 +500,7 @@ func (kube *Kube) GetResources() (
 						),
 					),
 					ReplicasStatus: proto.ReplicasStatus{
-						Ready: newInt32Pointer(activeCount),
+						Current: newInt32Pointer(activeCount),
 					},
 				})
 			}
