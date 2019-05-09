@@ -3,7 +3,7 @@ package proc
 import "github.com/MagalixCorp/magalix-agent/watcher"
 
 // GetContainerStateStatus a helper function to get the status of the container
-func GetContainerStateStatus(state watcher.ContainerState) (watcher.Status, *watcher.ContainerStatusSource) {
+func GetContainerStateStatus(state ContainerState) (watcher.Status, *watcher.ContainerStatusSource) {
 	var status watcher.Status
 	var source *watcher.ContainerStatusSource
 

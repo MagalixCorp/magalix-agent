@@ -140,7 +140,7 @@ func (proc *Proc) handlePod(pod Pod, oomKilled chan uuid.UUID) {
 
 	for container, state := range pod.Containers {
 		updated := false
-		if service.IsOOMKilled(state) {
+		if state.IsOOMKilled() {
 			oomKilled <- container
 		}
 		WithLock(service, func() {

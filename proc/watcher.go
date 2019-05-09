@@ -511,7 +511,7 @@ func (observer *Observer) handlePod(pod *kapi.Pod) error {
 		)
 	}
 
-	containers := map[uuid.UUID]watcher.ContainerState{}
+	containers := map[uuid.UUID]ContainerState{}
 	for _, container := range pod.Status.ContainerStatuses {
 		id, err := observer.identificator.GetContainerID(pod, container.Name)
 		if err != nil {
@@ -519,7 +519,7 @@ func (observer *Observer) handlePod(pod *kapi.Pod) error {
 				Describe("container_name", container.Name).
 				Format(err, "unable to obtain container ID")
 		}
-		containers[id] = watcher.ContainerState{container.State, container.LastTerminationState}
+		containers[id] = ContainerState{container.State, container.LastTerminationState}
 	}
 
 	observer.pods <- Pod{

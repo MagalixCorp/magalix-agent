@@ -1,22 +1,30 @@
 package proc
 
 import (
-	"sync"
-
 	"github.com/MagalixCorp/magalix-agent/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
-	karma "github.com/reconquest/karma-go"
+	"github.com/reconquest/karma-go"
+	kapi "k8s.io/api/core/v1"
+	"sync"
 )
 
 // PodName pod name
 type PodName = string
+
+// ContainerState a struct to hold the container state
+// it keeps the last termination state to detect OOMs in case
+// of CrashLoops
+type ContainerState struct {
+	Current              kapi.ContainerState
+	LastTerminationState kapi.ContainerState
+}
 
 // ServiceState defines the service state
 type ServiceState struct {
 	status     watcher.Status
 	replicas   int
 	pods       map[PodName]watcher.Status
-	containers map[uuid.UUID]watcher.ContainerState
+	containers map[uuid.UUID]ContainerState
 	*sync.RWMutex
 }
 
@@ -66,7 +74,7 @@ func (service *ServiceState) GetReplicas() int {
 }
 
 // IsOOMKilled returns if the service is oom killed
-func (service *ServiceState) IsOOMKilled(state watcher.ContainerState) bool {
+func (state *ContainerState) IsOOMKilled() bool {
 	return (state.Current.Terminated != nil && state.Current.Terminated.Reason == "OOMKilled") ||
 		(state.Current.Running == nil &&
 			state.LastTerminationState.Running == nil &&
@@ -77,7 +85,7 @@ func (service *ServiceState) IsOOMKilled(state watcher.ContainerState) bool {
 // IsSameContainerState checks if the state is the same for a container inside the service
 func (service *ServiceState) IsSameContainerState(
 	container uuid.UUID,
-	state watcher.ContainerState,
+	state ContainerState,
 ) bool {
 	prev, ok := service.containers[container]
 	if !ok {
@@ -103,7 +111,7 @@ func (service *ServiceState) IsSameContainerState(
 
 // SetContainerState setter for container state
 func (service *ServiceState) SetContainerState(
-	container uuid.UUID, state watcher.ContainerState,
+	container uuid.UUID, state ContainerState,
 ) {
 	service.containers[container] = state
 }

@@ -44,7 +44,7 @@ func (app *AppState) NewService(
 ) *ServiceState {
 	service := &ServiceState{
 		RWMutex:    &sync.RWMutex{},
-		containers: map[uuid.UUID]watcher.ContainerState{},
+		containers: map[uuid.UUID]ContainerState{},
 	}
 
 	app.services[id] = service
