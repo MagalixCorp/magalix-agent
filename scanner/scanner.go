@@ -231,7 +231,15 @@ func (scanner *Scanner) getApplications() (
 		)
 	}
 
+	for _, pod := range pods {
+		if pod.GetNamespace() == "yasser-debug" {
+			print("aaaa")
+		}
+	}
+
+	scanner.mutex.Lock()
 	scanner.pods = pods
+	scanner.mutex.Unlock()
 
 	var apps []*Application
 
@@ -742,26 +750,37 @@ func (scanner *Scanner) FindContainerWithParents(
 	podName string,
 	containerName string,
 ) (c *Container, s *Service, a *Application, found bool) {
-	appID, serviceID, container, found := scanner.FindContainer(namespace, podName, containerName)
-	if !found {
-		return
-	}
-
-	c = container
-
 	scanner.mutex.Lock()
 	defer scanner.mutex.Unlock()
-	found = false
+
 	for _, app := range scanner.apps {
-		if app.ID == appID {
-			for _, service := range app.Services {
-				if service.ID == serviceID {
-					found = true
-					a = app
-					s = service
-				}
-			}
+		if app.Name != namespace {
+			continue
 		}
+
+		for _, service := range app.Services {
+			if !service.PodRegexp.MatchString(podName) {
+				continue
+			}
+
+			for _, searchContainer := range service.Containers {
+				if searchContainer.Name != containerName {
+					continue
+				}
+
+				a = app
+				s = service
+				c = searchContainer
+
+				found = true
+
+				break
+			}
+
+			break
+		}
+
+		break
 	}
 
 	return
