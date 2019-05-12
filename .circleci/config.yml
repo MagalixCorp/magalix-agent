@@ -162,8 +162,10 @@ jobs:
 
             if [[ "$CIRCLE_BRANCH" == "master" ]]; then
               push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD} ${AGENT_TAG}
+              push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD} stable
             else
               push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} ${AGENT_TAG}
+              push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} stable
             fi
 
 
