@@ -140,7 +140,8 @@ jobs:
               exit 0
             fi
 
-            export AGENT_TAG=1.5
+            export AGENT_TAG_MAJOR=1
+            export AGENT_TAG_MINOR=1.0.0
 
             cd $SOURCE_PATH
 
@@ -161,10 +162,12 @@ jobs:
             }
 
             if [[ "$CIRCLE_BRANCH" == "master" ]]; then
-              push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD} ${AGENT_TAG}
+              push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD} ${AGENT_TAG_MAJOR}
+              push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD} ${AGENT_TAG_MINOR}
               push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD} stable
             else
-              push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} ${AGENT_TAG}
+              push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} ${AGENT_TAG_MAJOR}
+              push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} ${AGENT_TAG_MINOR}
               push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} stable
             fi
 
