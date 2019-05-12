@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/MagalixCorp/magalix-agent/utils"
@@ -733,9 +734,55 @@ func (kube *Kube) GetStatefulSet(namespace, name string) (
 }
 
 // SetResources set resources for a service
-func (kube *Kube) SetResources(kind string, name string, namespace string, totalResources TotalResources) error {
+func (kube *Kube) SetResources(
+	kind string,
+	name string,
+	namespace string,
+	totalResources TotalResources,
+) (skipped bool, err error) {
 	if len(totalResources.Containers) == 0 && totalResources.Replicas == nil {
-		return fmt.Errorf("invalid resources passed, nothing to change")
+		return false, fmt.Errorf("invalid resources passed, nothing to change")
+	}
+
+	if strings.ToLower(kind) == "statefulset" {
+		statefulSet, err := kube.GetStatefulSet(namespace, name)
+		if err != nil {
+			return false, karma.Format(err, "unable to get sts definition")
+		}
+
+		ctx := karma.
+			Describe("replicas", statefulSet.Spec.Replicas)
+
+		if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas > 1 {
+			msg := fmt.Sprintf("sts replicas %v > 1", statefulSet.Spec.Replicas)
+
+			updateStrategy := statefulSet.Spec.UpdateStrategy.Type
+			ctx = ctx.
+				Describe("update-strategy", updateStrategy)
+
+			if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
+
+				// no rollingUpdate spec, then Partition = 0
+				if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil {
+					partition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
+					ctx = ctx.
+						Describe("rolling-update-partition", partition)
+
+					if partition != nil && *partition != 0 {
+						return true, karma.Format(
+							ctx.Reason(nil),
+							msg+" and Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
+						)
+					}
+				}
+
+			} else {
+				return true, karma.Format(
+					ctx.Reason(nil),
+					msg+" and Spec.UpdateStrategy not equal 'RollingUpdate'",
+				)
+			}
+		}
 	}
 
 	var containerSpecs = make([]map[string]interface{}, len(totalResources.Containers))
@@ -775,7 +822,7 @@ func (kube *Kube) SetResources(kind string, name string, namespace string, total
 		}
 
 		if len(resources) == 0 {
-			return fmt.Errorf(
+			return false, fmt.Errorf(
 				"invalid resources for container: %s",
 				container.Name,
 			)
@@ -810,7 +857,7 @@ func (kube *Kube) SetResources(kind string, name string, namespace string, total
 
 	b, err := json.Marshal(body)
 	if err != nil {
-		return err
+		return false, err
 	}
 	req := kube.ClientV1Beta2.RESTClient().Patch(types.StrategicMergePatchType).
 		Resource(kind + "s").
@@ -821,7 +868,7 @@ func (kube *Kube) SetResources(kind string, name string, namespace string, total
 	res := req.Do()
 
 	_, err = res.Get()
-	return err
+	return false, err
 }
 
 func maskPodSpec(podSpec *kv1.PodSpec) {

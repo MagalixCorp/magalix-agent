@@ -110,7 +110,7 @@ func (p *OOMKillsProcessor) handleContainer(status IdentifiedContainer) {
 		return
 	}
 
-	err := p.kube.SetResources(service.Kind, service.Name, application.Name, kuber.TotalResources{
+	skipped, err := p.kube.SetResources(service.Kind, service.Name, application.Name, kuber.TotalResources{
 		Containers: []kuber.ContainerResourcesRequirements{
 			{
 				Name: container.Name,
@@ -122,10 +122,18 @@ func (p *OOMKillsProcessor) handleContainer(status IdentifiedContainer) {
 	})
 
 	if err != nil {
-		p.logger.Errorf(
-			ctx.Reason(err),
-			"unable to execute OOMKill handler",
-		)
+		if skipped {
+			p.logger.Errorf(
+				ctx.Reason(err),
+				"skipping OOMMKill handler execution",
+			)
+		} else {
+			p.logger.Errorf(
+				ctx.Reason(err),
+				"unable to execute OOMKill handler",
+			)
+		}
+
 		return
 	}
 

@@ -2,9 +2,6 @@ package executor
 
 import (
 	"encoding/json"
-	"fmt"
-	"strings"
-
 	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/proto"
@@ -12,7 +9,6 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
-	"k8s.io/api/apps/v1"
 )
 
 // Executor decision executor
@@ -108,53 +104,6 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 			Describe("service-name", name).
 			Describe("kind", kind)
 
-		if strings.ToLower(kind) == "statefulset" {
-			statefulSet, err := executor.kube.GetStatefulSet(namespace, name)
-			if err != nil {
-				response := executor.handleExecutionError(ctx, decision, err, nil)
-				responses = append(responses, *response)
-				continue
-			}
-
-			ctx = ctx.
-				Describe("replicas", statefulSet.Spec.Replicas)
-
-			if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas > 1 {
-				msg := fmt.Sprintf("sts replicas %v > 1", statefulSet.Spec.Replicas)
-
-				updateStrategy := statefulSet.Spec.UpdateStrategy.Type
-				ctx = ctx.
-					Describe("update-strategy", updateStrategy)
-
-				if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
-
-					// no rollingUpdate spec, then Partition = 0
-					if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil {
-						partition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
-						ctx = ctx.
-							Describe("rolling-update-partition", partition)
-
-						if partition != nil && *partition != 0 {
-							response := executor.handleExecutionSkipping(
-								ctx, decision,
-								msg+" and Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
-							)
-							responses = append(responses, *response)
-							continue
-						}
-					}
-
-				} else {
-					response := executor.handleExecutionSkipping(
-						ctx, decision,
-						msg+" and Spec.UpdateStrategy not equal 'RollingUpdate'",
-					)
-					responses = append(responses, *response)
-					continue
-				}
-			}
-		}
-
 		totalResources := kuber.TotalResources{
 			Replicas:   decision.TotalResources.Replicas,
 			Containers: make([]kuber.ContainerResourcesRequirements, 0, len(decision.TotalResources.Containers)),
@@ -196,9 +145,14 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 			responses = append(responses, *response)
 			continue
 		} else {
-			err = executor.kube.SetResources(kind, name, namespace, totalResources)
+			skipped, err := executor.kube.SetResources(kind, name, namespace, totalResources)
 			if err != nil {
-				response := executor.handleExecutionError(ctx, decision, err, nil)
+				var response *proto.DecisionExecutionResponse
+				if skipped {
+					response = executor.handleExecutionSkipping(ctx, decision, err.Error())
+				} else {
+					response = executor.handleExecutionError(ctx, decision, err, nil)
+				}
 				responses = append(responses, *response)
 				continue
 			}
