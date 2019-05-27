@@ -803,7 +803,7 @@ func (kube *Kube) SetResources(
 			if _, ok := resources["limits"]; !ok {
 				resources["limits"] = map[string]interface{}{}
 			}
-			resources["limits"]["cpi"] = cpuLimits
+			resources["limits"]["cpu"] = cpuLimits
 		}
 
 		if container.Requests.Memory != nil {
