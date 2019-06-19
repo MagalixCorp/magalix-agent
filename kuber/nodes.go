@@ -1,6 +1,7 @@
 package kuber
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/MagalixTechnologies/uuid-go"
@@ -195,20 +196,36 @@ func GetNodes(nodes []kapi.Node) []Node {
 			}
 		}
 
-		instanceType := labels["beta.kubernetes.io/instance-type"]
+		instanceType, cloudProvider := labels["beta.kubernetes.io/instance-type"]
 		instanceSize := ""
 
-		_, gcloud := labels["cloud.google.com/gke-nodepool"]
-		if gcloud {
-			if strings.Contains(instanceType, "-") {
-				parts := strings.SplitN(instanceType, "-", 2)
-				instanceType, instanceSize = parts[0], parts[1]
+		capacity := GetNodeCapacity(node.Status.Capacity)
+
+		if cloudProvider {
+			_, gcloud := labels["cloud.google.com/gke-nodepool"]
+			if gcloud {
+				if strings.Contains(instanceType, "-") {
+					parts := strings.SplitN(instanceType, "-", 2)
+					instanceType, instanceSize = parts[0], parts[1]
+				}
+			} else {
+				if strings.Contains(instanceType, ".") {
+					parts := strings.SplitN(instanceType, ".", 2)
+					instanceType, instanceSize = parts[0], parts[1]
+				}
 			}
 		} else {
-			if strings.Contains(instanceType, ".") {
-				parts := strings.SplitN(instanceType, ".", 2)
-				instanceType, instanceSize = parts[0], parts[1]
-			}
+			// for custom on-perm clusters we use node capacity as instance type
+			instanceType = "custom"
+
+			cpuCores := capacity.CPU / 1000
+			memoryGi := float64(capacity.Memory) / 1024 / 1024 / 1024
+
+			instanceSize = fmt.Sprintf(
+				"cpu-%d--memory-%.2f",
+				cpuCores,
+				memoryGi,
+			)
 		}
 
 		provider := strings.Split(node.Spec.ProviderID, ":")[0]
@@ -221,7 +238,7 @@ func GetNodes(nodes []kapi.Node) []Node {
 			InstanceType: instanceType,
 			InstanceSize: instanceSize,
 			Provider:     provider,
-			Capacity:     GetNodeCapacity(node.Status.Capacity),
+			Capacity:     capacity,
 			Allocatable:  GetNodeCapacity(node.Status.Allocatable),
 		})
 	}
