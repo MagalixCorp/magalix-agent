@@ -750,38 +750,33 @@ func (kube *Kube) SetResources(
 			return false, karma.Format(err, "unable to get sts definition")
 		}
 
+		updateStrategy := statefulSet.Spec.UpdateStrategy.Type
+
 		ctx := karma.
-			Describe("replicas", statefulSet.Spec.Replicas)
+			Describe("replicas", statefulSet.Spec.Replicas).
+			Describe("update-strategy", updateStrategy)
 
-		if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas > 1 {
-			msg := fmt.Sprintf("sts replicas %v > 1", statefulSet.Spec.Replicas)
+		if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
 
-			updateStrategy := statefulSet.Spec.UpdateStrategy.Type
-			ctx = ctx.
-				Describe("update-strategy", updateStrategy)
+			// no rollingUpdate spec, then Partition = 0
+			if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil {
+				partition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
+				ctx = ctx.
+					Describe("rolling-update-partition", partition)
 
-			if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
-
-				// no rollingUpdate spec, then Partition = 0
-				if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil {
-					partition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
-					ctx = ctx.
-						Describe("rolling-update-partition", partition)
-
-					if partition != nil && *partition != 0 {
-						return true, karma.Format(
-							ctx.Reason(nil),
-							msg+" and Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
-						)
-					}
+				if partition != nil && *partition != 0 {
+					return true, karma.Format(
+						ctx.Reason(nil),
+						"Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
+					)
 				}
-
-			} else {
-				return true, karma.Format(
-					ctx.Reason(nil),
-					msg+" and Spec.UpdateStrategy not equal 'RollingUpdate'",
-				)
 			}
+
+		} else {
+			return true, karma.Format(
+				ctx.Reason(nil),
+				"Spec.UpdateStrategy not equal 'RollingUpdate'",
+			)
 		}
 	}
 
