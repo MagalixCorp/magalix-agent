@@ -202,6 +202,7 @@ type PacketRegisterNodeItem struct {
 	ID            uuid.UUID                              `json:"id,omitempty"`
 	Name          string                                 `json:"name"`
 	IP            string                                 `json:"ip"`
+	Roles          string                                 `json:"roles"`
 	Region        string                                 `json:"region,omitempty"`
 	Provider      string                                 `json:"provider,omitempty"`
 	InstanceType  string                                 `json:"instance_type,omitempty"`

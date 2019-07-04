@@ -9,10 +9,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+const NodeRoleLabelPrefix = "node-role.kubernetes.io/"
+
 type Node struct {
 	ID            uuid.UUID    `json:"id,omitempty"`
 	Name          string       `json:"name"`
 	IP            string       `json:"ip"`
+	Roles         string       `json:"roles"`
 	KubeletPort   int32        `json:"port"`
 	Provider      string       `json:"provider,omitempty"`
 	Region        string       `json:"region,omitempty"`
@@ -230,9 +233,22 @@ func GetNodes(nodes []kapi.Node) []Node {
 
 		provider := strings.Split(node.Spec.ProviderID, ":")[0]
 
+		var nodeRoles []string
+
+		for key := range labels {
+			if strings.HasPrefix(key, NodeRoleLabelPrefix) {
+				nodeRoles = append(
+					nodeRoles,
+					strings.Replace(key, NodeRoleLabelPrefix, "", 1),
+				)
+				break
+			}
+		}
+
 		result = append(result, Node{
 			Name:         node.ObjectMeta.Name,
 			IP:           address,
+			Roles:        strings.Join(nodeRoles, ","),
 			KubeletPort:  node.Status.DaemonEndpoints.KubeletEndpoint.Port,
 			Region:       labels["failure-domain.beta.kubernetes.io/region"],
 			InstanceType: instanceType,
