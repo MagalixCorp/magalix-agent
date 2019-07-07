@@ -166,7 +166,6 @@ func GetContainers(
 				requests := kcontainer.Resources.Requests
 
 				containers = append(containers, &Container{
-					//Cluster:   kube.config.Name,
 					Node:      kpod.Spec.NodeName,
 					Pod:       kpod.Name,
 					Namespace: kpod.Namespace,

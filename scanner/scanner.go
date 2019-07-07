@@ -231,12 +231,6 @@ func (scanner *Scanner) getApplications() (
 		)
 	}
 
-	for _, pod := range pods {
-		if pod.GetNamespace() == "yasser-debug" {
-			print("aaaa")
-		}
-	}
-
 	scanner.mutex.Lock()
 	scanner.pods = pods
 	scanner.mutex.Unlock()
