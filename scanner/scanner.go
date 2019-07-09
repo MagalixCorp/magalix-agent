@@ -302,6 +302,9 @@ func (scanner *Scanner) getApplications() (
 
 				Image:     container.Image,
 				Resources: resources,
+
+				LivenessProbe:  container.LivenessProbe,
+				ReadinessProbe: container.ReadinessProbe,
 			})
 
 			scanner.logger.Tracef(

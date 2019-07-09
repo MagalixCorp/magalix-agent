@@ -123,6 +123,9 @@ type PacketRegisterContainerItem struct {
 
 	Image     string          `json:"image"`
 	Resources json.RawMessage `json:"resources"`
+
+	LivenessProbe  json.RawMessage `json:"liveness_probe"`
+	ReadinessProbe json.RawMessage `json:"readiness_probe"`
 }
 
 type ContainerResourceRequirements struct {
@@ -202,7 +205,7 @@ type PacketRegisterNodeItem struct {
 	ID            uuid.UUID                              `json:"id,omitempty"`
 	Name          string                                 `json:"name"`
 	IP            string                                 `json:"ip"`
-	Roles          string                                 `json:"roles"`
+	Roles         string                                 `json:"roles"`
 	Region        string                                 `json:"region,omitempty"`
 	Provider      string                                 `json:"provider,omitempty"`
 	InstanceType  string                                 `json:"instance_type,omitempty"`

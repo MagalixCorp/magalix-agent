@@ -59,13 +59,20 @@ func PacketApplications(applications []*Application) proto.PacketApplicationsSto
 
 			for _, container := range service.Containers {
 				// TODO: converting here to json for gob encoding, properly fix later
-				b, _ := json.Marshal(container.Resources)
+				resources, _ := json.Marshal(container.Resources)
+				lProbe, _ := json.Marshal(container.LivenessProbe)
+				rProbe, _ := json.Marshal(container.ReadinessProbe)
+
 				containers = append(
 					containers,
 					proto.PacketRegisterContainerItem{
 						PacketRegisterEntityItem: proto.PacketRegisterEntityItem(container.Entity),
-						Image:                    container.Image,
-						Resources:                b,
+
+						Image:     container.Image,
+						Resources: resources,
+
+						LivenessProbe:  lProbe,
+						ReadinessProbe: rProbe,
 					},
 				)
 			}

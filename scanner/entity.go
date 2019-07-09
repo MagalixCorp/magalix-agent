@@ -57,6 +57,9 @@ type Container struct {
 
 	Image     string
 	Resources *proto.ContainerResourceRequirements `json:"resources"`
+
+	LivenessProbe  *kv1.Probe
+	ReadinessProbe *kv1.Probe
 }
 
 func IdentifyEntity(target string, parent uuid.UUID) (uuid.UUID, error) {
