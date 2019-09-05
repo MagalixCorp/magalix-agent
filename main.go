@@ -16,11 +16,15 @@ import (
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scalar"
 	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixCorp/magalix-agent/scanner2"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
 	"github.com/reconquest/karma-go"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 var usage = `agent - magalix services agent.
@@ -132,6 +136,65 @@ func main() {
 		"magalix agent started",
 	)
 
+	var config *rest.Config
+
+	if args["--kube-incluster"].(bool) {
+		stderr.Infof(nil, "initializing kubernetes incluster config")
+
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			panic(karma.Format(
+				err,
+				"unable to get incluster config",
+			))
+		}
+
+	} else {
+		stderr.Infof(
+			nil,
+			"initializing kubernetes user-defined config",
+		)
+
+		token, _ := args["--kube-token"].(string)
+		if token == "" {
+			token = os.Getenv("KUBE_TOKEN")
+		}
+
+		config = &rest.Config{}
+		config.ContentType = runtime.ContentTypeJSON
+		config.APIPath = "/api"
+		config.Host = args["--kube-url"].(string)
+		config.BearerToken = token
+
+		//{
+		//	tlsClientConfig := rest.TLSClientConfig{}
+		//	rootCAFile, ok := args["--kube-root-ca-cert"].(string)
+		//	if ok {
+		//		if _, err := certutil.NewPool(rootCAFile); err != nil {
+		//			fmt.Printf("Expected to load root CA config from %s, but got err: %v", rootCAFile, err)
+		//		} else {
+		//			tlsClientConfig.CAFile = rootCAFile
+		//		}
+		//		config.TLSClientConfig = tlsClientConfig
+		//	}
+		//}
+
+		if args["--kube-insecure"].(bool) {
+			config.Insecure = true
+		}
+	}
+
+	config.Timeout = utils.MustParseDuration(args, "--kube-timeout")
+
+	dynamicClient, err := dynamic.NewForConfig(config)
+
+	observer := scanner2.NewObserver(
+		stderr,
+		dynamicClient,
+		make(chan struct{}, 0),
+		time.Minute*5,
+	)
+
 	secret, err := base64.StdEncoding.DecodeString(
 		utils.ExpandEnv(args, "--client-secret", false),
 	)
@@ -169,11 +232,15 @@ func main() {
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
+	defer observer.Stop()
 
 	if err != nil {
 		stderr.Fatalf(err, "unable to connect to gateway")
 		os.Exit(1)
 	}
+
+	ew := scanner2.NewEntitiesWatcher(stderr, observer, gwClient)
+	ew.Start()
 
 	kube, err := kuber.InitKubernetes(args, gwClient)
 	if err != nil {

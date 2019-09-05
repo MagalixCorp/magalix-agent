@@ -20,6 +20,9 @@ const (
 
 	PacketKindNodesStoreRequest PacketKind = "nodes/store"
 
+	PacketKindEntitiesDeltasRequest PacketKind = "entities/deltas"
+	PacketKindEntitiesResyncRequest PacketKind = "entities/resync"
+
 	PacketKindEventLastValueRequest PacketKind = "events/query/last_value"
 	PacketKindEventsStoreRequest    PacketKind = "events/store"
 

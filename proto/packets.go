@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/watcher"
@@ -14,7 +16,9 @@ import (
 	satori "github.com/satori/go.uuid"
 	"k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
-	kv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -27,9 +31,9 @@ var (
 		new(watcher.Status),
 		new(watcher.ContainerStatusSource),
 
-		new(kv1.NodeList),
-		new(kv1.LimitRangeList),
-		new(kv1.PodList),
+		new(corev1.NodeList),
+		new(corev1.LimitRangeList),
+		new(corev1.PodList),
 
 		new(v1beta1.CronJobList),
 
@@ -101,7 +105,7 @@ type PacketRegisterEntityItem struct {
 type PacketRegisterApplicationItem struct {
 	PacketRegisterEntityItem
 
-	LimitRanges []kv1.LimitRange            `json:"limit_ranges"`
+	LimitRanges []corev1.LimitRange         `json:"limit_ranges"`
 	Services    []PacketRegisterServiceItem `json:"services"`
 }
 
@@ -129,14 +133,14 @@ type PacketRegisterContainerItem struct {
 }
 
 type ContainerResourceRequirements struct {
-	kv1.ResourceRequirements
-	SpecResourceRequirements kv1.ResourceRequirements `json:"spec_resources_requirements,omitempty"`
+	corev1.ResourceRequirements
+	SpecResourceRequirements corev1.ResourceRequirements `json:"spec_resources_requirements,omitempty"`
 
 	LimitsKinds   ResourcesRequirementsKind `json:"limits_kinds,omitempty"`
 	RequestsKinds ResourcesRequirementsKind `json:"requests_kinds,omitempty"`
 }
 
-type ResourcesRequirementsKind = map[kv1.ResourceName]string
+type ResourcesRequirementsKind = map[corev1.ResourceName]string
 
 const (
 	ResourceRequirementKindSet                = "set"
@@ -323,6 +327,40 @@ type PacketRawRequest struct {
 	Timestamp time.Time
 }
 type PacketRawResponse struct{}
+
+type EntityDeltaKind string
+
+const (
+	EntityEventTypeUpsert EntityDeltaKind = "UPSERT"
+	EntityEventTypeDelete EntityDeltaKind = "DELETE"
+)
+
+type PacketEntityDelta struct {
+	Gvr       schema.GroupVersionResource `json:"gvr"`
+	DeltaKind EntityDeltaKind             `json:"delta_kink"`
+	Data      unstructured.Unstructured   `json:"data"`
+	Timestamp time.Time                   `json:"timestamp"`
+}
+
+type PacketEntitiesDeltasRequest struct {
+	Items     []PacketEntityDelta `json:"items"`
+	Timestamp time.Time           `json:"timestamp"`
+}
+type PacketEntitiesDeltasResponse struct{}
+
+type PacketEntitiesResyncItem struct {
+	Gvr  schema.GroupVersionResource  `json:"gvr"`
+	Data []*unstructured.Unstructured `json:"data"`
+}
+
+type PacketEntitiesResyncRequest struct {
+	Timestamp time.Time `json:"timestamp"`
+
+	// map of entities kind and entities definitions
+	// it holds other entities not already specified in attributes above
+	Snapshot map[string]PacketEntitiesResyncItem `json:"snapshot"`
+}
+type PacketEntitiesResyncResponse struct{}
 
 func Decode(in []byte, out interface{}) error {
 	return DecodeGOB(in, out)
