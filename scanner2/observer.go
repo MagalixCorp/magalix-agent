@@ -2,6 +2,7 @@ package scanner2
 
 import (
 	"bytes"
+	"strings"
 	"time"
 
 	"github.com/MagalixTechnologies/log-go"
@@ -11,10 +12,6 @@ import (
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
-
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 type Observer struct {
@@ -24,20 +21,14 @@ type Observer struct {
 	stopCh chan struct{}
 }
 
-var (
-	Nodes                  = corev1.SchemeGroupVersion.WithResource("nodes")
-	Namespaces             = corev1.SchemeGroupVersion.WithResource("namespaces")
-	LimitRanges            = corev1.SchemeGroupVersion.WithResource("limitranges")
-	Pods                   = corev1.SchemeGroupVersion.WithResource("pods")
-	ReplicationControllers = corev1.SchemeGroupVersion.WithResource("replicationcontrollers")
+type GroupVersionResourceKind struct {
+	schema.GroupVersionResource
+	Kind string
+}
 
-	Deployments  = appsv1.SchemeGroupVersion.WithResource("deployments")
-	StatefulSets = appsv1.SchemeGroupVersion.WithResource("statefulsets")
-	DaemonSets   = appsv1.SchemeGroupVersion.WithResource("daemonsets")
-	ReplicaSets  = appsv1.SchemeGroupVersion.WithResource("replicasets")
-
-	CronJobs = batchv1beta1.SchemeGroupVersion.WithResource("cronjobs")
-)
+func (gvrk GroupVersionResourceKind) String() string {
+	return strings.Join([]string{gvrk.Group, "/", gvrk.Version, ", Resource=", gvrk.Resource, ", Kind=", gvrk.Kind}, "")
+}
 
 func NewObserver(
 	logger *log.Logger,
@@ -54,27 +45,27 @@ func NewObserver(
 }
 
 func (observer *Observer) Watch(
-	gvr schema.GroupVersionResource,
+	gvrk GroupVersionResourceKind,
 ) *watcher {
 	observer.logger.Infof(
 		nil,
 		"subscribed on changes about resource: %s",
-		gvr.String(),
+		gvrk.String(),
 	)
 
-	watcher := observer.WatcherFor(gvr)
+	watcher := observer.WatcherFor(gvrk)
 	observer.Start()
 
 	return watcher
 }
 
 func (observer *Observer) WatcherFor(
-	gvr schema.GroupVersionResource,
+	gvrk GroupVersionResourceKind,
 ) *watcher {
-	informer := observer.ForResource(gvr)
+	informer := observer.ForResource(gvrk.GroupVersionResource)
 
 	return &watcher{
-		gvr:      gvr,
+		gvrk:     gvrk,
 		logger:   observer.logger,
 		informer: informer,
 	}
@@ -93,7 +84,7 @@ func (observer *Observer) WaitForCacheSync() {
 }
 
 type Watcher interface {
-	GetGroupVersionResource() schema.GroupVersionResource
+	GetGroupVersionResourceKind() GroupVersionResourceKind
 
 	Lister() cache.GenericLister
 
@@ -119,13 +110,13 @@ type Watcher interface {
 }
 
 type watcher struct {
-	gvr      schema.GroupVersionResource
+	gvrk     GroupVersionResourceKind
 	logger   *log.Logger
 	informer informers.GenericInformer
 }
 
-func (w *watcher) GetGroupVersionResource() schema.GroupVersionResource {
-	return w.gvr
+func (w *watcher) GetGroupVersionResourceKind() GroupVersionResourceKind {
+	return w.gvrk
 }
 
 func (w *watcher) Lister() cache.GenericLister {
@@ -133,11 +124,11 @@ func (w *watcher) Lister() cache.GenericLister {
 }
 
 func (w *watcher) AddEventHandler(handler ResourceEventHandler) {
-	w.informer.Informer().AddEventHandler(wrapHandler(handler, w.logger, w.gvr))
+	w.informer.Informer().AddEventHandler(wrapHandler(handler, w.logger, w.gvrk))
 }
 
 func (w *watcher) AddEventHandlerWithResyncPeriod(handler ResourceEventHandler, resyncPeriod time.Duration) {
-	w.informer.Informer().AddEventHandlerWithResyncPeriod(wrapHandler(handler, w.logger, w.gvr), resyncPeriod)
+	w.informer.Informer().AddEventHandlerWithResyncPeriod(wrapHandler(handler, w.logger, w.gvrk), resyncPeriod)
 }
 
 func (w *watcher) HasSynced() bool {
@@ -151,7 +142,7 @@ func (w *watcher) LastSyncResourceVersion() string {
 func wrapHandler(
 	wrapped ResourceEventHandler,
 	logger *log.Logger,
-	gvr schema.GroupVersionResource,
+	gvrk GroupVersionResourceKind,
 ) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -161,7 +152,7 @@ func wrapHandler(
 				logger.Error("unable to cast obj to *Unstructured")
 			}
 			if objUn != nil {
-				wrapped.OnAdd(now, gvr, *objUn)
+				wrapped.OnAdd(now, gvrk, *objUn)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -195,7 +186,7 @@ func wrapHandler(
 				}
 			}
 			if oldUn != nil && newUn != nil {
-				wrapped.OnUpdate(now, gvr, *oldUn, *newUn)
+				wrapped.OnUpdate(now, gvrk, *oldUn, *newUn)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -205,14 +196,14 @@ func wrapHandler(
 				logger.Error("unable to cast obj to *Unstructured")
 			}
 			if objUn != nil {
-				wrapped.OnDelete(now, gvr, *objUn)
+				wrapped.OnDelete(now, gvrk, *objUn)
 			}
 		},
 	}
 }
 
 type ResourceEventHandler interface {
-	OnAdd(now time.Time, gvr schema.GroupVersionResource, obj unstructured.Unstructured)
-	OnUpdate(now time.Time, gvr schema.GroupVersionResource, oldObj, newObj unstructured.Unstructured)
-	OnDelete(now time.Time, gvr schema.GroupVersionResource, obj unstructured.Unstructured)
+	OnAdd(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnUpdate(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
+	OnDelete(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
 }

@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/watcher"
@@ -17,6 +15,7 @@ import (
 	"k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -335,11 +334,25 @@ const (
 	EntityEventTypeDelete EntityDeltaKind = "DELETE"
 )
 
+type ParentController struct {
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	APIVersion string `json:"api_version"`
+
+	Parent *ParentController `json:"parent"`
+}
+
+type GroupVersionResourceKind struct {
+	schema.GroupVersionResource
+	Kind string `json:"kind"`
+}
+
 type PacketEntityDelta struct {
-	Gvr       schema.GroupVersionResource `json:"gvr"`
-	DeltaKind EntityDeltaKind             `json:"delta_kink"`
-	Data      unstructured.Unstructured   `json:"data"`
-	Timestamp time.Time                   `json:"timestamp"`
+	Gvrk      GroupVersionResourceKind  `json:"gvrk"`
+	DeltaKind EntityDeltaKind           `json:"delta_kink"`
+	Data      unstructured.Unstructured `json:"data"`
+	Parents   *ParentController         `json:"parents"`
+	Timestamp time.Time                 `json:"timestamp"`
 }
 
 type PacketEntitiesDeltasRequest struct {
@@ -349,7 +362,7 @@ type PacketEntitiesDeltasRequest struct {
 type PacketEntitiesDeltasResponse struct{}
 
 type PacketEntitiesResyncItem struct {
-	Gvr  schema.GroupVersionResource  `json:"gvr"`
+	Gvrk GroupVersionResourceKind     `json:"gvrk"`
 	Data []*unstructured.Unstructured `json:"data"`
 }
 
