@@ -1,13 +1,11 @@
-package scanner2
+package observer
 
 import (
 	"bytes"
-	"strings"
 	"time"
 
 	"github.com/MagalixTechnologies/log-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
@@ -19,15 +17,6 @@ type Observer struct {
 
 	logger *log.Logger
 	stopCh chan struct{}
-}
-
-type GroupVersionResourceKind struct {
-	schema.GroupVersionResource
-	Kind string
-}
-
-func (gvrk GroupVersionResourceKind) String() string {
-	return strings.Join([]string{gvrk.Group, "/", gvrk.Version, ", Resource=", gvrk.Resource, ", Kind=", gvrk.Kind}, "")
 }
 
 func NewObserver(

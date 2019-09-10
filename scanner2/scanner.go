@@ -5,14 +5,11 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/observer"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -34,63 +31,17 @@ const (
 )
 
 var (
-	Nodes = GroupVersionResourceKind{
-		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("nodes"),
-		Kind:                 "Node",
-	}
-	Namespaces = GroupVersionResourceKind{
-		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("namespaces"),
-		Kind:                 "Namespace",
-	}
-	Pods = GroupVersionResourceKind{
-		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("pods"),
-		Kind:                 "Pod",
-	}
-	ReplicationControllers = GroupVersionResourceKind{
-		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("replicationcontrollers"),
-		Kind:                 "ReplicationController",
-	}
-
-	Deployments = GroupVersionResourceKind{
-		GroupVersionResource: appsv1.SchemeGroupVersion.WithResource("deployments"),
-		Kind:                 "Deployment",
-	}
-	StatefulSets = GroupVersionResourceKind{
-		GroupVersionResource: appsv1.SchemeGroupVersion.WithResource("statefulsets"),
-		Kind:                 "StatefulSet",
-	}
-	DaemonSets = GroupVersionResourceKind{
-		GroupVersionResource: appsv1.SchemeGroupVersion.WithResource("daemonsets"),
-		Kind:                 "DaemonSet",
-	}
-	ReplicaSets = GroupVersionResourceKind{
-		GroupVersionResource: appsv1.SchemeGroupVersion.WithResource("replicasets"),
-		Kind:                 "ReplicaSet",
-	}
-
-	Jobs = GroupVersionResourceKind{
-		GroupVersionResource: batchv1.SchemeGroupVersion.WithResource("jobs"),
-		Kind:                 "Job",
-	}
-	CronJobs = GroupVersionResourceKind{
-		GroupVersionResource: batchv1beta1.SchemeGroupVersion.WithResource("cronjobs"),
-		Kind:                 "CronJob",
-	}
-)
-
-var (
-	watchedResources = []GroupVersionResourceKind{
-		Nodes,
-		Namespaces,
-		//LimitRanges,
-		Pods,
-		ReplicationControllers,
-		Deployments,
-		StatefulSets,
-		DaemonSets,
-		ReplicaSets,
-		Jobs,
-		CronJobs,
+	watchedResources = []observer.GroupVersionResourceKind{
+		observer.Nodes,
+		observer.Namespaces,
+		observer.Pods,
+		observer.ReplicationControllers,
+		observer.Deployments,
+		observer.StatefulSets,
+		observer.DaemonSets,
+		observer.ReplicaSets,
+		observer.Jobs,
+		observer.CronJobs,
 	}
 )
 
@@ -114,10 +65,10 @@ type EntitiesWatcher interface {
 type entitiesWatcher struct {
 	logger   *log.Logger
 	client   *client.Client
-	observer *Observer
+	observer *observer.Observer
 
-	watchers          map[GroupVersionResourceKind]Watcher
-	watchersByKind    map[string]Watcher
+	watchers          map[observer.GroupVersionResourceKind]observer.Watcher
+	watchersByKind    map[string]observer.Watcher
 	deltasQueue       chan proto.PacketEntityDelta
 	flushDeltasChan   chan struct{}
 	suspendDeltasChan chan struct{}
@@ -129,7 +80,7 @@ type entitiesWatcher struct {
 
 func NewEntitiesWatcher(
 	logger *log.Logger,
-	observer *Observer,
+	observer_ *observer.Observer,
 	client_ *client.Client,
 ) EntitiesWatcher {
 	ew := &entitiesWatcher{
@@ -137,9 +88,9 @@ func NewEntitiesWatcher(
 
 		client: client_,
 
-		observer:       observer,
-		watchers:       map[GroupVersionResourceKind]Watcher{},
-		watchersByKind: map[string]Watcher{},
+		observer:       observer_,
+		watchers:       map[observer.GroupVersionResourceKind]observer.Watcher{},
+		watchersByKind: map[string]observer.Watcher{},
 
 		deltasQueue:       make(chan proto.PacketEntityDelta, deltasBufferChanSize),
 		flushDeltasChan:   make(chan struct{}, 0),
@@ -254,17 +205,17 @@ func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
 
 	// send nodes and namespaces before all other deltas because they act as
 	// parents for other resources
-	nodesWatcher := ew.watchers[Nodes]
-	ew.publishGvrk(Nodes, nodesWatcher, tickTime)
+	nodesWatcher := ew.watchers[observer.Nodes]
+	ew.publishGvrk(observer.Nodes, nodesWatcher, tickTime)
 
-	namespacesWatcher := ew.watchers[Namespaces]
-	ew.publishGvrk(Namespaces, namespacesWatcher, tickTime)
+	namespacesWatcher := ew.watchers[observer.Namespaces]
+	ew.publishGvrk(observer.Namespaces, namespacesWatcher, tickTime)
 
 	for gvrk, w := range ew.watchers {
 		// no need for concurrent goroutines here because the lister uses
 		// in-memory cashed data
 
-		if gvrk == Nodes || gvrk == Namespaces {
+		if gvrk == observer.Nodes || gvrk == observer.Namespaces {
 			// already sent
 			continue
 		}
@@ -274,8 +225,8 @@ func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
 }
 
 func (ew *entitiesWatcher) publishGvrk(
-	gvrk GroupVersionResourceKind,
-	w Watcher,
+	gvrk observer.GroupVersionResourceKind,
+	w observer.Watcher,
 	tickTime time.Time,
 ) {
 	resource := gvrk.Resource
@@ -343,12 +294,12 @@ func (ew *entitiesWatcher) getParents(
 }
 
 func (ew *entitiesWatcher) deltaWrapper(
-	gvrk GroupVersionResourceKind,
+	gvrk observer.GroupVersionResourceKind,
 	delta proto.PacketEntityDelta,
 ) (proto.PacketEntityDelta, error) {
 	delta.Gvrk = packetGvrk(gvrk)
 
-	if gvrk == Pods {
+	if gvrk == observer.Pods {
 		parents, err := ew.getParents(&delta.Data)
 		if err != nil {
 			return delta, karma.Format(
@@ -364,7 +315,7 @@ func (ew *entitiesWatcher) deltaWrapper(
 
 func (ew *entitiesWatcher) OnAdd(
 	now time.Time,
-	gvrk GroupVersionResourceKind,
+	gvrk observer.GroupVersionResourceKind,
 	obj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
@@ -384,7 +335,7 @@ func (ew *entitiesWatcher) OnAdd(
 
 func (ew *entitiesWatcher) OnUpdate(
 	now time.Time,
-	gvrk GroupVersionResourceKind,
+	gvrk observer.GroupVersionResourceKind,
 	oldObj, newObj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
@@ -404,7 +355,7 @@ func (ew *entitiesWatcher) OnUpdate(
 
 func (ew *entitiesWatcher) OnDelete(
 	now time.Time,
-	gvrk GroupVersionResourceKind,
+	gvrk observer.GroupVersionResourceKind,
 	obj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
@@ -516,7 +467,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	})
 }
 
-func packetGvrk(gvrk GroupVersionResourceKind) proto.GroupVersionResourceKind {
+func packetGvrk(gvrk observer.GroupVersionResourceKind) proto.GroupVersionResourceKind {
 	return proto.GroupVersionResourceKind{
 		GroupVersionResource: gvrk.GroupVersionResource,
 		Kind:                 gvrk.Kind,
