@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixTechnologies/log-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -34,7 +35,7 @@ func NewObserver(
 }
 
 func (observer *Observer) Watch(
-	gvrk GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 ) *watcher {
 	observer.logger.Infof(
 		nil,
@@ -49,7 +50,7 @@ func (observer *Observer) Watch(
 }
 
 func (observer *Observer) WatcherFor(
-	gvrk GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 ) *watcher {
 	informer := observer.ForResource(gvrk.GroupVersionResource)
 
@@ -73,7 +74,7 @@ func (observer *Observer) WaitForCacheSync() {
 }
 
 type Watcher interface {
-	GetGroupVersionResourceKind() GroupVersionResourceKind
+	GetGroupVersionResourceKind() kuber.GroupVersionResourceKind
 
 	Lister() cache.GenericLister
 
@@ -99,12 +100,12 @@ type Watcher interface {
 }
 
 type watcher struct {
-	gvrk     GroupVersionResourceKind
+	gvrk     kuber.GroupVersionResourceKind
 	logger   *log.Logger
 	informer informers.GenericInformer
 }
 
-func (w *watcher) GetGroupVersionResourceKind() GroupVersionResourceKind {
+func (w *watcher) GetGroupVersionResourceKind() kuber.GroupVersionResourceKind {
 	return w.gvrk
 }
 
@@ -131,7 +132,7 @@ func (w *watcher) LastSyncResourceVersion() string {
 func wrapHandler(
 	wrapped ResourceEventHandler,
 	logger *log.Logger,
-	gvrk GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 ) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -192,7 +193,7 @@ func wrapHandler(
 }
 
 type ResourceEventHandler interface {
-	OnAdd(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
-	OnUpdate(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
-	OnDelete(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnAdd(now time.Time, gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnUpdate(now time.Time, gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
+	OnDelete(now time.Time, gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
 }

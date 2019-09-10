@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
-	"github.com/MagalixCorp/magalix-agent/observer"
+	"github.com/MagalixCorp/magalix-agent/kuber"
+	"github.com/MagalixCorp/magalix-agent/kuber/observer"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -34,17 +35,17 @@ const (
 )
 
 var (
-	watchedResources = []observer.GroupVersionResourceKind{
-		observer.Nodes,
-		observer.Namespaces,
-		observer.Pods,
-		observer.ReplicationControllers,
-		observer.Deployments,
-		observer.StatefulSets,
-		observer.DaemonSets,
-		observer.ReplicaSets,
-		observer.Jobs,
-		observer.CronJobs,
+	watchedResources = []kuber.GroupVersionResourceKind{
+		kuber.Nodes,
+		kuber.Namespaces,
+		kuber.Pods,
+		kuber.ReplicationControllers,
+		kuber.Deployments,
+		kuber.StatefulSets,
+		kuber.DaemonSets,
+		kuber.ReplicaSets,
+		kuber.Jobs,
+		kuber.CronJobs,
 	}
 )
 
@@ -57,7 +58,7 @@ type entitiesWatcher struct {
 	client   *client.Client
 	observer *observer.Observer
 
-	watchers       map[observer.GroupVersionResourceKind]observer.Watcher
+	watchers       map[kuber.GroupVersionResourceKind]observer.Watcher
 	watchersByKind map[string]observer.Watcher
 	deltasQueue    chan proto.PacketEntityDelta
 
@@ -76,7 +77,7 @@ func NewEntitiesWatcher(
 		client: client_,
 
 		observer:       observer_,
-		watchers:       map[observer.GroupVersionResourceKind]observer.Watcher{},
+		watchers:       map[kuber.GroupVersionResourceKind]observer.Watcher{},
 		watchersByKind: map[string]observer.Watcher{},
 
 		deltasQueue: make(chan proto.PacketEntityDelta, deltasBufferChanSize),
@@ -171,17 +172,17 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
 	// send nodes and namespaces before all other deltas because they act as
 	// parents for other resources
-	nodesWatcher := ew.watchers[observer.Nodes]
-	ew.publishGvrk(observer.Nodes, nodesWatcher, tickTime)
+	nodesWatcher := ew.watchers[kuber.Nodes]
+	ew.publishGvrk(kuber.Nodes, nodesWatcher, tickTime)
 
-	namespacesWatcher := ew.watchers[observer.Namespaces]
-	ew.publishGvrk(observer.Namespaces, namespacesWatcher, tickTime)
+	namespacesWatcher := ew.watchers[kuber.Namespaces]
+	ew.publishGvrk(kuber.Namespaces, namespacesWatcher, tickTime)
 
 	for gvrk, w := range ew.watchers {
 		// no need for concurrent goroutines here because the lister uses
 		// in-memory cashed data
 
-		if gvrk == observer.Nodes || gvrk == observer.Namespaces {
+		if gvrk == kuber.Nodes || gvrk == kuber.Namespaces {
 			// already sent
 			continue
 		}
@@ -191,7 +192,7 @@ func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
 }
 
 func (ew *entitiesWatcher) publishGvrk(
-	gvrk observer.GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 	w observer.Watcher,
 	tickTime time.Time,
 ) {
@@ -260,12 +261,12 @@ func (ew *entitiesWatcher) getParents(
 }
 
 func (ew *entitiesWatcher) deltaWrapper(
-	gvrk observer.GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 	delta proto.PacketEntityDelta,
 ) (proto.PacketEntityDelta, error) {
 	delta.Gvrk = packetGvrk(gvrk)
 
-	if gvrk == observer.Pods {
+	if gvrk == kuber.Pods {
 		parents, err := ew.getParents(&delta.Data)
 		if err != nil {
 			return delta, karma.Format(
@@ -281,7 +282,7 @@ func (ew *entitiesWatcher) deltaWrapper(
 
 func (ew *entitiesWatcher) OnAdd(
 	now time.Time,
-	gvrk observer.GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 	obj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
@@ -301,7 +302,7 @@ func (ew *entitiesWatcher) OnAdd(
 
 func (ew *entitiesWatcher) OnUpdate(
 	now time.Time,
-	gvrk observer.GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 	oldObj, newObj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
@@ -321,7 +322,7 @@ func (ew *entitiesWatcher) OnUpdate(
 
 func (ew *entitiesWatcher) OnDelete(
 	now time.Time,
-	gvrk observer.GroupVersionResourceKind,
+	gvrk kuber.GroupVersionResourceKind,
 	obj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
@@ -402,7 +403,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	})
 }
 
-func packetGvrk(gvrk observer.GroupVersionResourceKind) proto.GroupVersionResourceKind {
+func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {
 	return proto.GroupVersionResourceKind{
 		GroupVersionResource: gvrk.GroupVersionResource,
 		Kind:                 gvrk.Kind,

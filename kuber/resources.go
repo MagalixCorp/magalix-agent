@@ -1,4 +1,4 @@
-package observer
+package kuber
 
 import (
 	"strings"
