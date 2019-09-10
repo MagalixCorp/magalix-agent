@@ -1,4 +1,4 @@
-package scanner2
+package entities
 
 import (
 	"fmt"
