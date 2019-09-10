@@ -15,18 +15,21 @@ import (
 )
 
 const (
+	snapshotResyncTickerInterval = 30 * time.Minute
+	snapshotTickerInterval       = 10 * time.Minute
+
 	deltasBufferChanSize       = 1024
 	deltasPacketFlushAfterSize = 100
 	deltasPacketFlushAfterTime = time.Second * 10
 
-	deltasPacketExpireAfter = time.Hour
+	deltasPacketExpireAfter = 30 * time.Minute
 	deltasPacketExpireCount = 0
 	deltasPacketPriority    = 1
 	deltasPacketRetries     = 5
 
 	resyncPacketExpireAfter = time.Hour
 	resyncPacketExpireCount = 2
-	resyncPacketPriority    = 2
+	resyncPacketPriority    = 0
 	resyncPacketRetries     = 5
 )
 
@@ -78,8 +81,8 @@ func NewEntitiesWatcher(
 
 		deltasQueue: make(chan proto.PacketEntityDelta, deltasBufferChanSize),
 	}
-	ew.snapshotIdentitiesTicker = utils.NewTicker("snapshot-identities", time.Minute, ew.snapshotIdentities)
-	ew.snapshotTicker = utils.NewTicker("snapshot", 5*time.Minute, ew.snapshot)
+	ew.snapshotIdentitiesTicker = utils.NewTicker("snapshot-resync", snapshotResyncTickerInterval, ew.snapshotResync)
+	ew.snapshotTicker = utils.NewTicker("snapshot", snapshotTickerInterval, ew.snapshot)
 	return ew
 }
 
@@ -106,7 +109,7 @@ func (ew *entitiesWatcher) Start() {
 	go ew.deltasWorker()
 }
 
-func (ew *entitiesWatcher) snapshotIdentities(tickTime time.Time) {
+func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 	packet := proto.PacketEntitiesResyncRequest{
 		Snapshot:  map[string]proto.PacketEntitiesResyncItem{},
 		Timestamp: tickTime.UTC(),
