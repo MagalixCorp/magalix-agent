@@ -3,20 +3,22 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"k8s.io/client-go/util/cert"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/entities"
 	"github.com/MagalixCorp/magalix-agent/events"
 	"github.com/MagalixCorp/magalix-agent/executor"
 	"github.com/MagalixCorp/magalix-agent/kuber"
+	"github.com/MagalixCorp/magalix-agent/kuber/observer"
 	"github.com/MagalixCorp/magalix-agent/metrics"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scalar"
 	"github.com/MagalixCorp/magalix-agent/scanner"
-	"github.com/MagalixCorp/magalix-agent/scanner2"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -136,59 +138,10 @@ func main() {
 		"magalix agent started",
 	)
 
-	var config *rest.Config
+	kRestConfig, err := getKRestConfig(stderr, args)
 
-	if args["--kube-incluster"].(bool) {
-		stderr.Infof(nil, "initializing kubernetes incluster config")
-
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			panic(karma.Format(
-				err,
-				"unable to get incluster config",
-			))
-		}
-
-	} else {
-		stderr.Infof(
-			nil,
-			"initializing kubernetes user-defined config",
-		)
-
-		token, _ := args["--kube-token"].(string)
-		if token == "" {
-			token = os.Getenv("KUBE_TOKEN")
-		}
-
-		config = &rest.Config{}
-		config.ContentType = runtime.ContentTypeJSON
-		config.APIPath = "/api"
-		config.Host = args["--kube-url"].(string)
-		config.BearerToken = token
-
-		//{
-		//	tlsClientConfig := rest.TLSClientConfig{}
-		//	rootCAFile, ok := args["--kube-root-ca-cert"].(string)
-		//	if ok {
-		//		if _, err := certutil.NewPool(rootCAFile); err != nil {
-		//			fmt.Printf("Expected to load root CA config from %s, but got err: %v", rootCAFile, err)
-		//		} else {
-		//			tlsClientConfig.CAFile = rootCAFile
-		//		}
-		//		config.TLSClientConfig = tlsClientConfig
-		//	}
-		//}
-
-		if args["--kube-insecure"].(bool) {
-			config.Insecure = true
-		}
-	}
-
-	config.Timeout = utils.MustParseDuration(args, "--kube-timeout")
-
-	dynamicClient, err := dynamic.NewForConfig(config)
-
-	observer := scanner2.NewObserver(
+	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
+	observer_ := observer.NewObserver(
 		stderr,
 		dynamicClient,
 		make(chan struct{}, 0),
@@ -232,17 +185,17 @@ func main() {
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
-	defer observer.Stop()
+	defer observer_.Stop()
 
 	if err != nil {
 		stderr.Fatalf(err, "unable to connect to gateway")
 		os.Exit(1)
 	}
 
-	ew := scanner2.NewEntitiesWatcher(stderr, observer, gwClient)
+	ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
 	ew.Start()
 
-	kube, err := kuber.InitKubernetes(args, gwClient)
+	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
 	if err != nil {
 		stderr.Fatalf(err, "unable to initialize Kubernetes")
 		os.Exit(1)
@@ -309,4 +262,59 @@ func main() {
 		scalar.InitScalars(stderr, entityScanner, kube, dryRun)
 	}
 
+}
+
+func getKRestConfig(
+	logger *log.Logger,
+	args map[string]interface{},
+) (config *rest.Config, err error) {
+	if args["--kube-incluster"].(bool) {
+		logger.Infof(nil, "initializing kubernetes incluster config")
+
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, karma.Format(
+				err,
+				"unable to get incluster config",
+			)
+		}
+
+	} else {
+		logger.Infof(
+			nil,
+			"initializing kubernetes user-defined config",
+		)
+
+		token, _ := args["--kube-token"].(string)
+		if token == "" {
+			token = os.Getenv("KUBE_TOKEN")
+		}
+
+		config = &rest.Config{}
+		config.ContentType = runtime.ContentTypeJSON
+		config.APIPath = "/api"
+		config.Host = args["--kube-url"].(string)
+		config.BearerToken = token
+
+		{
+			tlsClientConfig := rest.TLSClientConfig{}
+			rootCAFile, ok := args["--kube-root-ca-cert"].(string)
+			if ok {
+				if _, err := cert.NewPool(rootCAFile); err != nil {
+					fmt.Printf("Expected to load root CA config from %s, but got err: %v", rootCAFile, err)
+				} else {
+					tlsClientConfig.CAFile = rootCAFile
+				}
+				config.TLSClientConfig = tlsClientConfig
+			}
+		}
+
+		if args["--kube-insecure"].(bool) {
+			config.Insecure = true
+		}
+	}
+
+	config.Timeout = utils.MustParseDuration(args, "--kube-timeout")
+
+	return
 }
