@@ -45,19 +45,6 @@ var (
 	}
 )
 
-//func kindToGvrk(kind string) (GroupVersionResourceKind, error) {
-//	for _, watchedResource := range watchedResources {
-//		if watchedResource.Kind == kind {
-//			return watchedResource, nil
-//		}
-//	}
-//	return GroupVersionResourceKind{}, karma.Format(
-//		nil,
-//		"unable to get GVR from kind: %s",
-//		kind,
-//	)
-//}
-
 type EntitiesWatcher interface {
 	Start()
 }
@@ -67,12 +54,9 @@ type entitiesWatcher struct {
 	client   *client.Client
 	observer *observer.Observer
 
-	watchers          map[observer.GroupVersionResourceKind]observer.Watcher
-	watchersByKind    map[string]observer.Watcher
-	deltasQueue       chan proto.PacketEntityDelta
-	flushDeltasChan   chan struct{}
-	suspendDeltasChan chan struct{}
-	resumeDeltasChan  chan struct{}
+	watchers       map[observer.GroupVersionResourceKind]observer.Watcher
+	watchersByKind map[string]observer.Watcher
+	deltasQueue    chan proto.PacketEntityDelta
 
 	snapshotIdentitiesTicker *utils.Ticker
 	snapshotTicker           *utils.Ticker
@@ -92,10 +76,7 @@ func NewEntitiesWatcher(
 		watchers:       map[observer.GroupVersionResourceKind]observer.Watcher{},
 		watchersByKind: map[string]observer.Watcher{},
 
-		deltasQueue:       make(chan proto.PacketEntityDelta, deltasBufferChanSize),
-		flushDeltasChan:   make(chan struct{}, 0),
-		suspendDeltasChan: make(chan struct{}, 0),
-		resumeDeltasChan:  make(chan struct{}, 0),
+		deltasQueue: make(chan proto.PacketEntityDelta, deltasBufferChanSize),
 	}
 	ew.snapshotIdentitiesTicker = utils.NewTicker("snapshot-identities", time.Minute, ew.snapshotIdentities)
 	ew.snapshotTicker = utils.NewTicker("snapshot", 5*time.Minute, ew.snapshot)
@@ -126,10 +107,6 @@ func (ew *entitiesWatcher) Start() {
 }
 
 func (ew *entitiesWatcher) snapshotIdentities(tickTime time.Time) {
-	//ew.suspendedDeltasWorker()
-	//ew.flushDeltas()
-	//defer ew.resumeDeltasWorker()
-
 	packet := proto.PacketEntitiesResyncRequest{
 		Snapshot:  map[string]proto.PacketEntitiesResyncItem{},
 		Timestamp: tickTime.UTC(),
@@ -178,17 +155,6 @@ func (ew *entitiesWatcher) snapshotIdentities(tickTime time.Time) {
 		}
 	}
 
-	/*
-		1. 	each 1h, send a full snapshot packet containing only identificators (name,kind, api-version)
-			this packet will be used to only delete deleted entities.
-			before sending this packet we must flush the deltas queue and be sure they are sent
-		   	we don't need to suspend the deltas-worker because we don't use the snapshot to Upsert the data, only delete the deleted entities
-
-
-		2. 	each 10m, resend all entities, as Upsert delta - that guarantees the data integrity even if we lost one event
-
-	*/
-
 	ew.client.Pipe(client.Package{
 		Kind:        proto.PacketKindEntitiesResyncRequest,
 		ExpiryTime:  utils.After(resyncPacketExpireAfter),
@@ -200,9 +166,6 @@ func (ew *entitiesWatcher) snapshotIdentities(tickTime time.Time) {
 }
 
 func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
-	// we don't need to stop nor suspend the deltas worker here
-	// we actually are sending the snapshot using it.
-
 	// send nodes and namespaces before all other deltas because they act as
 	// parents for other resources
 	nodesWatcher := ew.watchers[observer.Nodes]
@@ -373,15 +336,6 @@ func (ew *entitiesWatcher) OnDelete(
 	ew.deltasQueue <- delta
 }
 
-func (ew *entitiesWatcher) flushDeltas() {
-	ew.flushDeltasChan <- struct{}{}
-}
-func (ew *entitiesWatcher) suspendedDeltasWorker() {
-	ew.suspendDeltasChan <- struct{}{}
-}
-func (ew *entitiesWatcher) resumeDeltasWorker() {
-	ew.resumeDeltasChan <- struct{}{}
-}
 func (ew *entitiesWatcher) deltasWorker() {
 	// this worker should be started only once
 
@@ -389,17 +343,6 @@ func (ew *entitiesWatcher) deltasWorker() {
 		items := map[string]proto.PacketEntityDelta{}
 		t := time.Now()
 		shouldFlush := false
-		shouldSuspend := false
-		waitForResume := func() {
-			for {
-				select {
-				case <-ew.flushDeltasChan:
-					ew.sendDeltas(items)
-				case <-ew.resumeDeltasChan:
-					return
-				}
-			}
-		}
 		for {
 			select {
 			case item := <-ew.deltasQueue:
@@ -421,10 +364,6 @@ func (ew *entitiesWatcher) deltasWorker() {
 					time.Now().Sub(t) >= deltasPacketFlushAfterTime {
 					shouldFlush = true
 				}
-			case <-ew.flushDeltasChan:
-				shouldFlush = true
-			case <-ew.suspendDeltasChan:
-				shouldSuspend = true
 			case <-time.After(deltasPacketFlushAfterTime):
 				shouldFlush = true
 			}
@@ -432,13 +371,6 @@ func (ew *entitiesWatcher) deltasWorker() {
 				ew.sendDeltas(items)
 				break
 			}
-			if shouldSuspend {
-				waitForResume()
-			}
-		}
-
-		if shouldSuspend {
-			waitForResume()
 		}
 	}
 }
