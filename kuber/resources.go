@@ -1,6 +1,7 @@
 package kuber
 
 import (
+	"github.com/reconquest/karma-go"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -64,3 +65,34 @@ var (
 		Kind:                 "CronJob",
 	}
 )
+
+func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
+	switch kind {
+	case Nodes.Kind:
+		return &Nodes, nil
+	case Namespaces.Kind:
+		return &Namespaces, nil
+	case Pods.Kind:
+		return &Pods, nil
+	case ReplicationControllers.Kind:
+		return &ReplicationControllers, nil
+	case Deployments.Kind:
+		return &Deployments, nil
+	case StatefulSets.Kind:
+		return &StatefulSets, nil
+	case DaemonSets.Kind:
+		return &DaemonSets, nil
+	case ReplicaSets.Kind:
+		return &ReplicaSets, nil
+	case Jobs.Kind:
+		return &Jobs, nil
+	case CronJobs.Kind:
+		return &CronJobs, nil
+	default:
+		return nil, karma.Format(
+			nil,
+			"unknown kind: %s",
+			kind,
+		)
+	}
+}

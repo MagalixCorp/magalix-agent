@@ -14,7 +14,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/events"
 	"github.com/MagalixCorp/magalix-agent/executor"
 	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/kuber/observer"
 	"github.com/MagalixCorp/magalix-agent/metrics"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scalar"
@@ -141,7 +140,7 @@ func main() {
 	kRestConfig, err := getKRestConfig(stderr, args)
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
-	observer_ := observer.NewObserver(
+	observer_ := kuber.NewObserver(
 		stderr,
 		dynamicClient,
 		make(chan struct{}, 0),
@@ -259,7 +258,7 @@ func main() {
 	}
 
 	if scalarEnabled {
-		scalar.InitScalars(stderr, entityScanner, kube, dryRun)
+		scalar.InitScalars(stderr, kube, observer_, dryRun)
 	}
 
 }

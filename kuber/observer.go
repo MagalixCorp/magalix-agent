@@ -1,10 +1,9 @@
-package observer
+package kuber
 
 import (
 	"bytes"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixTechnologies/log-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -35,7 +34,7 @@ func NewObserver(
 }
 
 func (observer *Observer) Watch(
-	gvrk kuber.GroupVersionResourceKind,
+	gvrk GroupVersionResourceKind,
 ) *watcher {
 	observer.logger.Infof(
 		nil,
@@ -50,7 +49,7 @@ func (observer *Observer) Watch(
 }
 
 func (observer *Observer) WatcherFor(
-	gvrk kuber.GroupVersionResourceKind,
+	gvrk GroupVersionResourceKind,
 ) *watcher {
 	informer := observer.ForResource(gvrk.GroupVersionResource)
 
@@ -74,7 +73,7 @@ func (observer *Observer) WaitForCacheSync() {
 }
 
 type Watcher interface {
-	GetGroupVersionResourceKind() kuber.GroupVersionResourceKind
+	GetGroupVersionResourceKind() GroupVersionResourceKind
 
 	Lister() cache.GenericLister
 
@@ -100,12 +99,12 @@ type Watcher interface {
 }
 
 type watcher struct {
-	gvrk     kuber.GroupVersionResourceKind
+	gvrk     GroupVersionResourceKind
 	logger   *log.Logger
 	informer informers.GenericInformer
 }
 
-func (w *watcher) GetGroupVersionResourceKind() kuber.GroupVersionResourceKind {
+func (w *watcher) GetGroupVersionResourceKind() GroupVersionResourceKind {
 	return w.gvrk
 }
 
@@ -132,7 +131,7 @@ func (w *watcher) LastSyncResourceVersion() string {
 func wrapHandler(
 	wrapped ResourceEventHandler,
 	logger *log.Logger,
-	gvrk kuber.GroupVersionResourceKind,
+	gvrk GroupVersionResourceKind,
 ) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -193,7 +192,37 @@ func wrapHandler(
 }
 
 type ResourceEventHandler interface {
-	OnAdd(now time.Time, gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
-	OnUpdate(now time.Time, gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
-	OnDelete(now time.Time, gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnAdd(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnUpdate(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
+	OnDelete(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+}
+
+// ResourceEventHandlerFuncs is an adaptor to let you easily specify as many or
+// as few of the notification functions as you want while still implementing
+// ResourceEventHandler.
+type ResourceEventHandlerFuncs struct {
+	AddFunc    func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	UpdateFunc func(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
+	DeleteFunc func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+}
+
+// OnAdd calls AddFunc if it's not nil.
+func (r ResourceEventHandlerFuncs) OnAdd(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured) {
+	if r.AddFunc != nil {
+		r.AddFunc(now, gvrk, obj)
+	}
+}
+
+// OnUpdate calls UpdateFunc if it's not nil.
+func (r ResourceEventHandlerFuncs) OnUpdate(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
+	if r.UpdateFunc != nil {
+		r.UpdateFunc(now, gvrk, oldObj, newObj)
+	}
+}
+
+// OnDelete calls DeleteFunc if it's not nil.
+func (r ResourceEventHandlerFuncs) OnDelete(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured) {
+	if r.DeleteFunc != nil {
+		r.DeleteFunc(now, gvrk, obj)
+	}
 }

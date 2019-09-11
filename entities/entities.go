@@ -6,7 +6,6 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/kuber/observer"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -56,10 +55,10 @@ type EntitiesWatcher interface {
 type entitiesWatcher struct {
 	logger   *log.Logger
 	client   *client.Client
-	observer *observer.Observer
+	observer *kuber.Observer
 
-	watchers       map[kuber.GroupVersionResourceKind]observer.Watcher
-	watchersByKind map[string]observer.Watcher
+	watchers       map[kuber.GroupVersionResourceKind]kuber.Watcher
+	watchersByKind map[string]kuber.Watcher
 	deltasQueue    chan proto.PacketEntityDelta
 
 	snapshotIdentitiesTicker *utils.Ticker
@@ -68,7 +67,7 @@ type entitiesWatcher struct {
 
 func NewEntitiesWatcher(
 	logger *log.Logger,
-	observer_ *observer.Observer,
+	observer_ *kuber.Observer,
 	client_ *client.Client,
 ) EntitiesWatcher {
 	ew := &entitiesWatcher{
@@ -77,8 +76,8 @@ func NewEntitiesWatcher(
 		client: client_,
 
 		observer:       observer_,
-		watchers:       map[kuber.GroupVersionResourceKind]observer.Watcher{},
-		watchersByKind: map[string]observer.Watcher{},
+		watchers:       map[kuber.GroupVersionResourceKind]kuber.Watcher{},
+		watchersByKind: map[string]kuber.Watcher{},
 
 		deltasQueue: make(chan proto.PacketEntityDelta, deltasBufferChanSize),
 	}
@@ -193,7 +192,7 @@ func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
 
 func (ew *entitiesWatcher) publishGvrk(
 	gvrk kuber.GroupVersionResourceKind,
-	w observer.Watcher,
+	w kuber.Watcher,
 	tickTime time.Time,
 ) {
 	resource := gvrk.Resource
@@ -216,48 +215,19 @@ func (ew *entitiesWatcher) publishGvrk(
 func (ew *entitiesWatcher) getParents(
 	u *unstructured.Unstructured,
 ) (*proto.ParentController, error) {
-	owners := u.GetOwnerReferences()
-	var parent *proto.ParentController
-	for _, owner := range owners {
-		if owner.Controller != nil && *owner.Controller {
-			parent = &proto.ParentController{
-				Kind:       owner.Kind,
-				Name:       owner.Name,
-				APIVersion: owner.APIVersion,
-			}
 
-			watcher, ok := ew.watchersByKind[owner.Kind]
-			if !ok {
-				// not watched parent
-				break
-			}
-			ownerObj, err := watcher.Lister().
-				ByNamespace(u.GetNamespace()).
-				Get(owner.Name)
-			if err != nil {
-				return nil, karma.Format(
-					err,
-					"unable to get parent owner",
-				)
-			}
-			ownerU, ok := ownerObj.(*unstructured.Unstructured)
-			if !ok {
-				return nil, karma.Format(
-					nil,
-					"unable to cast runtime.Object to *unstructured.Unstructured",
-				)
-			}
-			parentParent, err := ew.getParents(ownerU)
-			if err != nil {
-				return nil, karma.Format(
-					err,
-					"unable to get parent.parent",
-				)
-			}
-			parent.Parent = parentParent
-		}
+	parent, err := kuber.GetParents(
+		u,
+		func(kind string) (watcher kuber.Watcher, b bool) {
+			watcher, ok := ew.watchersByKind[kind]
+			return watcher, ok
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
-	return parent, nil
+
+	return packetParent(parent), nil
 }
 
 func (ew *entitiesWatcher) deltaWrapper(
@@ -407,5 +377,17 @@ func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceK
 	return proto.GroupVersionResourceKind{
 		GroupVersionResource: gvrk.GroupVersionResource,
 		Kind:                 gvrk.Kind,
+	}
+}
+
+func packetParent(parent *kuber.ParentController) *proto.ParentController {
+	if parent == nil {
+		return nil
+	}
+	return &proto.ParentController{
+		Kind:       parent.Kind,
+		Name:       parent.Name,
+		APIVersion: parent.APIVersion,
+		Parent:     packetParent(parent.Parent),
 	}
 }
