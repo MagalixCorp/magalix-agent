@@ -184,7 +184,6 @@ func main() {
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
-	defer observer_.Stop()
 
 	if err != nil {
 		stderr.Fatalf(err, "unable to connect to gateway")
