@@ -1,23 +1,29 @@
 package scalar
 
 import (
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/scanner"
-	"github.com/MagalixTechnologies/log-go"
 	"time"
+
+	"github.com/MagalixCorp/magalix-agent/kuber"
+	"github.com/MagalixTechnologies/log-go"
 )
 
 func InitScalars(
 	logger *log.Logger,
-	scanner *scanner.Scanner,
 	kube *kuber.Kube,
+	observer_ *kuber.Observer,
 	dryRun bool,
 ) {
 
-	sl := NewScannerListener(logger, scanner)
-	oomKilledProcessor := NewOOMKillsProcessor(logger, kube, time.Second, dryRun)
+	sl := NewScannerListener(logger, observer_)
+	oomKilledProcessor := NewOOMKillsProcessor(
+		logger,
+		kube,
+		observer_,
+		time.Second,
+		dryRun,
+	)
 
-	sl.AddContainerListener(oomKilledProcessor)
+	sl.AddPodListener(oomKilledProcessor)
 
 	go oomKilledProcessor.Start()
 	go sl.Start()

@@ -48,6 +48,7 @@ type Scanner struct {
 	dones []chan struct{}
 }
 
+// deprecated: please use entities/EntitiesWatcher instead
 // InitScanner creates a new scanner then Start it
 func InitScanner(
 	client *client.Client,

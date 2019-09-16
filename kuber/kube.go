@@ -4,32 +4,28 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
 
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	beta2client "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
 	kapps "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
 	batch "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	kcore "k8s.io/client-go/kubernetes/typed/core/v1"
 	krest "k8s.io/client-go/rest"
-	certutil "k8s.io/client-go/util/cert"
-
-	"github.com/MagalixCorp/magalix-agent/client"
-	"github.com/MagalixCorp/magalix-agent/proto"
 )
 
 const (
@@ -92,60 +88,9 @@ type RawResources struct {
 }
 
 func InitKubernetes(
-	args map[string]interface{},
+	config *krest.Config,
 	client *client.Client,
 ) (*Kube, error) {
-	var config *krest.Config
-	var err error
-
-	if args["--kube-incluster"].(bool) {
-		client.Infof(nil, "initializing kubernetes incluster config")
-
-		config, err = krest.InClusterConfig()
-		if err != nil {
-			return nil, karma.Format(
-				err,
-				"unable to get incluster config",
-			)
-		}
-
-	} else {
-		client.Infof(
-			nil,
-			"initializing kubernetes user-defined config",
-		)
-
-		token, _ := args["--kube-token"].(string)
-		if token == "" {
-			token = os.Getenv("KUBE_TOKEN")
-		}
-
-		config = &krest.Config{}
-		config.ContentType = kruntime.ContentTypeJSON
-		config.APIPath = "/api"
-		config.Host = args["--kube-url"].(string)
-		config.BearerToken = token
-
-		{
-			tlsClientConfig := krest.TLSClientConfig{}
-			rootCAFile, ok := args["--kube-root-ca-cert"].(string)
-			if ok {
-				if _, err := certutil.NewPool(rootCAFile); err != nil {
-					fmt.Printf("Expected to load root CA config from %s, but got err: %v", rootCAFile, err)
-				} else {
-					tlsClientConfig.CAFile = rootCAFile
-				}
-				config.TLSClientConfig = tlsClientConfig
-			}
-		}
-
-		if args["--kube-insecure"].(bool) {
-			config.Insecure = true
-		}
-	}
-
-	config.Timeout = utils.MustParseDuration(args, "--kube-timeout")
-
 	client.Debugf(
 		karma.
 			Describe("url", config.Host).

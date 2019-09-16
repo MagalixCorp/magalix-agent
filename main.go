@@ -3,12 +3,14 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"k8s.io/client-go/util/cert"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/entities"
 	"github.com/MagalixCorp/magalix-agent/events"
 	"github.com/MagalixCorp/magalix-agent/executor"
 	"github.com/MagalixCorp/magalix-agent/kuber"
@@ -21,6 +23,9 @@ import (
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
 	"github.com/reconquest/karma-go"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 var usage = `agent - magalix services agent.
@@ -132,6 +137,16 @@ func main() {
 		"magalix agent started",
 	)
 
+	kRestConfig, err := getKRestConfig(stderr, args)
+
+	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
+	observer_ := kuber.NewObserver(
+		stderr,
+		dynamicClient,
+		make(chan struct{}, 0),
+		time.Minute*5,
+	)
+
 	secret, err := base64.StdEncoding.DecodeString(
 		utils.ExpandEnv(args, "--client-secret", false),
 	)
@@ -175,7 +190,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	kube, err := kuber.InitKubernetes(args, gwClient)
+	ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
+	ew.Start()
+
+	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
 	if err != nil {
 		stderr.Fatalf(err, "unable to initialize Kubernetes")
 		os.Exit(1)
@@ -239,7 +257,62 @@ func main() {
 	}
 
 	if scalarEnabled {
-		scalar.InitScalars(stderr, entityScanner, kube, dryRun)
+		scalar.InitScalars(stderr, kube, observer_, dryRun)
 	}
 
+}
+
+func getKRestConfig(
+	logger *log.Logger,
+	args map[string]interface{},
+) (config *rest.Config, err error) {
+	if args["--kube-incluster"].(bool) {
+		logger.Infof(nil, "initializing kubernetes incluster config")
+
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, karma.Format(
+				err,
+				"unable to get incluster config",
+			)
+		}
+
+	} else {
+		logger.Infof(
+			nil,
+			"initializing kubernetes user-defined config",
+		)
+
+		token, _ := args["--kube-token"].(string)
+		if token == "" {
+			token = os.Getenv("KUBE_TOKEN")
+		}
+
+		config = &rest.Config{}
+		config.ContentType = runtime.ContentTypeJSON
+		config.APIPath = "/api"
+		config.Host = args["--kube-url"].(string)
+		config.BearerToken = token
+
+		{
+			tlsClientConfig := rest.TLSClientConfig{}
+			rootCAFile, ok := args["--kube-root-ca-cert"].(string)
+			if ok {
+				if _, err := cert.NewPool(rootCAFile); err != nil {
+					fmt.Printf("Expected to load root CA config from %s, but got err: %v", rootCAFile, err)
+				} else {
+					tlsClientConfig.CAFile = rootCAFile
+				}
+				config.TLSClientConfig = tlsClientConfig
+			}
+		}
+
+		if args["--kube-insecure"].(bool) {
+			config.Insecure = true
+		}
+	}
+
+	config.Timeout = utils.MustParseDuration(args, "--kube-timeout")
+
+	return
 }
