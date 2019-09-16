@@ -1,14 +1,15 @@
 package kuber
 
 import (
-	"github.com/reconquest/karma-go"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"encoding/json"
 
-	corev1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/reconquest/karma-go"
+	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type Identifyable interface {
-	GetOwnerReferences() []corev1.OwnerReference
+	GetOwnerReferences() []apisv1.OwnerReference
 	GetNamespace() string
 }
 
@@ -82,4 +83,29 @@ func RootParent(parent *ParentController) *ParentController {
 	}
 
 	return p
+}
+
+func transcode(
+	u interface{},
+	v interface{},
+) error {
+	b, err := json.Marshal(u)
+	if err != nil {
+		return karma.Format(
+			err,
+			"unable to marshal %T to json",
+			u,
+		)
+	}
+
+	err = json.Unmarshal(b, v)
+	if err != nil {
+		return karma.Format(
+			err,
+			"unable to unmarshal json into %T",
+			v,
+		)
+	}
+
+	return nil
 }

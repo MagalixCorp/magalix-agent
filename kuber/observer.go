@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"github.com/MagalixTechnologies/log-go"
+	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 type Observer struct {
@@ -136,11 +139,16 @@ func wrapHandler(
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			now := time.Now().UTC()
-			objUn, oldOk := obj.(*unstructured.Unstructured)
-			if !oldOk {
+			objUn, ok := obj.(*unstructured.Unstructured)
+			if !ok {
 				logger.Error("unable to cast obj to *Unstructured")
 			}
 			if objUn != nil {
+				objUn, err := maskUnstructured(objUn)
+				if err != nil {
+					logger.Errorf(err, "unable to mask Unstructured")
+					return
+				}
 				wrapped.OnAdd(now, gvrk, *objUn)
 			}
 		},
@@ -175,20 +183,96 @@ func wrapHandler(
 				}
 			}
 			if oldUn != nil && newUn != nil {
+				oldUn, err := maskUnstructured(oldUn)
+				if err != nil {
+					logger.Errorf(err, "unable to mask Unstructured")
+				}
+				newUn, err := maskUnstructured(newUn)
+				if err != nil {
+					logger.Errorf(err, "unable to mask Unstructured")
+					return
+				}
 				wrapped.OnUpdate(now, gvrk, *oldUn, *newUn)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			now := time.Now().UTC()
-			objUn, oldOk := obj.(*unstructured.Unstructured)
-			if !oldOk {
+			objUn, ok := obj.(*unstructured.Unstructured)
+			if !ok {
 				logger.Error("unable to cast obj to *Unstructured")
 			}
 			if objUn != nil {
+				objUn, err := maskUnstructured(objUn)
+				if err != nil {
+					logger.Errorf(err, "unable to mask Unstructured")
+					return
+				}
 				wrapped.OnDelete(now, gvrk, *objUn)
 			}
 		},
 	}
+}
+
+var (
+	podSpecMap = map[string][]string{
+		Pods.Kind:                   {"spec"},
+		ReplicationControllers.Kind: {"spec", "template", "spec"},
+		Deployments.Kind:            {"spec", "template", "spec"},
+		StatefulSets.Kind:           {"spec", "template", "spec"},
+		DaemonSets.Kind:             {"spec", "template", "spec"},
+		ReplicaSets.Kind:            {"spec", "template", "spec"},
+		Jobs.Kind:                   {"spec", "template", "spec"},
+		CronJobs.Kind:               {"spec", "jobTemplate", "spec", "template", "spec"},
+	}
+)
+
+func maskUnstructured(
+	obj *unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
+	kind := obj.GetKind()
+	ctx := karma.Describe("kind", kind)
+	podSpecPath, ok := podSpecMap[kind]
+	if !ok {
+		return nil, ctx.
+			Format(nil, "unknown kind to mask")
+	}
+
+	podSpecU, ok, err := unstructured.NestedFieldNoCopy(obj.Object, podSpecPath...)
+	if err != nil {
+		return nil, ctx.
+			Format(err, "unable to get pod spec")
+	}
+	if !ok {
+		return nil, ctx.
+			Format(nil, "unable to find pod spec in specified path")
+	}
+
+	var podSpec corev1.PodSpec
+	err = transcode(podSpecU, &podSpec)
+	if err != nil {
+		return nil, ctx.
+			Format(err, "unable to transcode pod spec")
+	}
+
+	podSpec.Containers = maskContainers(podSpec.Containers)
+	podSpec.InitContainers = maskContainers(podSpec.InitContainers)
+
+	var podSpecJson map[string]interface{}
+	err = transcode(podSpec, &podSpecJson)
+	if err != nil {
+		return nil, ctx.
+			Format(err, "unable to transcode pod spec")
+	}
+
+	// deep copy to not mutate the data from cash store
+	obj = obj.DeepCopy()
+	err = unstructured.SetNestedField(obj.Object, podSpecJson, podSpecPath...)
+	if err != nil {
+		return nil, ctx.
+			Format(err, "unable to set pod spec")
+	}
+
+	return obj, nil
 }
 
 type ResourceEventHandler interface {
