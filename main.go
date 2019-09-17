@@ -210,7 +210,7 @@ func main() {
 		if err = proto.Decode(in, &restart); err != nil {
 			return
 		}
-		defer gwClient.Done(restart.Staus)
+		defer gwClient.Done(restart.Status)
 		return nil, nil
 	})
 

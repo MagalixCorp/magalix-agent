@@ -302,7 +302,7 @@ const (
 	DecisionExecutionStatusSkipped DecisionExecutionStatus = "skipped"
 )
 
-type DecisionExecutionResponse struct {
+type PacketDecisionFeedbackRequest struct {
 	ID          uuid.UUID               `json:"id"`
 	Status      DecisionExecutionStatus `json:"status"`
 	Message     string                  `json:"message"`
@@ -310,10 +310,15 @@ type DecisionExecutionResponse struct {
 	ContainerId *uuid.UUID              `json:"container_id"`
 }
 
-type PacketDecisionsResponse []DecisionExecutionResponse
+
+type PacketDecisionFeedbackResponse struct{}
+
+type PacketDecisionResponse struct {
+	Error *string `json:"error"`
+}
 
 type PacketRestart struct {
-	Staus int `json:"status"`
+	Status int `json:"status"`
 }
 
 type PacketRaw map[string]interface{}
