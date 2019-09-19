@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	decisionsBufferLength  = 1000
-	decisionsBufferTimeout = 10 * time.Second
+	decisionsBufferLength        = 1000
+	decisionsBufferTimeout       = 10 * time.Second
+	decisionsConcurrentExecution = 5
 
 	decisionsFeedbackExpiryTime     = 30 * time.Minute
 	decisionsFeedbackExpiryCount    = 0
@@ -45,7 +46,7 @@ func InitExecutor(
 	dryRun bool,
 ) *Executor {
 	e := NewExecutor(client, kube, scanner, dryRun)
-	e.startWorker()
+	e.startWorkers()
 	return e
 }
 
@@ -69,9 +70,11 @@ func NewExecutor(
 	return executor
 }
 
-func (executor *Executor) startWorker() {
+func (executor *Executor) startWorkers() {
 	// this method should be called one time only
-	go executor.executorWorker()
+	for i := 0; i < decisionsConcurrentExecution; i++ {
+		go executor.executorWorker()
+	}
 }
 
 func (executor *Executor) handleExecutionError(
