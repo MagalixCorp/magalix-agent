@@ -16,9 +16,14 @@ import (
 )
 
 const (
-	decisionsBufferLength        = 1000
-	decisionsBufferTimeout       = 10 * time.Second
+	decisionsBufferLength  = 1000
+	decisionsBufferTimeout = 10 * time.Second
+
 	decisionsConcurrentExecution = 5
+
+	decisionsPullBufferTimeout     = 2 * time.Minute
+	decisionsPullBackoffSleep      = 1 * time.Second
+	decisionsPullBackoffMaxRetries = 10
 
 	decisionsFeedbackExpiryTime     = 30 * time.Minute
 	decisionsFeedbackExpiryCount    = 0
@@ -35,7 +40,7 @@ type Executor struct {
 	dryRun    bool
 	oomKilled chan uuid.UUID
 
-	decisionsChan chan proto.PacketDecision
+	decisionsChan chan *proto.PacketDecision
 }
 
 // InitExecutor creates a new excecutor then starts it
@@ -47,6 +52,7 @@ func InitExecutor(
 ) *Executor {
 	e := NewExecutor(client, kube, scanner, dryRun)
 	e.startWorkers()
+	go e.executeDueDecisions()
 	return e
 }
 
@@ -64,10 +70,72 @@ func NewExecutor(
 		scanner: scanner,
 		dryRun:  dryRun,
 
-		decisionsChan: make(chan proto.PacketDecision, decisionsBufferLength),
+		decisionsChan: make(chan *proto.PacketDecision, decisionsBufferLength),
 	}
 
 	return executor
+}
+
+func (executor *Executor) backoff(
+	fn func() error, sleep time.Duration, maxRetries int,
+) error {
+	return utils.WithBackoff(
+		fn,
+		utils.Backoff{
+			Sleep:      sleep,
+			MaxRetries: maxRetries,
+		},
+		executor.logger,
+	)
+}
+
+func (executor *Executor) executeDueDecisions() {
+	decisions, err := executor.pullDueDecisions()
+	if err != nil {
+		executor.logger.Errorf(
+			err,
+			"unable to pull due decisions",
+		)
+	}
+	for _, decision := range decisions {
+		err := executor.submitDecision(decision, decisionsPullBufferTimeout)
+		if err != nil {
+			executor.logger.Errorf(
+				err,
+				"unable to submit due decision",
+			)
+		}
+	}
+}
+
+func (executor *Executor) pullDueDecisions() ([]*proto.PacketDecision, error) {
+	var response proto.PacketDecisionPullResponse
+	err := executor.backoff(
+		func() error {
+			var res proto.PacketDecisionPullResponse
+			err := executor.client.Send(
+				proto.PacketKindDecisionPull,
+				proto.PacketDecisionPullRequest{},
+				&res,
+			)
+			if err == nil {
+				response = res
+			}
+
+			return err
+		},
+		decisionsPullBackoffSleep,
+		decisionsPullBackoffMaxRetries,
+	)
+
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to pull due decisions",
+		)
+	}
+
+	return response.Decisions, nil
 }
 
 func (executor *Executor) startWorkers() {
@@ -78,7 +146,7 @@ func (executor *Executor) startWorkers() {
 }
 
 func (executor *Executor) handleExecutionError(
-	ctx *karma.Context, decision proto.PacketDecision, err error, containerId *uuid.UUID,
+	ctx *karma.Context, decision *proto.PacketDecision, err error, containerId *uuid.UUID,
 ) *proto.PacketDecisionFeedbackRequest {
 	executor.logger.Errorf(ctx.Reason(err), "unable to execute decision")
 
@@ -91,7 +159,7 @@ func (executor *Executor) handleExecutionError(
 	}
 }
 func (executor *Executor) handleExecutionSkipping(
-	ctx *karma.Context, decision proto.PacketDecision, msg string,
+	ctx *karma.Context, decision *proto.PacketDecision, msg string,
 ) *proto.PacketDecisionFeedbackRequest {
 
 	executor.logger.Infof(ctx, "skipping execution: %s", msg)
@@ -110,19 +178,30 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 		return
 	}
 
-	select {
-	case executor.decisionsChan <- decision:
-	case <-time.After(decisionsBufferTimeout):
-		err := fmt.Sprintf(
-			"timeout (after %s) waiting to push decision into buffer chan",
-			decisionsBufferTimeout,
-		)
+	err = executor.submitDecision(&decision, decisionsBufferTimeout)
+	if err != nil {
+		errMessage := err.Error()
 		return proto.Encode(proto.PacketDecisionResponse{
-			Error: &err,
+			Error: &errMessage,
 		})
 	}
 
 	return proto.Encode(proto.PacketDecisionResponse{})
+}
+
+func (executor *Executor) submitDecision(
+	decision *proto.PacketDecision,
+	timeout time.Duration,
+) error {
+	select {
+	case executor.decisionsChan <- decision:
+	case <-time.After(timeout):
+		return fmt.Errorf(
+			"timeout (after %s) waiting to push decision into buffer chan",
+			decisionsBufferTimeout,
+		)
+	}
+	return nil
 }
 
 func (executor *Executor) executorWorker() {
@@ -149,7 +228,7 @@ func (executor *Executor) executorWorker() {
 }
 
 func (executor *Executor) execute(
-	decision proto.PacketDecision,
+	decision *proto.PacketDecision,
 ) (*proto.PacketDecisionFeedbackRequest, error) {
 
 	ctx := karma.

@@ -29,7 +29,9 @@ const (
 
 	PacketKindDecision         PacketKind = "decision"
 	PacketKindDecisionFeedback PacketKind = "decision/feedback"
-	PacketKindRestart          PacketKind = "restart"
+	PacketKindDecisionPull     PacketKind = "decision/pull"
+
+	PacketKindRestart PacketKind = "restart"
 
 	PacketKindRawStoreRequest PacketKind = "raw/store"
 )

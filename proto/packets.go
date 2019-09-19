@@ -311,6 +311,12 @@ type PacketDecisionResponse struct {
 	Error *string `json:"error"`
 }
 
+type PacketDecisionPullRequest struct{}
+
+type PacketDecisionPullResponse struct {
+	Decisions []*PacketDecision `json:"decisions"`
+}
+
 type PacketRestart struct {
 	Status int `json:"status"`
 }
