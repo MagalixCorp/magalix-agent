@@ -318,7 +318,7 @@ type PacketDecisionPullResponse struct {
 }
 
 type PacketRestart struct {
-	Staus int `json:"status"`
+	Status int `json:"status"`
 }
 
 type PacketRaw map[string]interface{}
