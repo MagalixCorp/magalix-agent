@@ -276,44 +276,49 @@ type RequestLimit struct {
 }
 
 type ContainerResources struct {
-	ContainerId uuid.UUID    `json:"container_id"`
-	Requests    RequestLimit `json:"requests,omitempty"`
-	Limits      RequestLimit `json:"limits,omitempty"`
+	Requests RequestLimit `json:"requests,omitempty"`
+	Limits   RequestLimit `json:"limits,omitempty"`
 }
 
-type TotalResources struct {
-	Replicas   *int                 `json:"replicas,omitempty"`
-	Containers []ContainerResources `json:"containers"`
-}
+type PacketDecision struct {
+	ID          uuid.UUID `json:"id"`
+	ServiceId   uuid.UUID `json:"service_id"`
+	ContainerId uuid.UUID `json:"container_id"`
 
-type Decision struct {
-	ID             uuid.UUID      `json:"id"`
-	ServiceId      uuid.UUID      `json:"service_id"`
-	TotalResources TotalResources `json:"total_resources"`
+	ContainerResources ContainerResources `json:"container_resources"`
 }
-
-type PacketDecisions []Decision
 
 type DecisionExecutionStatus string
 
 const (
-	DecisionExecutionStatusSucceed DecisionExecutionStatus = "succeed"
+	DecisionExecutionStatusSucceed DecisionExecutionStatus = "executed"
 	DecisionExecutionStatusFailed  DecisionExecutionStatus = "failed"
 	DecisionExecutionStatusSkipped DecisionExecutionStatus = "skipped"
 )
 
-type DecisionExecutionResponse struct {
-	ID          uuid.UUID               `json:"id"`
-	Status      DecisionExecutionStatus `json:"status"`
-	Message     string                  `json:"message"`
-	ServiceId   uuid.UUID               `json:"service_id"`
-	ContainerId *uuid.UUID              `json:"container_id"`
+type PacketDecisionFeedbackRequest struct {
+	ID          uuid.UUID `json:"id"`
+	ServiceId   uuid.UUID `json:"service_id"`
+	ContainerId uuid.UUID `json:"container_id"`
+
+	Status  DecisionExecutionStatus `json:"status"`
+	Message string                  `json:"message"`
 }
 
-type PacketDecisionsResponse []DecisionExecutionResponse
+type PacketDecisionFeedbackResponse struct{}
+
+type PacketDecisionResponse struct {
+	Error *string `json:"error"`
+}
+
+type PacketDecisionPullRequest struct{}
+
+type PacketDecisionPullResponse struct {
+	Decisions []*PacketDecision `json:"decisions"`
+}
 
 type PacketRestart struct {
-	Staus int `json:"status"`
+	Status int `json:"status"`
 }
 
 type PacketRaw map[string]interface{}
