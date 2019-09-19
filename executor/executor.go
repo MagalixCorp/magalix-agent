@@ -19,8 +19,6 @@ const (
 	decisionsBufferLength  = 1000
 	decisionsBufferTimeout = 10 * time.Second
 
-	decisionsConcurrentExecution = 5
-
 	decisionsPullBufferTimeout     = 2 * time.Minute
 	decisionsPullBackoffSleep      = 1 * time.Second
 	decisionsPullBackoffMaxRetries = 10
@@ -40,6 +38,8 @@ type Executor struct {
 	dryRun    bool
 	oomKilled chan uuid.UUID
 
+	workersCount int
+
 	decisionsChan chan *proto.PacketDecision
 }
 
@@ -48,9 +48,10 @@ func InitExecutor(
 	client *client.Client,
 	kube *kuber.Kube,
 	scanner *scanner.Scanner,
+	workersCount int,
 	dryRun bool,
 ) *Executor {
-	e := NewExecutor(client, kube, scanner, dryRun)
+	e := NewExecutor(client, kube, scanner, workersCount, dryRun)
 	e.startWorkers()
 	go e.executePendingDecisions()
 	return e
@@ -61,6 +62,7 @@ func NewExecutor(
 	client *client.Client,
 	kube *kuber.Kube,
 	scanner *scanner.Scanner,
+	workersCount int,
 	dryRun bool,
 ) *Executor {
 	executor := &Executor{
@@ -69,6 +71,8 @@ func NewExecutor(
 		kube:    kube,
 		scanner: scanner,
 		dryRun:  dryRun,
+
+		workersCount: workersCount,
 
 		decisionsChan: make(chan *proto.PacketDecision, decisionsBufferLength),
 	}
@@ -142,7 +146,7 @@ func (executor *Executor) pullPendingDecisions() ([]*proto.PacketDecision, error
 
 func (executor *Executor) startWorkers() {
 	// this method should be called one time only
-	for i := 0; i < decisionsConcurrentExecution; i++ {
+	for i := 0; i < executor.workersCount; i++ {
 		go executor.executorWorker()
 	}
 }
