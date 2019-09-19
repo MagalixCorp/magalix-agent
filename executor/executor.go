@@ -34,10 +34,7 @@ type Executor struct {
 	dryRun    bool
 	oomKilled chan uuid.UUID
 
-	decisionsChan chan proto.Decision
-
-	// TODO: remove
-	changed map[uuid.UUID]struct{}
+	decisionsChan chan proto.PacketDecision
 }
 
 // InitExecutor creates a new excecutor then starts it
@@ -66,9 +63,7 @@ func NewExecutor(
 		scanner: scanner,
 		dryRun:  dryRun,
 
-		decisionsChan: make(chan proto.Decision, decisionsBufferLength),
-
-		changed: map[uuid.UUID]struct{}{},
+		decisionsChan: make(chan proto.PacketDecision, decisionsBufferLength),
 	}
 
 	return executor
@@ -80,7 +75,7 @@ func (executor *Executor) startWorker() {
 }
 
 func (executor *Executor) handleExecutionError(
-	ctx *karma.Context, decision proto.Decision, err error, containerId *uuid.UUID,
+	ctx *karma.Context, decision proto.PacketDecision, err error, containerId *uuid.UUID,
 ) *proto.PacketDecisionFeedbackRequest {
 	executor.logger.Errorf(ctx.Reason(err), "unable to execute decision")
 
@@ -89,11 +84,11 @@ func (executor *Executor) handleExecutionError(
 		Status:      proto.DecisionExecutionStatusFailed,
 		Message:     err.Error(),
 		ServiceId:   decision.ServiceId,
-		ContainerId: containerId,
+		ContainerId: decision.ContainerId,
 	}
 }
 func (executor *Executor) handleExecutionSkipping(
-	ctx *karma.Context, decision proto.Decision, msg string,
+	ctx *karma.Context, decision proto.PacketDecision, msg string,
 ) *proto.PacketDecisionFeedbackRequest {
 
 	executor.logger.Infof(ctx, "skipping execution: %s", msg)
@@ -107,23 +102,21 @@ func (executor *Executor) handleExecutionSkipping(
 }
 
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
-	var decisions proto.PacketDecisions
-	if err = proto.Decode(in, &decisions); err != nil {
+	var decision proto.PacketDecision
+	if err = proto.Decode(in, &decision); err != nil {
 		return
 	}
 
-	for _, decision := range decisions {
-		select {
-		case executor.decisionsChan <- decision:
-		case <-time.After(decisionsBufferTimeout):
-			err := fmt.Sprintf(
-				"timeout (after %s) waiting to push decision into buffer chan",
-				decisionsBufferTimeout,
-			)
-			return proto.Encode(proto.PacketDecisionResponse{
-				Error: &err,
-			})
-		}
+	select {
+	case executor.decisionsChan <- decision:
+	case <-time.After(decisionsBufferTimeout):
+		err := fmt.Sprintf(
+			"timeout (after %s) waiting to push decision into buffer chan",
+			decisionsBufferTimeout,
+		)
+		return proto.Encode(proto.PacketDecisionResponse{
+			Error: &err,
+		})
 	}
 
 	return proto.Encode(proto.PacketDecisionResponse{})
@@ -153,12 +146,13 @@ func (executor *Executor) executorWorker() {
 }
 
 func (executor *Executor) execute(
-	decision proto.Decision,
+	decision proto.PacketDecision,
 ) (*proto.PacketDecisionFeedbackRequest, error) {
 
 	ctx := karma.
 		Describe("decision-id", decision.ID).
-		Describe("service-id", decision.ServiceId)
+		Describe("service-id", decision.ServiceId).
+		Describe("container-id", decision.ContainerId)
 
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
@@ -172,31 +166,28 @@ func (executor *Executor) execute(
 		Describe("service-name", name).
 		Describe("kind", kind)
 
-	totalResources := kuber.TotalResources{
-		Replicas:   decision.TotalResources.Replicas,
-		Containers: make([]kuber.ContainerResourcesRequirements, 0, len(decision.TotalResources.Containers)),
+	containerName, err := executor.getContainerDetails(decision.ContainerId)
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to get container details",
+		)
 	}
-	for _, container := range decision.TotalResources.Containers {
-		executor.changed[container.ContainerId] = struct{}{}
-		containerName, err := executor.getContainerDetails(container.ContainerId)
-		if err != nil {
-			// TODO: do we need to soft fail here and continue execution with other containers?
-			return nil, karma.Format(
-				err,
-				"unable to get container details",
-			)
-		}
-		totalResources.Containers = append(totalResources.Containers, kuber.ContainerResourcesRequirements{
-			Name: containerName,
-			Limits: kuber.RequestLimit{
-				Memory: container.Limits.Memory,
-				CPU:    container.Limits.CPU,
+
+	totalResources := kuber.TotalResources{
+		Containers: []kuber.ContainerResourcesRequirements{
+			{
+				Name: containerName,
+				Limits: kuber.RequestLimit{
+					Memory: decision.ContainerResources.Limits.Memory,
+					CPU:    decision.ContainerResources.Limits.CPU,
+				},
+				Requests: kuber.RequestLimit{
+					Memory: decision.ContainerResources.Requests.Memory,
+					CPU:    decision.ContainerResources.Requests.CPU,
+				},
 			},
-			Requests: kuber.RequestLimit{
-				Memory: container.Requests.Memory,
-				CPU:    container.Requests.CPU,
-			},
-		})
+		},
 	}
 
 	trace, _ := json.Marshal(totalResources)
@@ -229,10 +220,11 @@ func (executor *Executor) execute(
 		executor.logger.Infof(ctx, msg)
 
 		return &proto.PacketDecisionFeedbackRequest{
-			ID:        decision.ID,
-			ServiceId: decision.ServiceId,
-			Status:    proto.DecisionExecutionStatusSucceed,
-			Message:   msg,
+			ID:          decision.ID,
+			ServiceId:   decision.ServiceId,
+			ContainerId: decision.ContainerId,
+			Status:      proto.DecisionExecutionStatusSucceed,
+			Message:     msg,
 		}, nil
 	}
 
