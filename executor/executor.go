@@ -52,7 +52,7 @@ func InitExecutor(
 ) *Executor {
 	e := NewExecutor(client, kube, scanner, dryRun)
 	e.startWorkers()
-	go e.executeDueDecisions()
+	go e.executePendingDecisions()
 	return e
 }
 
@@ -89,8 +89,10 @@ func (executor *Executor) backoff(
 	)
 }
 
-func (executor *Executor) executeDueDecisions() {
-	decisions, err := executor.pullDueDecisions()
+// executePendingDecisions pulls decisions pending in execution status to execute again
+// decisions can stuck in pending status if the it crashes while there are few decisions queued for execution
+func (executor *Executor) executePendingDecisions() {
+	decisions, err := executor.pullPendingDecisions()
 	if err != nil {
 		executor.logger.Errorf(
 			err,
@@ -108,7 +110,7 @@ func (executor *Executor) executeDueDecisions() {
 	}
 }
 
-func (executor *Executor) pullDueDecisions() ([]*proto.PacketDecision, error) {
+func (executor *Executor) pullPendingDecisions() ([]*proto.PacketDecision, error) {
 	var response proto.PacketDecisionPullResponse
 	err := executor.backoff(
 		func() error {
