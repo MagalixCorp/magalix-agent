@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/watcher"
-	uuid "github.com/MagalixTechnologies/uuid-go"
+	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
-	karma "github.com/reconquest/karma-go"
+	"github.com/reconquest/karma-go"
 	"github.com/reconquest/stats-go"
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
@@ -515,11 +515,15 @@ func (observer *Observer) handlePod(pod *kapi.Pod) error {
 	for _, container := range pod.Status.ContainerStatuses {
 		id, err := observer.identificator.GetContainerID(pod, container.Name)
 		if err != nil {
-			return context.
-				Describe("container_name", container.Name).
-				Format(err, "unable to obtain container ID")
+			errorf(
+				context.
+					Describe("container_name", container.Name).
+					Reason(err),
+				"unable to obtain container ID",
+			)
+		} else {
+			containers[id] = ContainerState{container.State, container.LastTerminationState}
 		}
-		containers[id] = ContainerState{container.State, container.LastTerminationState}
 	}
 
 	observer.pods <- Pod{
