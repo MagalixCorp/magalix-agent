@@ -73,6 +73,8 @@ Options:
                                               [default: 10s]
   --events-buffer-size <size>                Events batch writer buffer size.
                                               [default: 20]
+  --executor-workers <number>                 Executor concurrent workers count
+                                              [default: 5]
   --timeout-proto-handshake <duration>       Timeout to do a websocket handshake.
                                               [default: 10s]
   --timeout-proto-write <duration>           Timeout to write a message to websocket channel.
@@ -168,10 +170,11 @@ func main() {
 		accountID = utils.ExpandEnvUUID(args, "--account-id")
 		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 
-		metricsEnabled = !args["--disable-metrics"].(bool)
-		eventsEnabled  = !args["--disable-events"].(bool)
-		scalarEnabled  = !args["--disable-scalar"].(bool)
-		dryRun         = args["--dry-run"].(bool)
+		metricsEnabled  = !args["--disable-metrics"].(bool)
+		eventsEnabled   = !args["--disable-events"].(bool)
+		scalarEnabled   = !args["--disable-scalar"].(bool)
+		executorWorkers = utils.MustParseInt(args, "--executor-workers")
+		dryRun          = args["--dry-run"].(bool)
 
 		skipNamespaces []string
 	)
@@ -219,6 +222,7 @@ func main() {
 		gwClient,
 		kube,
 		entityScanner,
+		executorWorkers,
 		dryRun,
 	)
 
@@ -228,7 +232,7 @@ func main() {
 		if err = proto.Decode(in, &restart); err != nil {
 			return
 		}
-		defer gwClient.Done(restart.Staus)
+		defer gwClient.Done(restart.Status)
 		return nil, nil
 	})
 

@@ -30,8 +30,11 @@ const (
 
 	PacketKindBye PacketKind = "bye"
 
-	PacketKindDecision PacketKind = "decision"
-	PacketKindRestart  PacketKind = "restart"
+	PacketKindDecision         PacketKind = "decision"
+	PacketKindDecisionFeedback PacketKind = "decision/feedback"
+	PacketKindDecisionPull     PacketKind = "decision/pull"
+
+	PacketKindRestart PacketKind = "restart"
 
 	PacketKindRawStoreRequest PacketKind = "raw/store"
 )
