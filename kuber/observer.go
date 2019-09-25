@@ -233,8 +233,8 @@ func maskUnstructured(
 	ctx := karma.Describe("kind", kind)
 	podSpecPath, ok := podSpecMap[kind]
 	if !ok {
-		return nil, ctx.
-			Format(nil, "unknown kind to mask")
+		// not maskable kind
+		return obj, nil
 	}
 
 	podSpecU, ok, err := unstructured.NestedFieldNoCopy(obj.Object, podSpecPath...)
