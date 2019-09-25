@@ -190,18 +190,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
-	if err != nil {
-		stderr.Fatalf(err, "unable to initialize Kubernetes")
-		os.Exit(1)
-	}
-
-	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
-	analysisDataInterval := utils.MustParseDuration(
-		args,
-		"--analysis-data-interval",
-	)
-
 	deltasEnabled := true
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
@@ -218,15 +206,19 @@ func main() {
 		deltasEnabled = false // fallback to old scanner implementation
 	}
 
-	entityScanner := scanner.InitScanner(
-		gwClient,
-		kube,
-		skipNamespaces,
-		accountID,
-		clusterID,
-		optInAnalysisData,
-		analysisDataInterval,
+	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
+	if err != nil {
+		stderr.Fatalf(err, "unable to initialize Kubernetes")
+		os.Exit(1)
+	}
+
+	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
+	analysisDataInterval := utils.MustParseDuration(
+		args,
+		"--analysis-data-interval",
 	)
+
+	var entityScanner *scanner.Scanner
 
 	if deltasEnabled {
 		ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
@@ -239,7 +231,27 @@ func main() {
 			scalar2.InitScalars(stderr, kube, observer_, dryRun)
 		}
 
+		entityScanner = scanner.InitScanner(
+			gwClient,
+			scanner.NewKuberFromObserver(ew),
+			skipNamespaces,
+			accountID,
+			clusterID,
+			optInAnalysisData,
+			analysisDataInterval,
+		)
+
 	} else {
+		entityScanner = scanner.InitScanner(
+			gwClient,
+			kube,
+			skipNamespaces,
+			accountID,
+			clusterID,
+			optInAnalysisData,
+			analysisDataInterval,
+		)
+
 		if scalarEnabled {
 			scalar.InitScalars(stderr, entityScanner, kube, dryRun)
 		}

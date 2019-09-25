@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -274,7 +275,7 @@ func maskUnstructured(
 	}
 
 	var podSpec corev1.PodSpec
-	err = transcode(podSpecU, &podSpec)
+	err = utils.Transcode(podSpecU, &podSpec)
 	if err != nil {
 		return nil, ctx.
 			Format(err, "unable to transcode pod spec")
@@ -284,7 +285,7 @@ func maskUnstructured(
 	podSpec.InitContainers = maskContainers(podSpec.InitContainers)
 
 	var podSpecJson map[string]interface{}
-	err = transcode(podSpec, &podSpecJson)
+	err = utils.Transcode(podSpec, &podSpecJson)
 	if err != nil {
 		return nil, ctx.
 			Format(err, "unable to transcode pod spec")

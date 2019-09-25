@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
+	"github.com/reconquest/karma-go"
 	"github.com/ryanuber/go-glob"
 )
 
@@ -253,4 +255,29 @@ func TruncateString(str string, num int) string {
 		truncated = str[0:num] + "..."
 	}
 	return truncated
+}
+
+func Transcode(
+	u interface{},
+	v interface{},
+) error {
+	b, err := json.Marshal(u)
+	if err != nil {
+		return karma.Format(
+			err,
+			"unable to marshal %T to json",
+			u,
+		)
+	}
+
+	err = json.Unmarshal(b, v)
+	if err != nil {
+		return karma.Format(
+			err,
+			"unable to unmarshal json into %T",
+			v,
+		)
+	}
+
+	return nil
 }

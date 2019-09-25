@@ -142,9 +142,40 @@ func NewKubelet(
 	return kubelet, nil
 }
 
+type EntitiesProvider interface {
+	GetNodes() []kuber.Node
+	NodesLastScanTime() time.Time
+
+	GetApplications() []*scanner.Application
+	AppsLastScanTime() time.Time
+
+	FindService(
+		namespace string,
+		podName string,
+	) (uuid.UUID, uuid.UUID, bool)
+	FindContainer(
+		namespace string,
+		podName string,
+		containerName string,
+	) (uuid.UUID, uuid.UUID, *scanner.Container, bool)
+	FindContainerByPodUIDContainerName(
+		podUID string,
+		containerName string,
+	) (
+		applicationID uuid.UUID,
+		serviceID uuid.UUID,
+		containerID uuid.UUID,
+		podName string,
+		ok bool,
+	)
+}
+
+type entitiesProvider struct {
+}
+
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
-	scanner *scanner.Scanner, tickTime time.Time,
+	entitiesProvider EntitiesProvider, tickTime time.Time,
 ) ([]*Metrics, map[string]interface{}, error) {
 	kubelet.collectGarbage()
 
@@ -330,8 +361,8 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
-	nodes := scanner.GetNodes()
-	nodesScanTime := scanner.NodesLastScanTime()
+	nodes := entitiesProvider.GetNodes()
+	nodesScanTime := entitiesProvider.NodesLastScanTime()
 
 	addMetricValue(
 		TypeCluster,
@@ -522,7 +553,7 @@ func (kubelet *Kubelet) GetMetrics(
 			throttleMetrics := map[uuid.UUID]map[string]*containerMetricStore{}
 
 			for _, pod := range summary.Pods {
-				applicationID, serviceID, ok := scanner.FindService(
+				applicationID, serviceID, ok := entitiesProvider.FindService(
 					pod.PodRef.Namespace, pod.PodRef.Name,
 				)
 
@@ -609,7 +640,7 @@ func (kubelet *Kubelet) GetMetrics(
 				}
 
 				for _, container := range podContainers {
-					applicationID, serviceID, identifiedContainer, ok := scanner.FindContainer(
+					applicationID, serviceID, identifiedContainer, ok := entitiesProvider.FindContainer(
 						pod.PodRef.Namespace,
 						pod.PodRef.Name,
 						container.Name,
@@ -723,7 +754,7 @@ func (kubelet *Kubelet) GetMetrics(
 				for _, val := range cadvisor[metric.Ref] {
 					podUID, containerName, _, value, ok := getCAdvisorContainerValue(val)
 					if ok {
-						_, _, containerID, _, ok := scanner.FindContainerByPodUIDContainerName(podUID, containerName)
+						_, _, containerID, _, ok := entitiesProvider.FindContainerByPodUIDContainerName(podUID, containerName)
 						if ok {
 							if storedMetrics, ok := throttleMetrics[containerID]; ok {
 								if storedMetric, ok := storedMetrics[metric.Name]; ok {
@@ -782,8 +813,8 @@ func (kubelet *Kubelet) GetMetrics(
 		},
 	)
 
-	apps := scanner.GetApplications()
-	scanTime := scanner.AppsLastScanTime()
+	apps := entitiesProvider.GetApplications()
+	scanTime := entitiesProvider.AppsLastScanTime()
 	for _, app := range apps {
 		for _, service := range app.Services {
 			for _, container := range service.Containers {

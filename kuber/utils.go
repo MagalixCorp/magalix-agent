@@ -1,8 +1,6 @@
 package kuber
 
 import (
-	"encoding/json"
-
 	"github.com/reconquest/karma-go"
 	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -76,36 +74,11 @@ func RootParent(parent *ParentController) *ParentController {
 		return nil
 	}
 
-	var p *ParentController
+	p := parent
 
 	for parent.Parent != nil {
 		p = parent.Parent
 	}
 
 	return p
-}
-
-func transcode(
-	u interface{},
-	v interface{},
-) error {
-	b, err := json.Marshal(u)
-	if err != nil {
-		return karma.Format(
-			err,
-			"unable to marshal %T to json",
-			u,
-		)
-	}
-
-	err = json.Unmarshal(b, v)
-	if err != nil {
-		return karma.Format(
-			err,
-			"unable to unmarshal json into %T",
-			v,
-		)
-	}
-
-	return nil
 }

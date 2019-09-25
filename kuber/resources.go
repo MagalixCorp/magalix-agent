@@ -30,6 +30,10 @@ var (
 		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("namespaces"),
 		Kind:                 "Namespace",
 	}
+	LimitRanges = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("limitranges"),
+		Kind:                 "LimitRange",
+	}
 	Pods = GroupVersionResourceKind{
 		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("pods"),
 		Kind:                 "Pod",

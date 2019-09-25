@@ -11,7 +11,8 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
-	kv1 "k8s.io/api/core/v1"
+
+	corev1 "k8s.io/api/core/v1"
 	kresource "k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -20,21 +21,33 @@ const (
 	intervalScanner       = time.Minute * 1
 )
 
+type ResourcesProvider interface {
+	GetNodes() (*corev1.NodeList, error)
+	GetPods() (*corev1.PodList, error)
+	GetResources() (
+		pods []corev1.Pod,
+		limitRanges []corev1.LimitRange,
+		resources []kuber.Resource,
+		rawResources map[string]interface{},
+		err error,
+	)
+}
+
 // Scanner cluster scanner
 type Scanner struct {
 	*utils.Ticker
 
-	client         *client.Client
-	logger         *log.Logger
-	kube           *kuber.Kube
-	skipNamespaces []string
-	accountID      uuid.UUID
-	clusterID      uuid.UUID
+	client            *client.Client
+	logger            *log.Logger
+	resourcesProvider ResourcesProvider
+	skipNamespaces    []string
+	accountID         uuid.UUID
+	clusterID         uuid.UUID
 
 	apps         []*Application
 	appsLastScan time.Time
 
-	pods []kv1.Pod
+	pods []corev1.Pod
 
 	nodes         []kuber.Node
 	nodesLastScan time.Time
@@ -52,7 +65,7 @@ type Scanner struct {
 // InitScanner creates a new scanner then Start it
 func InitScanner(
 	client *client.Client,
-	kube *kuber.Kube,
+	resourcesProvider ResourcesProvider,
 	skipNamespaces []string,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
@@ -60,13 +73,13 @@ func InitScanner(
 	analysisDataInterval time.Duration,
 ) *Scanner {
 	scanner := &Scanner{
-		client:         client,
-		logger:         client.Logger,
-		kube:           kube,
-		skipNamespaces: skipNamespaces,
-		accountID:      accountID,
-		clusterID:      clusterID,
-		history:        NewHistory(),
+		client:            client,
+		logger:            client.Logger,
+		resourcesProvider: resourcesProvider,
+		skipNamespaces:    skipNamespaces,
+		accountID:         accountID,
+		clusterID:         clusterID,
+		history:           NewHistory(),
 
 		optInAnalysisData: optInAnalysisData,
 
@@ -150,13 +163,13 @@ func (scanner *Scanner) scanNodes() {
 	}
 }
 
-func (scanner *Scanner) getNodes() ([]kuber.Node, *kv1.NodeList, error) {
-	nodeList, err := scanner.kube.GetNodes()
+func (scanner *Scanner) getNodes() ([]kuber.Node, *corev1.NodeList, error) {
+	nodeList, err := scanner.resourcesProvider.GetNodes()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	podList, err := scanner.kube.GetPods()
+	podList, err := scanner.resourcesProvider.GetPods()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -224,7 +237,7 @@ func (scanner *Scanner) scanApplications() {
 func (scanner *Scanner) getApplications() (
 	[]*Application, map[string]interface{}, error,
 ) {
-	pods, limitRanges, resources, rawResources, err := scanner.kube.GetResources()
+	pods, limitRanges, resources, rawResources, err := scanner.resourcesProvider.GetResources()
 	if err != nil {
 		return nil, nil, karma.Format(
 			err,
@@ -334,10 +347,10 @@ func (scanner *Scanner) getApplications() (
 
 // getLimitRangesForNamespace returns all LimitRanges for a specific namespace.
 func getLimitRangesForNamespace(
-	limitRanges []kv1.LimitRange,
+	limitRanges []corev1.LimitRange,
 	namespace string,
-) []kv1.LimitRange {
-	var ranges []kv1.LimitRange
+) []corev1.LimitRange {
+	var ranges []corev1.LimitRange
 
 	for index, limit := range limitRanges {
 		if limit.GetNamespace() == namespace {
@@ -349,67 +362,67 @@ func getLimitRangesForNamespace(
 }
 
 func withDefaultResources(
-	resources kv1.ResourceRequirements,
-	defaultRequests kv1.ResourceList,
-	defaultLimits kv1.ResourceList,
+	resources corev1.ResourceRequirements,
+	defaultRequests corev1.ResourceList,
+	defaultLimits corev1.ResourceList,
 ) *proto.ContainerResourceRequirements {
 	limitsKinds := proto.ResourcesRequirementsKind{}
 	requestsKinds := proto.ResourcesRequirementsKind{}
 	limits := resources.Limits
 	if limits == nil {
-		limits = kv1.ResourceList{}
+		limits = corev1.ResourceList{}
 	}
 	requests := resources.Requests
 	if requests == nil {
-		requests = kv1.ResourceList{}
+		requests = corev1.ResourceList{}
 	}
-	if !quantityHasValue(requests, kv1.ResourceCPU) {
-		if quantityHasValue(limits, kv1.ResourceCPU) {
+	if !quantityHasValue(requests, corev1.ResourceCPU) {
+		if quantityHasValue(limits, corev1.ResourceCPU) {
 			limit := limits.Cpu()
-			requests[kv1.ResourceCPU] = *limit
-			requestsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindDefaultFromLimits
-		} else if quantityHasValue(defaultRequests, kv1.ResourceCPU) {
+			requests[corev1.ResourceCPU] = *limit
+			requestsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindDefaultFromLimits
+		} else if quantityHasValue(defaultRequests, corev1.ResourceCPU) {
 			request := defaultRequests.Cpu()
-			requests[kv1.ResourceCPU] = *request
-			requestsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
+			requests[corev1.ResourceCPU] = *request
+			requestsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		requestsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindSet
+		requestsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindSet
 	}
-	if !quantityHasValue(requests, kv1.ResourceMemory) {
-		if quantityHasValue(limits, kv1.ResourceMemory) {
+	if !quantityHasValue(requests, corev1.ResourceMemory) {
+		if quantityHasValue(limits, corev1.ResourceMemory) {
 			limit := limits.Memory()
-			requests[kv1.ResourceMemory] = *limit
-			requestsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindDefaultFromLimits
-		} else if quantityHasValue(defaultRequests, kv1.ResourceMemory) {
+			requests[corev1.ResourceMemory] = *limit
+			requestsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindDefaultFromLimits
+		} else if quantityHasValue(defaultRequests, corev1.ResourceMemory) {
 			request := defaultRequests.Memory()
-			requests[kv1.ResourceMemory] = *request
-			requestsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
+			requests[corev1.ResourceMemory] = *request
+			requestsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		requestsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindSet
+		requestsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindSet
 	}
 
-	if !quantityHasValue(limits, kv1.ResourceCPU) {
-		if quantityHasValue(defaultLimits, kv1.ResourceCPU) {
+	if !quantityHasValue(limits, corev1.ResourceCPU) {
+		if quantityHasValue(defaultLimits, corev1.ResourceCPU) {
 			limit := defaultLimits.Cpu()
-			limits[kv1.ResourceCPU] = *limit
-			limitsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
+			limits[corev1.ResourceCPU] = *limit
+			limitsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		limitsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindSet
+		limitsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindSet
 	}
-	if !quantityHasValue(limits, kv1.ResourceMemory) {
-		if quantityHasValue(defaultLimits, kv1.ResourceMemory) {
+	if !quantityHasValue(limits, corev1.ResourceMemory) {
+		if quantityHasValue(defaultLimits, corev1.ResourceMemory) {
 			limit := defaultLimits.Memory()
-			limits[kv1.ResourceMemory] = *limit
-			limitsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
+			limits[corev1.ResourceMemory] = *limit
+			limitsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		limitsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindSet
+		limitsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindSet
 	}
 	return &proto.ContainerResourceRequirements{
-		SpecResourceRequirements: kv1.ResourceRequirements{
+		SpecResourceRequirements: corev1.ResourceRequirements{
 			Limits:   limits,
 			Requests: requests,
 		},
@@ -418,33 +431,33 @@ func withDefaultResources(
 	}
 }
 
-func applyReplicas(resources kv1.ResourceRequirements, replicas int64) kv1.ResourceRequirements {
-	requests := kv1.ResourceList{}
-	limits := kv1.ResourceList{}
+func applyReplicas(resources corev1.ResourceRequirements, replicas int64) corev1.ResourceRequirements {
+	requests := corev1.ResourceList{}
+	limits := corev1.ResourceList{}
 
-	if cpu, ok := resources.Requests[kv1.ResourceCPU]; ok {
-		requests[kv1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
+	if cpu, ok := resources.Requests[corev1.ResourceCPU]; ok {
+		requests[corev1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
 	}
 
-	if memory, ok := resources.Requests[kv1.ResourceMemory]; ok {
-		requests[kv1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
+	if memory, ok := resources.Requests[corev1.ResourceMemory]; ok {
+		requests[corev1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
 	}
 
-	if cpu, ok := resources.Limits[kv1.ResourceCPU]; ok {
-		limits[kv1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
+	if cpu, ok := resources.Limits[corev1.ResourceCPU]; ok {
+		limits[corev1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
 	}
 
-	if memory, ok := resources.Limits[kv1.ResourceMemory]; ok {
-		limits[kv1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
+	if memory, ok := resources.Limits[corev1.ResourceMemory]; ok {
+		limits[corev1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
 	}
 
-	return kv1.ResourceRequirements{
+	return corev1.ResourceRequirements{
 		Requests: requests,
 		Limits:   limits,
 	}
 }
 
-func quantityHasValue(resources kv1.ResourceList, resource kv1.ResourceName) bool {
+func quantityHasValue(resources corev1.ResourceList, resource corev1.ResourceName) bool {
 	_, ok := resources[resource]
 	return ok
 }
@@ -455,29 +468,29 @@ func multiplyQuantity(q kresource.Quantity, multiplier int64, scale kresource.Sc
 	return mq
 }
 
-func getDefaultResources(limitRanges []kv1.LimitRange) (kv1.ResourceList, kv1.ResourceList) {
-	defaultRequests, defaultLimits := kv1.ResourceList{}, kv1.ResourceList{}
+func getDefaultResources(limitRanges []corev1.LimitRange) (corev1.ResourceList, corev1.ResourceList) {
+	defaultRequests, defaultLimits := corev1.ResourceList{}, corev1.ResourceList{}
 	for _, limitRange := range limitRanges {
 		for _, limitItem := range limitRange.Spec.Limits {
-			if limitItem.Type == kv1.LimitTypeContainer {
+			if limitItem.Type == corev1.LimitTypeContainer {
 
-				if quantityHasValue(limitItem.DefaultRequest, kv1.ResourceCPU) {
+				if quantityHasValue(limitItem.DefaultRequest, corev1.ResourceCPU) {
 					cpu := limitItem.DefaultRequest.Cpu()
-					defaultRequests[kv1.ResourceCPU] = *cpu
+					defaultRequests[corev1.ResourceCPU] = *cpu
 				}
-				if quantityHasValue(limitItem.DefaultRequest, kv1.ResourceMemory) {
+				if quantityHasValue(limitItem.DefaultRequest, corev1.ResourceMemory) {
 					memory := limitItem.DefaultRequest.Memory()
-					defaultRequests[kv1.ResourceMemory] = *memory
+					defaultRequests[corev1.ResourceMemory] = *memory
 				}
 
-				if quantityHasValue(limitItem.Default, kv1.ResourceCPU) {
+				if quantityHasValue(limitItem.Default, corev1.ResourceCPU) {
 					cpu := limitItem.Default.Cpu()
-					defaultLimits[kv1.ResourceCPU] = *cpu
+					defaultLimits[corev1.ResourceCPU] = *cpu
 				}
 
-				if quantityHasValue(limitItem.Default, kv1.ResourceMemory) {
+				if quantityHasValue(limitItem.Default, corev1.ResourceMemory) {
 					memory := limitItem.Default.Memory()
-					defaultLimits[kv1.ResourceMemory] = *memory
+					defaultLimits[corev1.ResourceMemory] = *memory
 				}
 			}
 		}
@@ -593,11 +606,11 @@ func (scanner *Scanner) GetNodes() []kuber.Node {
 }
 
 // GetPods get scanned pods
-func (scanner *Scanner) GetPods() []kv1.Pod {
+func (scanner *Scanner) GetPods() []corev1.Pod {
 	scanner.mutex.Lock()
 	defer scanner.mutex.Unlock()
 
-	pods := make([]kv1.Pod, len(scanner.pods))
+	pods := make([]corev1.Pod, len(scanner.pods))
 	copy(pods, scanner.pods)
 
 	return pods

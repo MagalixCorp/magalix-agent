@@ -37,6 +37,7 @@ var (
 	watchedResources = []kuber.GroupVersionResourceKind{
 		kuber.Nodes,
 		kuber.Namespaces,
+		kuber.LimitRanges,
 		kuber.Pods,
 		kuber.ReplicationControllers,
 		kuber.Deployments,
@@ -47,6 +48,11 @@ var (
 		kuber.CronJobs,
 	}
 )
+
+type EntitiesWatcher interface {
+	Start() error
+	WatcherFor(gvrk kuber.GroupVersionResourceKind) (kuber.Watcher, error)
+}
 
 type entitiesWatcher struct {
 	logger   *log.Logger
@@ -65,7 +71,7 @@ func NewEntitiesWatcher(
 	logger *log.Logger,
 	observer_ *kuber.Observer,
 	client_ *client.Client,
-) *entitiesWatcher {
+) EntitiesWatcher {
 	ew := &entitiesWatcher{
 		logger: logger,
 
@@ -108,6 +114,18 @@ func (ew *entitiesWatcher) Start() error {
 	go ew.deltasWorker()
 
 	return nil
+}
+
+func (ew *entitiesWatcher) WatcherFor(
+	gvrk kuber.GroupVersionResourceKind,
+) (kuber.Watcher, error) {
+	w, ok := ew.watchers[gvrk]
+	if !ok {
+		return nil, karma.
+			Describe("gvrk", gvrk).
+			Format(nil, "non watched resource")
+	}
+	return w, nil
 }
 
 func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
