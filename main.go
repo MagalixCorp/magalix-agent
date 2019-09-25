@@ -17,6 +17,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/metrics"
 	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixCorp/magalix-agent/scalar"
+	"github.com/MagalixCorp/magalix-agent/scalar2"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -106,6 +107,10 @@ var version = "[manual build]"
 
 var startID string
 
+const (
+	entitiesSyncTimeout = time.Minute
+)
+
 func getVersion() string {
 	return strings.Join([]string{
 		"magalix agent " + version,
@@ -140,14 +145,6 @@ func main() {
 	)
 
 	kRestConfig, err := getKRestConfig(stderr, args)
-
-	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
-	observer_ := kuber.NewObserver(
-		stderr,
-		dynamicClient,
-		make(chan struct{}, 0),
-		time.Minute*5,
-	)
 
 	secret, err := base64.StdEncoding.DecodeString(
 		utils.ExpandEnv(args, "--client-secret", false),
@@ -193,9 +190,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
-	ew.Start()
-
 	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
 	if err != nil {
 		stderr.Fatalf(err, "unable to initialize Kubernetes")
@@ -208,6 +202,22 @@ func main() {
 		"--analysis-data-interval",
 	)
 
+	deltasEnabled := true
+
+	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
+	observer_ := kuber.NewObserver(
+		stderr,
+		dynamicClient,
+		make(chan struct{}, 0),
+		time.Minute*5,
+	)
+	t := entitiesSyncTimeout
+	err = observer_.WaitForCacheSync(&t)
+	if err != nil {
+		stderr.Errorf(err, "unable to start entities watcher")
+		deltasEnabled = false // fallback to old scanner implementation
+	}
+
 	entityScanner := scanner.InitScanner(
 		gwClient,
 		kube,
@@ -217,6 +227,23 @@ func main() {
 		optInAnalysisData,
 		analysisDataInterval,
 	)
+
+	if deltasEnabled {
+		ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
+		err := ew.Start()
+		if err != nil {
+			stderr.Fatalf(err, "unable to start entities watcher")
+		}
+
+		if scalarEnabled {
+			scalar2.InitScalars(stderr, kube, observer_, dryRun)
+		}
+
+	} else {
+		if scalarEnabled {
+			scalar.InitScalars(stderr, entityScanner, kube, dryRun)
+		}
+	}
 
 	e := executor.InitExecutor(
 		gwClient,
@@ -258,10 +285,6 @@ func main() {
 			gwClient.Fatalf(err, "unable to initialize metrics sources")
 			os.Exit(1)
 		}
-	}
-
-	if scalarEnabled {
-		scalar.InitScalars(stderr, kube, observer_, dryRun)
 	}
 
 }

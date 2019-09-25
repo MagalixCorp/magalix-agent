@@ -2,6 +2,7 @@ package kuber
 
 import (
 	"bytes"
+	"context"
 	"time"
 
 	"github.com/MagalixTechnologies/log-go"
@@ -71,8 +72,33 @@ func (observer *Observer) Stop() {
 	observer.stopCh <- struct{}{}
 }
 
-func (observer *Observer) WaitForCacheSync() {
-	observer.DynamicSharedInformerFactory.WaitForCacheSync(observer.stopCh)
+func (observer *Observer) WaitForCacheSync(timeout *time.Duration) error {
+	if timeout == nil {
+		observer.DynamicSharedInformerFactory.WaitForCacheSync(observer.stopCh)
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	finished := make(chan struct{})
+
+	go func() {
+		observer.DynamicSharedInformerFactory.WaitForCacheSync(observer.stopCh)
+		finished <- struct{}{}
+	}()
+
+	for {
+		select {
+		case <-finished:
+			cancel()
+			return nil
+		case <-ctx.Done():
+			return karma.Format(
+				nil,
+				"timeout waiting for cache sync",
+			)
+		}
+	}
+
 }
 
 type Watcher interface {

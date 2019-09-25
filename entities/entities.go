@@ -48,10 +48,6 @@ var (
 	}
 )
 
-type EntitiesWatcher interface {
-	Start()
-}
-
 type entitiesWatcher struct {
 	logger   *log.Logger
 	client   *client.Client
@@ -69,7 +65,7 @@ func NewEntitiesWatcher(
 	logger *log.Logger,
 	observer_ *kuber.Observer,
 	client_ *client.Client,
-) EntitiesWatcher {
+) *entitiesWatcher {
 	ew := &entitiesWatcher{
 		logger: logger,
 
@@ -86,7 +82,7 @@ func NewEntitiesWatcher(
 	return ew
 }
 
-func (ew *entitiesWatcher) Start() {
+func (ew *entitiesWatcher) Start() error {
 	// this method should be called only once
 
 	// TODO: if a packet expires or failed to be sent
@@ -98,7 +94,10 @@ func (ew *entitiesWatcher) Start() {
 		ew.watchersByKind[gvrk.Kind] = w
 	}
 
-	ew.observer.WaitForCacheSync()
+	err := ew.observer.WaitForCacheSync(nil)
+	if err != nil {
+		return err
+	}
 
 	ew.snapshotIdentitiesTicker.Start(true, false, false)
 	ew.snapshotTicker.Start(true, false, false)
@@ -107,6 +106,8 @@ func (ew *entitiesWatcher) Start() {
 		watcher.AddEventHandler(ew)
 	}
 	go ew.deltasWorker()
+
+	return nil
 }
 
 func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {

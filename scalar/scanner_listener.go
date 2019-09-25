@@ -1,119 +1,136 @@
 package scalar
 
 import (
-	"encoding/json"
-	"sync"
-	"time"
-
-	"github.com/MagalixCorp/magalix-agent/kuber"
+	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	corev1 "k8s.io/api/core/v1"
+	kv1 "k8s.io/api/core/v1"
+	"sync"
 )
 
-type PodProcessor interface {
-	Submit(pod corev1.Pod) error
+type ContainerProcessor interface {
+	Submit(status IdentifiedContainer) error
+	Applicable(status IdentifiedContainer) bool
+}
+
+type IdentifiedContainer struct {
+	Container   scanner.Container
+	Service     scanner.Service
+	Application scanner.Application
+	Status      kv1.ContainerStatus
 }
 
 type ScannerListener struct {
-	logger *log.Logger
+	logger  *log.Logger
+	scanner *scanner.Scanner
 
-	observer      *kuber.Observer
-	podsWatcher   kuber.Watcher
-	podsChan      chan corev1.Pod
-	plMutex       sync.Mutex
-	podsListeners []PodProcessor
+	pods chan []kv1.Pod
+
+	clMutex             sync.Mutex
+	containersListeners []ContainerProcessor
+
+	stopCh chan struct{}
 }
 
 func NewScannerListener(
 	logger *log.Logger,
-	observer_ *kuber.Observer,
+	scanner *scanner.Scanner,
 ) *ScannerListener {
 	return &ScannerListener{
-		logger: logger,
+		logger:  logger,
+		scanner: scanner,
 
-		observer: observer_,
-		podsChan: make(chan corev1.Pod, 0),
-		plMutex:  sync.Mutex{},
+		pods: make(chan []kv1.Pod, 0),
+
+		clMutex: sync.Mutex{},
+
+		stopCh: make(chan struct{}, 0),
 	}
 }
 
 func (sl *ScannerListener) Start() {
 	go sl.processPods()
+	stop := false
+	for {
+		select {
+		case <-sl.scanner.WaitForNextTick(): sl.pods <- sl.scanner.GetPods()
+			break
+		case <-sl.stopCh:
+			stop = true
+			break
+		}
+		if stop {
+			break
+		}
+	}
 
-	sl.podsWatcher = sl.observer.Watch(kuber.Pods)
-	sl.podsWatcher.AddEventHandler(
-		&kuber.ResourceEventHandlerFuncs{
-			AddFunc: func(now time.Time, gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
-				sl.handleUnstructuredPod(&obj)
-			},
-			UpdateFunc: func(now time.Time, gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
-				sl.handleUnstructuredPod(&newObj)
-			},
-		},
-	)
+	close(sl.stopCh)
+	close(sl.pods)
+
 }
 
 func (sl *ScannerListener) Stop() {
-	close(sl.podsChan)
-	// TODO: we may need to find a method to remove the EventHandler
+	sl.stopCh <- struct{}{}
 }
 
-func (sl *ScannerListener) handleUnstructuredPod(u *unstructured.Unstructured) {
-	var pod corev1.Pod
-	err := transcodeUnstructured(u, &pod)
-	if err != nil {
-		sl.logger.Errorf(
-			err,
-			"unable to decode Unstructured to corev1.Pod",
-		)
-	}
-	sl.podsChan <- pod
-}
+func (sl *ScannerListener) AddContainerListener(processor ContainerProcessor) {
+	sl.clMutex.Lock()
+	defer sl.clMutex.Unlock()
 
-func (sl *ScannerListener) AddPodListener(processor PodProcessor) {
-	sl.plMutex.Lock()
-	defer sl.plMutex.Unlock()
-
-	sl.podsListeners = append(sl.podsListeners, processor)
+	sl.containersListeners = append(sl.containersListeners, processor)
 }
 
 func (sl *ScannerListener) processPods() {
-	for pod := range sl.podsChan {
-		for _, listener := range sl.podsListeners {
-			err := listener.Submit(pod)
-			if err != nil {
-				sl.logger.Errorf(
-					err,
-					"error submitting pod to listener",
-				)
+	for pods := range sl.pods {
+
+		for _, pod := range pods {
+
+			for _, containerStatus := range pod.Status.ContainerStatuses {
+				container, service, application, err := sl.identifyContainer(pod, containerStatus.Name)
+				if err != nil {
+					sl.logger.Errorf(err, "unable to obtain containerStatus ID")
+				} else {
+					status := IdentifiedContainer{
+						Container:   *container,
+						Service:     *service,
+						Application: *application,
+						Status:      containerStatus,
+					}
+					for _, listener := range sl.containersListeners {
+						if listener.Applicable(status) {
+							err := listener.Submit(status)
+							if err != nil {
+								sl.logger.Errorf(
+									err,
+									"error submitting to listener",
+								)
+							}
+						}
+					}
+				}
 			}
+
 		}
+
 	}
 }
 
-func transcodeUnstructured(
-	u *unstructured.Unstructured,
-	v interface{},
-) error {
-	b, err := u.MarshalJSON()
-	if err != nil {
-		return karma.Format(
-			err,
-			"unable to marshal Unstructured to json",
-		)
+func (sl *ScannerListener) identifyContainer(
+	pod kv1.Pod,
+	containerName string,
+) (*scanner.Container, *scanner.Service, *scanner.Application, error) {
+	container, service, application, found := sl.scanner.FindContainerWithParents(
+		pod.GetNamespace(),
+		pod.GetName(),
+		containerName,
+	)
+	if !found {
+		return nil, nil, nil, karma.
+			Describe("namespace", pod.GetNamespace()).
+			Describe("name", pod.GetName()).
+			Describe("container", containerName).
+			Reason("no such container")
 	}
 
-	err = json.Unmarshal(b, v)
-	if err != nil {
-		return karma.Format(
-			err,
-			"unable to unmarshal json into %T",
-			v,
-		)
-	}
-
-	return nil
+	return container, service, application, nil
 }
