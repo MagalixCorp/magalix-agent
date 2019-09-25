@@ -1,9 +1,9 @@
 package kuber
 
 import (
-	"github.com/reconquest/karma-go"
 	"strings"
 
+	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	appsv1 "k8s.io/api/apps/v1"
