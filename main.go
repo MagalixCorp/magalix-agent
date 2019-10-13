@@ -239,6 +239,7 @@ func main() {
 			clusterID,
 			optInAnalysisData,
 			analysisDataInterval,
+			false,
 		)
 
 	} else {
@@ -250,6 +251,7 @@ func main() {
 			clusterID,
 			optInAnalysisData,
 			analysisDataInterval,
+			true,
 		)
 
 		if scalarEnabled {

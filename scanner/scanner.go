@@ -59,6 +59,8 @@ type Scanner struct {
 	analysisDataSender func(args ...interface{})
 
 	dones []chan struct{}
+
+	enableSender bool
 }
 
 // deprecated: please use entities/EntitiesWatcher instead
@@ -71,6 +73,7 @@ func InitScanner(
 	clusterID uuid.UUID,
 	optInAnalysisData bool,
 	analysisDataInterval time.Duration,
+	enableSender bool,
 ) *Scanner {
 	scanner := &Scanner{
 		client:            client,
@@ -85,6 +88,8 @@ func InitScanner(
 
 		mutex: &sync.Mutex{},
 		dones: make([]chan struct{}, 0),
+
+		enableSender: enableSender,
 	}
 	if optInAnalysisData {
 		scanner.analysisDataSender = utils.Throttle(
