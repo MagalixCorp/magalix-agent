@@ -340,9 +340,10 @@ const (
 )
 
 type ParentController struct {
-	Kind       string `json:"kind"`
-	Name       string `json:"name"`
-	APIVersion string `json:"api_version"`
+	Kind       string	`json:"kind"`
+	Name       string	`json:"name"`
+	APIVersion string	`json:"api_version"`
+	IsWatched  bool		`json:"is_watched"`
 
 	Parent *ParentController `json:"parent"`
 }

@@ -27,6 +27,18 @@ type OOMKillsProcessor struct {
 	dryRun bool
 }
 
+type Pod struct {
+	corev1.Pod
+}
+
+func (p *Pod) GetKind() string {
+	return p.Kind
+}
+
+func (p *Pod) GetAPIVersion() string {
+	return p.APIVersion
+}
+
 func NewOOMKillsProcessor(
 	logger *log.Logger,
 	kube *kuber.Kube,
@@ -137,7 +149,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 	}
 
 	parents, err := kuber.GetParents(
-		&pod,
+		&Pod{Pod: pod},
 		func(kind string) (kuber.Watcher, bool) {
 			gvrk, err := kuber.KindToGvrk(kind)
 			if err != nil {
