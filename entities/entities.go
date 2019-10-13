@@ -263,7 +263,7 @@ func (ew *entitiesWatcher) deltaWrapper(
 				"unable to get pod parents",
 			)
 		}
-		delta.Parents = parents
+		delta.Parent = parents
 	}
 
 	return delta, nil
