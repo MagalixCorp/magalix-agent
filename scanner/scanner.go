@@ -50,6 +50,7 @@ type Scanner struct {
 	pods []corev1.Pod
 
 	nodes         []kuber.Node
+	nodeList      []corev1.Node
 	nodesLastScan time.Time
 
 	history History
@@ -153,6 +154,7 @@ func (scanner *Scanner) scanNodes() {
 		)
 
 		scanner.nodes = nodes
+		scanner.nodeList = nodeList.Items
 		scanner.nodesLastScan = time.Now().UTC()
 
 		scanner.SendNodes(nodes)
@@ -600,14 +602,14 @@ func (scanner *Scanner) GetApplications() []*Application {
 }
 
 // GetNodes get scanned nodes
-func (scanner *Scanner) GetNodes() []kuber.Node {
+func (scanner *Scanner) GetNodes() []corev1.Node {
 	scanner.mutex.Lock()
 	defer scanner.mutex.Unlock()
 
-	nodes := make([]kuber.Node, len(scanner.nodes))
-	copy(nodes, scanner.nodes)
+	nodeList := make([]corev1.Node, len(scanner.nodeList))
+	copy(nodeList, scanner.nodeList)
 
-	return nodes
+	return nodeList
 }
 
 // GetPods get scanned pods

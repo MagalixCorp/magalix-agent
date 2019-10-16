@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"net/http"
 	"net/url"
@@ -13,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
@@ -78,12 +78,12 @@ func parseJSONStream(body io.Reader, response interface{}) (err error) {
 	return nil
 }
 
-type NodePathGetter func(node *kuber.Node, path_ string) string
+type NodePathGetter func(node *corev1.Node, path_ string) string
 
 type KubeletClient struct {
 	*log.Logger
 
-	scanner *scanner.Scanner
+	nodesProvider NodesProvider
 
 	kube       *kuber.Kube
 	restClient *rest.RESTClient
@@ -114,7 +114,7 @@ func (client *KubeletClient) discoverNodesAddress() (
 	err error,
 ) {
 
-	nodes := client.scanner.GetNodes()
+	nodes := client.nodesProvider.GetNodes()
 	if len(nodes) == 0 {
 		return nil,
 			karma.Format(
@@ -147,7 +147,7 @@ func (client *KubeletClient) discoverNodesAddress() (
 		close(found)
 	}
 
-	processNode := func(n kuber.Node) {
+	processNode := func(n corev1.Node) {
 		group.Go(func() error {
 			getAddr, isApiServer, err := client.discoverNodeAddress(&n)
 			if err == nil {
@@ -160,7 +160,7 @@ func (client *KubeletClient) discoverNodesAddress() (
 
 	}
 
-	for _, node := range client.scanner.GetNodes() {
+	for _, node := range client.nodesProvider.GetNodes() {
 		processNode(node)
 	}
 
@@ -179,13 +179,13 @@ func (client *KubeletClient) discoverNodesAddress() (
 }
 
 func (client *KubeletClient) discoverNodeAddress(
-	node *kuber.Node,
+	node *corev1.Node,
 ) (nodeGet NodePathGetter, isApiServer *bool, err error) {
 	isApiServer = new(bool)
 
 	ctx := karma.
 		Describe("node", node.Name).
-		Describe("ip", node.IP)
+		Describe("ip", GetNodeIP(node))
 
 	*isApiServer = true
 	nodeGet, err = client.tryApiServerProxy(ctx, node)
@@ -206,9 +206,9 @@ func (client *KubeletClient) discoverNodeAddress(
 
 func (client *KubeletClient) tryApiServerProxy(
 	ctx *karma.Context,
-	node *kuber.Node,
+	node *corev1.Node,
 ) (NodePathGetter, error) {
-	getNodeUrl := func(node *kuber.Node, path string) string {
+	getNodeUrl := func(node *corev1.Node, path string) string {
 		subResources := []string{"proxy"}
 		subResources = append(subResources, strings.Split(path, "/")...)
 
@@ -239,10 +239,10 @@ func (client *KubeletClient) tryApiServerProxy(
 
 func (client *KubeletClient) tryDirectAccess(
 	ctx *karma.Context,
-	node *kuber.Node,
+	node *corev1.Node,
 ) (NodePathGetter, error) {
-	getNodeUrl := func(node *kuber.Node, path_ string) string {
-		base := fmt.Sprintf("http://%s:%v", node.IP, client.httpPort)
+	getNodeUrl := func(node *corev1.Node, path_ string) string {
+		base := fmt.Sprintf("http://%s:%v", GetNodeIP(node), client.httpPort)
 		return joinUrl(base, path_)
 	}
 	err := client.testNodeAccess(ctx, node, getNodeUrl)
@@ -261,7 +261,7 @@ func (client *KubeletClient) tryDirectAccess(
 }
 
 func (client *KubeletClient) testNodeAccess(
-	ctx *karma.Context, node *kuber.Node, getNodeUrl NodePathGetter,
+	ctx *karma.Context, node *corev1.Node, getNodeUrl NodePathGetter,
 ) error {
 	ctx = ctx.
 		Describe("path", "stats/summary")
@@ -298,7 +298,7 @@ func (client *KubeletClient) get(url_ string) (*http.Response, error) {
 }
 
 func (client *KubeletClient) Get(
-	node *kuber.Node,
+	node *corev1.Node,
 	path string,
 ) (*http.Response, error) {
 	url_ := client.getNodeUrl(node, path)
@@ -306,7 +306,7 @@ func (client *KubeletClient) Get(
 }
 
 func (client *KubeletClient) GetBytes(
-	node *kuber.Node,
+	node *corev1.Node,
 	path string,
 ) ([]byte, error) {
 	resp, err := client.Get(node, path)
@@ -318,7 +318,7 @@ func (client *KubeletClient) GetBytes(
 }
 
 func (client *KubeletClient) GetJson(
-	node *kuber.Node,
+	node *corev1.Node,
 	path string,
 	response interface{},
 ) error {
@@ -330,9 +330,13 @@ func (client *KubeletClient) GetJson(
 	return parseJSONStream(resp.Body, &response)
 }
 
+type NodesProvider interface {
+	GetNodes() []corev1.Node
+}
+
 func NewKubeletClient(
 	logger *log.Logger,
-	scanner *scanner.Scanner,
+	nodesProvider NodesProvider,
 	kube *kuber.Kube,
 	args map[string]interface{},
 ) (*KubeletClient, error) {
@@ -348,7 +352,7 @@ func NewKubeletClient(
 	client := &KubeletClient{
 		Logger: logger,
 
-		scanner: scanner,
+		nodesProvider: nodesProvider,
 
 		kube:       kube,
 		restClient: restClient,
@@ -362,4 +366,15 @@ func NewKubeletClient(
 	}
 
 	return client, nil
+}
+
+func GetNodeIP(node *corev1.Node) string {
+	var address string
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == corev1.NodeInternalIP {
+			address = addr.Address
+		}
+	}
+
+	return address
 }

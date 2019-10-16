@@ -282,6 +282,7 @@ func InitMetrics(
 	client *client.Client,
 	scanner *scanner.Scanner,
 	kube *kuber.Kube,
+	identifyEntities bool,
 	optInAnalysisData bool,
 	args map[string]interface{},
 ) error {

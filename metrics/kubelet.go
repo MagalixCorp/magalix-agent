@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixTechnologies/alltogether-go"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // used internally to set default values for some metrics.
@@ -143,7 +143,7 @@ func NewKubelet(
 }
 
 type EntitiesProvider interface {
-	GetNodes() []kuber.Node
+	GetNodes() []corev1.Node
 	NodesLastScanTime() time.Time
 
 	GetApplications() []*scanner.Application
@@ -378,14 +378,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 	instanceGroups := map[string]int64{}
 	for _, node := range nodes {
-		instanceGroup := ""
-		if node.InstanceType != "" {
-			instanceGroup = node.InstanceType
-		}
-		if node.InstanceSize != "" {
-			instanceGroup += "." + node.InstanceSize
-		}
-
+		instanceGroup := GetNodeInstanceGroup(node)
 		if _, ok := instanceGroups[instanceGroup]; !ok {
 			instanceGroups[instanceGroup] = 0
 		}
@@ -416,10 +409,10 @@ func (kubelet *Kubelet) GetMetrics(
 			Time  time.Time
 			Value int64
 		}{
-			{"cpu/node_capacity", nodesScanTime, int64(node.Capacity.CPU)},
-			{"cpu/node_allocatable", nodesScanTime, int64(node.Allocatable.CPU)},
-			{"memory/node_capacity", nodesScanTime, int64(node.Capacity.Memory)},
-			{"memory/node_allocatable", nodesScanTime, int64(node.Allocatable.Memory)},
+			{"cpu/node_capacity", nodesScanTime, node.Status.Capacity.Cpu().MilliValue()},
+			{"cpu/node_allocatable", nodesScanTime, node.Status.Allocatable.Cpu().MilliValue()},
+			{"memory/node_capacity", nodesScanTime, node.Status.Capacity.Memory().Value()},
+			{"memory/node_allocatable", nodesScanTime, node.Status.Allocatable.Memory().Value()},
 		} {
 			addMetricValue(
 				TypeNode,
@@ -437,7 +430,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 	pr, err := alltogether.NewConcurrentProcessor(
 		nodes,
-		func(node kuber.Node) error {
+		func(node corev1.Node) error {
 			kubelet.Infof(
 				nil,
 				"{kubelet} requesting metrics from node %s",
@@ -996,4 +989,47 @@ func (kubelet *Kubelet) withBackoff(fn func() error) error {
 
 		time.Sleep(timeout)
 	}
+}
+
+func GetNodeInstanceGroup(node corev1.Node) string {
+	labels := node.Labels
+	instanceType, cloudProvider := labels["beta.kubernetes.io/instance-type"]
+	instanceSize := ""
+
+	if cloudProvider {
+		_, gcloud := labels["cloud.google.com/gke-nodepool"]
+		if gcloud {
+			if strings.Contains(instanceType, "-") {
+				parts := strings.SplitN(instanceType, "-", 2)
+				instanceType, instanceSize = parts[0], parts[1]
+			}
+		} else {
+			if strings.Contains(instanceType, ".") {
+				parts := strings.SplitN(instanceType, ".", 2)
+				instanceType, instanceSize = parts[0], parts[1]
+			}
+		}
+	} else {
+		// for custom on-perm clusters we use node capacity as instance type
+		instanceType = "custom"
+
+		cpuCores := node.Status.Capacity.Cpu().MilliValue() / 1000
+		memoryGi := node.Status.Capacity.Memory().Value() / 1024 / 1024 / 1024
+
+		instanceSize = fmt.Sprintf(
+			"cpu-%d--memory-%.2f",
+			cpuCores,
+			memoryGi,
+		)
+	}
+
+	instanceGroup := ""
+	if instanceType != "" {
+		instanceGroup = instanceType
+	}
+	if instanceSize != "" {
+		instanceGroup += "." + instanceSize
+	}
+
+	return instanceGroup
 }
