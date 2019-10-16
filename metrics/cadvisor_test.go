@@ -10,13 +10,13 @@ func TestDecodeCAdvisor(t *testing.T) {
 	tests := []struct {
 		name    string
 		in      string
-		want    CAdvisorMetrics
+		want    cAdvisorMetrics
 		wantErr bool
 	}{
 		{
 			name: "test empty input",
 			in:   "",
-			want: CAdvisorMetrics{},
+			want: cAdvisorMetrics{},
 		},
 		{
 			name: "test regular input",
@@ -27,8 +27,8 @@ container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/bursta
 container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/burstable/podfb95fb02-e6aa-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 4577
 container_cpu_cfs_throttled_seconds_total{container_name="",id="/kubepods/burstable/pod6b6035fb-e6a9-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 3357.740971059
 `,
-			want: CAdvisorMetrics{
-				"container_cpu_cfs_throttled_periods_total": []TagsValue{
+			want: cAdvisorMetrics{
+				"container_cpu_cfs_throttled_periods_total": []tagsValue{
 					{
 						Tags: map[string]string{
 							"container_name": "",
@@ -74,7 +74,7 @@ container_cpu_cfs_throttled_seconds_total{container_name="",id="/kubepods/bursta
 						Value: 4577,
 					},
 				},
-				"container_cpu_cfs_throttled_seconds_total": []TagsValue{
+				"container_cpu_cfs_throttled_seconds_total": []tagsValue{
 					{
 						Tags: map[string]string{
 							"container_name": "",
@@ -100,8 +100,8 @@ container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/bursta
 container_cpu_cfs_throttled_periods_total{container_name="",id="/kubepods/burstable/podfb95fb02-e6aa-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 4577
 container_cpu_cfs_throttled_seconds_total{container_name="",id="/kubepods/burstable/pod6b6035fb-e6a9-11e8-a8ed-42010a8e0004",image="",name="",namespace="",pod_name=""} 3357.740971059
 `,
-			want: CAdvisorMetrics{
-				"container_cpu_cfs_throttled_periods_total": []TagsValue{
+			want: cAdvisorMetrics{
+				"container_cpu_cfs_throttled_periods_total": []tagsValue{
 					{
 						Tags: map[string]string{
 							"container_name": "",
@@ -147,7 +147,7 @@ container_cpu_cfs_throttled_seconds_total{container_name="",id="/kubepods/bursta
 						Value: 4577,
 					},
 				},
-				"container_cpu_cfs_throttled_seconds_total": []TagsValue{
+				"container_cpu_cfs_throttled_seconds_total": []tagsValue{
 					{
 						Tags: map[string]string{
 							"container_name": "",

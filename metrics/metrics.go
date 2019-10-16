@@ -125,66 +125,6 @@ func watchMetrics(
 	ticker.Start(false, true, true)
 }
 
-func watchMetricsProm(
-	c *client.Client,
-	sources map[string]Source,
-	interval time.Duration,
-) {
-	scrapeSource := func(tickTime time.Time, sourceName string, source Source) {
-		batches, err := source.GetMetrics(tickTime)
-		if err != nil {
-			c.Errorf(err,
-				"unable to retrieve metrics from %s source",
-				sourceName,
-			)
-			return
-		}
-
-		for batch := range batches {
-			packet := packetMetricsProm(batch)
-
-			c.Pipe(client.Package{
-				Kind:        proto.PacketKindMetricsPromStoreRequest,
-				ExpiryTime:  utils.After(2 * time.Hour),
-				ExpiryCount: 100,
-				Priority:    4,
-				Retries:     10,
-				Data:        packet,
-			})
-		}
-	}
-
-	ticker := utils.NewTicker(
-		"prom-metrics",
-		interval,
-		func(tickTime time.Time) {
-			ctx := karma.Describe("tick", tickTime.Format(time.RFC3339))
-			c.Infof(
-				ctx,
-				"requesting metrics from prometheus sources",
-			)
-
-			wg := &sync.WaitGroup{}
-			wg.Add(len(sources))
-
-			for sourceName, source := range sources {
-				go func(sourceName string, source Source) {
-					scrapeSource(tickTime, sourceName, source)
-					wg.Done()
-				}(sourceName, source)
-			}
-
-			wg.Wait()
-
-			c.Infof(
-				ctx,
-				"collected metrics from prometheus sources",
-			)
-		},
-	)
-	ticker.Start(false, true, true)
-}
-
 func packetMetricsProm(metricsBatch *MetricsBatch) *proto.PacketMetricsPromStoreRequest {
 	packet := &proto.PacketMetricsPromStoreRequest{
 		Timestamp: metricsBatch.Timestamp,
@@ -290,11 +230,11 @@ func InitMetrics(
 		metricsInterval = utils.MustParseDuration(args, "--metrics-interval")
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
-		metricsSources = map[string]interface{}{}
+		metricsSources = []MetricsSource{}
 		foundErrors    = make([]error, 0)
 	)
 
-	metricsSourcesNames := []string{"alpha-cadvisor", "alpha-stats", "kubelet"}
+	metricsSourcesNames := []string{"kubelet"}
 	if names, ok := args["--source"].([]string); ok && len(names) > 0 {
 		metricsSourcesNames = names
 		failOnError = true
@@ -331,33 +271,7 @@ func InitMetrics(
 				continue
 			}
 
-			metricsSources[metricsSource] = kubelet
-
-		case "alpha-cadvisor":
-			cAdvisor, err := NewCAdvisor(
-				kubeletClient,
-				client.Logger,
-				scanner,
-				utils.Backoff{
-					Sleep:      utils.MustParseDuration(args, "--kubelet-backoff-sleep"),
-					MaxRetries: utils.MustParseInt(args, "--kubelet-backoff-max-retries"),
-				},
-			)
-
-			if err != nil {
-				foundErrors = append(foundErrors, karma.Format(
-					err,
-					"unable to initialize cAdvisor source",
-				))
-				continue
-			}
-
-			metricsSources[metricsSource] = cAdvisor
-
-		case "alpha-stats":
-			stats := NewStats(scanner, client.Logger)
-
-			metricsSources[metricsSource] = stats
+			metricsSources = append(metricsSources, kubelet)
 		}
 	}
 
@@ -365,23 +279,15 @@ func InitMetrics(
 		return karma.Format(foundErrors, "unable to init metric sources")
 	}
 
-	promSources := map[string]Source{}
-	for sourceName, source := range metricsSources {
-		switch s := source.(type) {
-		case MetricsSource:
-			go watchMetrics(
-				client,
-				s,
-				scanner,
-				metricsInterval,
-			)
-			break
-		case Source:
-			promSources[sourceName] = s
-			break
-		}
+	for _, source := range metricsSources {
+		go watchMetrics(
+			client,
+			source,
+			entitiesProvider,
+			identifyEntities,
+			metricsInterval,
+		)
 	}
-	go watchMetricsProm(client, promSources, metricsInterval)
 
 	return nil
 }
