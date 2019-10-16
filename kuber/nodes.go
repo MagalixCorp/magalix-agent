@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/MagalixTechnologies/uuid-go"
-	kapi "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -53,7 +53,7 @@ type ContainerResources struct {
 	Memory int `json:"memory"`
 }
 
-func resourceListToContainerResources(resourceList kapi.ResourceList) *ContainerResources {
+func resourceListToContainerResources(resourceList corev1.ResourceList) *ContainerResources {
 	res := &ContainerResources{}
 
 	if memory := resourceList.Memory(); memory != nil {
@@ -76,7 +76,7 @@ type NodeCapacity struct {
 	Pods             int `json:"pods"`
 }
 
-func GetContainersByNode(pods []kapi.Pod) map[string]int {
+func GetContainersByNode(pods []corev1.Pod) map[string]int {
 	containers := map[string]int{}
 	for _, pod := range pods {
 		containers[pod.Spec.NodeName] += len(pod.Spec.Containers)
@@ -94,7 +94,7 @@ func UpdateNodesContainers(nodes []Node, containers map[string]int) []Node {
 
 func AddContainerListToNodes(
 	nodes []Node,
-	pods []kapi.Pod,
+	pods []corev1.Pod,
 	namespace *string,
 	pod *string,
 	container *string,
@@ -126,8 +126,8 @@ func getWorkerNodesMap(nodes []*Node) map[string]*Node {
 }
 
 func RangePods(
-	pods []kapi.Pod,
-	fn func(kapi.Pod) bool) error {
+	pods []corev1.Pod,
+	fn func(corev1.Pod) bool) error {
 
 	for _, pod := range pods {
 		if !fn(pod) {
@@ -139,7 +139,7 @@ func RangePods(
 }
 
 func GetContainers(
-	pods []kapi.Pod,
+	pods []corev1.Pod,
 	namespace *string,
 	pod *string,
 	container *string,
@@ -148,7 +148,7 @@ func GetContainers(
 
 	err := RangePods(
 		pods,
-		func(kpod kapi.Pod) bool {
+		func(kpod corev1.Pod) bool {
 			if namespace != nil && kpod.Namespace != *namespace {
 				return true
 			}
@@ -185,7 +185,7 @@ func GetContainers(
 	return containers, nil
 }
 
-func GetNodes(nodes []kapi.Node) []Node {
+func GetNodes(nodes []corev1.Node) []Node {
 	result := []Node{}
 
 	for _, node := range nodes {
@@ -193,7 +193,7 @@ func GetNodes(nodes []kapi.Node) []Node {
 
 		var address string
 		for _, addr := range node.Status.Addresses {
-			if addr.Type == kapi.NodeInternalIP {
+			if addr.Type == corev1.NodeInternalIP {
 				address = addr.Address
 			}
 		}
@@ -261,7 +261,7 @@ func GetNodes(nodes []kapi.Node) []Node {
 	return result
 }
 
-func GetNodeCapacity(resources kapi.ResourceList) NodeCapacity {
+func GetNodeCapacity(resources corev1.ResourceList) NodeCapacity {
 	capacity := NodeCapacity{
 		CPU:              int(resources.Cpu().MilliValue()),
 		Memory:           int(resources.Memory().Value()),
