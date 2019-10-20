@@ -3,9 +3,7 @@ package metrics
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -46,34 +44,28 @@ func scanTokens(data []byte, atEOF bool) (advance int, token []byte, err error) 
 	return 0, nil, nil
 }
 
-func getCAdvisorContainerValue(t tagsValue) (podUID string, containerName string, namespace string, value float64, ok bool) {
+func getCAdvisorContainerValue(t tagsValue) (string, string, string, float64, bool) {
 	// container name is empty if not existent
-	containerName, _ = t.Tags["container_name"]
-	id, ok := t.Tags["id"]
-	if !ok {
-		return
-	}
-	namespace, ok = t.Tags["namespace"]
-	if !ok {
-		return
+	containerName, ok := t.Tags["container_name"]
+	if !ok || containerName == "" || containerName == "POD" {
+		return "", "", "", 0, false
 	}
 
-	if !strings.HasPrefix(id, "/kubepods") {
-		return
+	namespace, ok := t.Tags["namespace"]
+	if !ok || namespace == "" {
+		return "", "", "", 0, false
 	}
-	podregexp := regexp.MustCompile(`pod[0-9a-f\-]+`)
-	podUID = podregexp.FindString(id)[3:]
-	if len(podUID) <= 0 {
-		return
+
+	podName, ok := t.Tags["pod_name"]
+	if !ok || podName == "" {
+		podName, ok = t.Tags["pod"]
+		if !ok || podName == "" {
+			return "", "", "", 0, false
+		}
 	}
-	// dashes removed
-	if len(podUID) == 32 {
-		// 6b6035fb-e6a9-11e8-a8ed-42010a8e0004
-		podUID = fmt.Sprintf(`%s-%s-%s-%s-%s`, podUID[0:8], podUID[8:12], podUID[12:16], podUID[16:20], podUID[20:32])
-	}
-	value = t.Value
-	ok = true
-	return
+
+	value := t.Value
+	return namespace, podName, containerName, value, true
 }
 
 // decodeCAdvisorResponse decode cAdvisor response to cAdvisorMetrics

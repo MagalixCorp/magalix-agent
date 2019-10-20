@@ -602,25 +602,47 @@ func (scanner *Scanner) GetApplications() []*Application {
 }
 
 // GetNodes get scanned nodes
-func (scanner *Scanner) GetNodes() []corev1.Node {
+func (scanner *Scanner) GetNodes() ([]corev1.Node, error) {
 	scanner.mutex.Lock()
 	defer scanner.mutex.Unlock()
 
 	nodeList := make([]corev1.Node, len(scanner.nodeList))
 	copy(nodeList, scanner.nodeList)
 
-	return nodeList
+	return nodeList, nil
 }
 
 // GetPods get scanned pods
-func (scanner *Scanner) GetPods() []corev1.Pod {
+func (scanner *Scanner) GetPods() ([]corev1.Pod, error) {
 	scanner.mutex.Lock()
 	defer scanner.mutex.Unlock()
 
 	pods := make([]corev1.Pod, len(scanner.pods))
 	copy(pods, scanner.pods)
 
-	return pods
+	return pods, nil
+}
+
+func (scanner *Scanner) FindController(namespaceName string, podName string) (string, string, error) {
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
+
+	for _, namespace := range scanner.apps {
+		if namespace.Name != namespaceName {
+			continue
+		}
+
+		for _, controller := range namespace.Services {
+			if controller.PodRegexp.MatchString(podName) {
+				return controller.Name, controller.Kind, nil
+			}
+		}
+	}
+
+	return "", "", karma.
+		Describe("namespace_name", namespaceName).
+		Describe("pod_name", podName).
+		Format(nil, "unable to find controller")
 }
 
 // FindService find app and service id from pod name and namespace

@@ -114,7 +114,10 @@ func (client *KubeletClient) discoverNodesAddress() (
 	err error,
 ) {
 
-	nodes := client.nodesProvider.GetNodes()
+	nodes, err := client.nodesProvider.GetNodes()
+	if err != nil {
+		return nil, karma.Format(err, "can't test kubelet access")
+	}
 	if len(nodes) == 0 {
 		return nil,
 			karma.Format(
@@ -160,7 +163,7 @@ func (client *KubeletClient) discoverNodesAddress() (
 
 	}
 
-	for _, node := range client.nodesProvider.GetNodes() {
+	for _, node := range nodes {
 		processNode(node)
 	}
 
@@ -331,7 +334,7 @@ func (client *KubeletClient) GetJson(
 }
 
 type NodesProvider interface {
-	GetNodes() []corev1.Node
+	GetNodes() ([]corev1.Node, error)
 }
 
 func NewKubeletClient(

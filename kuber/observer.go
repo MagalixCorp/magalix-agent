@@ -3,6 +3,7 @@ package kuber
 import (
 	"bytes"
 	"context"
+	"k8s.io/apimachinery/pkg/labels"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/utils"
@@ -49,6 +50,13 @@ func (observer *Observer) Watch(
 
 	watcher := observer.WatcherFor(gvrk)
 	observer.Start()
+
+	return watcher
+}
+
+func (observer *Observer) WatchAndWaitForSync(gvrk GroupVersionResourceKind) *watcher {
+	watcher := observer.Watch(gvrk)
+	cache.WaitForCacheSync(observer.stopCh, watcher.informer.Informer().HasSynced)
 
 	return watcher
 }
@@ -100,6 +108,74 @@ func (observer *Observer) WaitForCacheSync(timeout *time.Duration) error {
 		}
 	}
 
+}
+
+func (observer *Observer) GetNodes() ([]corev1.Node, error) {
+	watcher := observer.WatchAndWaitForSync(Nodes)
+	_nodes, err := watcher.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, karma.Format(err, "unable to list nodes")
+	}
+	nodes := make([]corev1.Node, len(_nodes))
+	for i, n := range (_nodes) {
+		u := n.(*unstructured.Unstructured)
+		err = utils.Transcode(u, &nodes[i])
+		if err != nil {
+			return nil, karma.Format(err, "unable to transcode unstructured to corev1.Node")
+		}
+	}
+	return nodes, nil
+}
+
+func (observer *Observer) GetPods() ([]corev1.Pod, error) {
+	watcher := observer.WatchAndWaitForSync(Pods)
+	_pods, err := watcher.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, karma.Format(err, "unable to list pods")
+	}
+	pods := make([]corev1.Pod, len(_pods))
+	for i, n := range (_pods) {
+		u := n.(*unstructured.Unstructured)
+		err = utils.Transcode(u, &pods[i])
+		if err != nil {
+			return nil, karma.Format(err, "unable to transcode unstructured to corev1.Pod")
+		}
+	}
+	return pods, nil
+}
+
+func (observer *Observer) FindController(namespaceName string, podName string) (string, string, error) {
+	ctx := karma.
+		Describe("pod_name", podName).
+		Describe("namespace_name", namespaceName)
+
+	watcher := observer.WatchAndWaitForSync(Pods)
+	pod, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(podName)
+	if err != nil {
+		return "", "", karma.Format(ctx.Reason(err), "unable to get pod")
+	}
+
+	parent, err := GetParents(pod.(*unstructured.Unstructured), func(kind string) (Watcher, bool) {
+		gvrk, err := KindToGvrk(kind)
+		if err != nil {
+			observer.logger.Warningf(ctx.Describe("kind", kind).Reason(err), "unable to get GVRK for kind")
+			return nil, false
+		}
+
+		watcher := observer.WatchAndWaitForSync(*gvrk)
+
+		return watcher, true
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	if parent == nil {
+		return podName, Pods.Kind, nil
+	}
+
+	root := RootParent(parent)
+	return root.Name, root.Kind, nil
 }
 
 type Watcher interface {

@@ -8,23 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixTechnologies/alltogether-go"
 	"github.com/MagalixTechnologies/log-go"
-	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 	corev1 "k8s.io/api/core/v1"
 )
-
-// used internally to set default values for some metrics.
-// ex: throttling metrics, which won't exist in response if there is no throttle
-// and we want default value of zero
-type containerMetricStore struct {
-	ApplicationID, ServiceID, ContainerID uuid.UUID
-	Namespace, PodName, ContainerName     string
-	Timestamp                             time.Time
-	Value                                 float64
-}
 
 type KubeletSummaryContainer struct {
 	Name      string
@@ -142,65 +130,38 @@ func NewKubelet(
 	return kubelet, nil
 }
 
-type EntitiesProvider interface {
-	GetNodes() []corev1.Node
-	NodesLastScanTime() time.Time
-
-	GetApplications() []*scanner.Application
-	AppsLastScanTime() time.Time
-
-	FindService(
-		namespace string,
-		podName string,
-	) (uuid.UUID, uuid.UUID, bool)
-	FindContainer(
-		namespace string,
-		podName string,
-		containerName string,
-	) (uuid.UUID, uuid.UUID, *scanner.Container, bool)
-	FindContainerByPodUIDContainerName(
-		podUID string,
-		containerName string,
-	) (
-		applicationID uuid.UUID,
-		serviceID uuid.UUID,
-		containerID uuid.UUID,
-		podName string,
-		ok bool,
-	)
-}
-
-type entitiesProvider struct {
-}
-
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
 	entitiesProvider EntitiesProvider, tickTime time.Time,
-) ([]*Metrics, map[string]interface{}, error) {
+) ([]*Metric, map[string]interface{}, error) {
 	kubelet.collectGarbage()
 
 	metricsMutex := &sync.Mutex{}
-	metrics := []*Metrics{}
+	metrics := []*Metric{}
 
 	rawMutex := &sync.Mutex{}
 	rawResponses := map[string]interface{}{}
 
 	getKey := func(
-		entity string,
-		parentKey string,
-		entityKey string,
 		measurement string,
+		namespaceName string,
+		entityKind string,
+		entityName string,
+		containerName string,
 	) string {
-		if parentKey != "" {
-			parentKey = parentKey + ":"
-		}
-		return fmt.Sprintf(
-			"%s-%s:%s%s",
-			entity,
+		key := fmt.Sprintf(
+			"%s:%s/%s/%s",
 			measurement,
-			parentKey,
-			entityKey,
+			namespaceName,
+			entityKind,
+			entityName,
 		)
+
+		if containerName != "" {
+			key = fmt.Sprintf("%s/%s", key, containerName)
+		}
+
+		return key
 	}
 
 	calcRate := func(
@@ -233,49 +194,54 @@ func (kubelet *Kubelet) GetMetrics(
 		return rate, nil
 	}
 
+	addMetric := func(metric *Metric) {
+		metricsMutex.Lock()
+		defer metricsMutex.Unlock()
+		if metric.Timestamp.Equal(time.Time{}) {
+			kubelet.Errorf(
+				karma.Describe("metric", metric.Name).
+					Describe("type", metric.Type).
+					Describe("timestamp", metric.Timestamp).
+					Reason(fmt.Errorf("invalid timestamp")),
+				"invalid timestamp detect. defaulting to tickTime",
+			)
+			metric.Timestamp = tickTime
+		}
+		metrics = append(metrics, metric)
+	}
 	addMetricValue := func(
 		measurementType string,
 		measurement string,
-		nodeID uuid.UUID,
-		applicationID uuid.UUID,
-		serviceID uuid.UUID,
-		containerID uuid.UUID,
+		nodeName string,
+		namespaceName string,
+		controllerName string,
+		controllerKind string,
+		containerName string,
 		podName string,
 		timestamp time.Time,
 		value int64,
 	) {
-		metricsMutex.Lock()
-		defer metricsMutex.Unlock()
-		if timestamp.Equal(time.Time{}) {
-			kubelet.Errorf(
-				karma.Describe("metric", measurement).
-					Describe("type", measurementType).
-					Describe("timestamp", timestamp).
-					Reason(fmt.Errorf("invalid timestamp")),
-				"invalid timestamp detect. defaulting to tickTime",
-			)
-			timestamp = tickTime
-		}
-
-		metrics = append(metrics, &Metrics{
-			Name:        measurement,
-			Type:        measurementType,
-			Node:        nodeID,
-			Application: applicationID,
-			Service:     serviceID,
-			Container:   containerID,
-			Timestamp:   timestamp,
-			Value:       value,
-			PodName:     podName,
+		addMetric(&Metric{
+			Name:           measurement,
+			Type:           measurementType,
+			NodeName:       nodeName,
+			NamespaceName:  namespaceName,
+			ControllerName: controllerName,
+			ControllerKind: controllerKind,
+			ContainerName:  containerName,
+			PodName:        podName,
+			Timestamp:      timestamp,
+			Value:          value,
 		})
 	}
 	addMetricValueWithTags := func(
 		measurementType string,
 		measurement string,
-		nodeID uuid.UUID,
-		applicationID uuid.UUID,
-		serviceID uuid.UUID,
-		containerID uuid.UUID,
+		nodeName string,
+		namespaceName string,
+		controllerName string,
+		controllerKind string,
+		containerName string,
 		podName string,
 		timestamp time.Time,
 		value int64,
@@ -283,96 +249,114 @@ func (kubelet *Kubelet) GetMetrics(
 	) {
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
-		metrics = append(metrics, &Metrics{
-			Name:        measurement,
-			Type:        measurementType,
-			Node:        nodeID,
-			Application: applicationID,
-			Service:     serviceID,
-			Container:   containerID,
-			Timestamp:   timestamp,
-			Value:       value,
-			PodName:     podName,
-
+		metrics = append(metrics, &Metric{
+			Name:           measurement,
+			Type:           measurementType,
+			NodeName:       nodeName,
+			NamespaceName:  namespaceName,
+			ControllerName: controllerName,
+			ControllerKind: controllerKind,
+			ContainerName:  containerName,
+			PodName:        podName,
+			Timestamp:      timestamp,
+			Value:          value,
 			AdditionalTags: additionalTags,
 		})
 	}
 
-	addMetricValueRate := func(
-		measurementType string,
-		parentKey string,
-		entityKey string,
-		measurement string,
-		nodeID uuid.UUID,
-		applicationID uuid.UUID,
-		serviceID uuid.UUID,
-		containerID uuid.UUID,
-		pod string,
-		timestamp time.Time,
-		value int64,
+	addMetricRate := func(
+		entityKind string,
+		entityName string,
 		multiplier int64,
+		metric *Metric,
 	) {
-		if timestamp.Equal(time.Time{}) {
+		if metric.Timestamp.Equal(time.Time{}) {
 			kubelet.Errorf(
-				karma.Describe("metric", measurement).
-					Describe("type", measurementType).
-					Describe("timestamp", timestamp).
+				karma.Describe("metric", metric.Name).
+					Describe("type", metric.Type).
+					Describe("timestamp", metric.Timestamp).
 					Reason(fmt.Errorf("invalid timestamp")),
 				"{rate} invalid timestamp detect. defaulting to tickTime",
 			)
-			timestamp = tickTime
+			metric.Timestamp = tickTime
 		}
 
-		key := getKey(measurementType, parentKey, entityKey, measurement)
-		rate, err := calcRate(key, timestamp, value, multiplier)
+		key := getKey(metric.Name, metric.NamespaceName, entityKind, entityName, metric.ContainerName)
+		rate, err := calcRate(key, metric.Timestamp, metric.Value, multiplier)
 		kubelet.updatePreviousValue(key, &KubeletValue{
-			Timestamp: timestamp,
-			Value:     value,
+			Timestamp: metric.Timestamp,
+			Value:     metric.Value,
 		})
 
 		if err != nil {
 			kubelet.Warningf(
-				karma.Describe("metric", measurement).
-					Describe("type", measurementType).
-					Describe("timestamp", timestamp).
+				karma.Describe("metric", metric.Name).
+					Describe("type", metric.Type).
+					Describe("timestamp", metric.Timestamp).
 					Reason(err),
 				"can't calculate rate",
 			)
 			return
 		}
-		addMetricValue(
-			measurementType,
-			measurement,
-			nodeID,
-			applicationID,
-			serviceID,
-			containerID,
-			pod,
-			timestamp,
-			rate,
+		metric.Value = rate
+		addMetric(metric)
+	}
+	addMetricValueRate := func(
+		measurementType string,
+		entityKind string,
+		entityName string,
+		measurement string,
+		nodeName string,
+		namespaceName string,
+		controllerName string,
+		controllerKind string,
+		containerName string,
+		podName string,
+		timestamp time.Time,
+		value int64,
+		multiplier int64,
+	) {
+		addMetricRate(
+			entityKind,
+			entityName,
+			multiplier,
+			&Metric{
+				Name:           measurement,
+				Type:           measurementType,
+				NodeName:       nodeName,
+				NamespaceName:  namespaceName,
+				ControllerName: controllerName,
+				ControllerKind: controllerKind,
+				ContainerName:  containerName,
+				PodName:        podName,
+				Timestamp:      timestamp,
+				Value:          value,
+			},
 		)
-
 	}
 
-	addRawResponse := func(nodeID uuid.UUID, data interface{}) {
+	addRawResponse := func(nodeName string, data interface{}) {
 		rawMutex.Lock()
 		defer rawMutex.Unlock()
-		rawResponses[nodeID.String()] = data
+		rawResponses[nodeName] = data
 	}
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
-	nodes := entitiesProvider.GetNodes()
-	nodesScanTime := entitiesProvider.NodesLastScanTime()
+	nodes, err := entitiesProvider.GetNodes()
+	if err != nil {
+		return nil, nil, karma.Format(err, "Can't get nodes")
+	}
 
 	addMetricValue(
 		TypeCluster,
 		"nodes/count",
-		uuid.Nil,
-		uuid.Nil,
-		uuid.Nil,
-		uuid.Nil,
 		"",
-		nodesScanTime,
+		"",
+		"",
+		"",
+		"",
+		"",
+		tickTime,
 		int64(len(nodes)),
 	)
 
@@ -390,12 +374,13 @@ func (kubelet *Kubelet) GetMetrics(
 		addMetricValueWithTags(
 			TypeCluster,
 			"nodes/count",
-			uuid.Nil,
-			uuid.Nil,
-			uuid.Nil,
-			uuid.Nil,
 			"",
-			nodesScanTime,
+			"",
+			"",
+			"",
+			"",
+			"",
+			tickTime,
 			nodesCount,
 			map[string]interface{}{
 				"instance_group": instanceGroup,
@@ -409,22 +394,66 @@ func (kubelet *Kubelet) GetMetrics(
 			Time  time.Time
 			Value int64
 		}{
-			{"cpu/node_capacity", nodesScanTime, node.Status.Capacity.Cpu().MilliValue()},
-			{"cpu/node_allocatable", nodesScanTime, node.Status.Allocatable.Cpu().MilliValue()},
-			{"memory/node_capacity", nodesScanTime, node.Status.Capacity.Memory().Value()},
-			{"memory/node_allocatable", nodesScanTime, node.Status.Allocatable.Memory().Value()},
+			{"cpu/node_capacity", tickTime, node.Status.Capacity.Cpu().MilliValue()},
+			{"cpu/node_allocatable", tickTime, node.Status.Allocatable.Cpu().MilliValue()},
+			{"memory/node_capacity", tickTime, node.Status.Capacity.Memory().Value()},
+			{"memory/node_allocatable", tickTime, node.Status.Allocatable.Memory().Value()},
 		} {
 			addMetricValue(
 				TypeNode,
 				measurement.Name,
-				node.ID,
-				uuid.Nil,
-				uuid.Nil,
-				uuid.Nil,
+				node.Name,
+				"",
+				"",
+				"",
+				"",
 				"",
 				measurement.Time,
 				measurement.Value,
 			)
+		}
+	}
+
+	pods, err := entitiesProvider.GetPods()
+	if err != nil {
+		return nil, nil, karma.Format(err, "unable to get pods")
+	}
+
+	for _, pod := range pods {
+		controllerName, controllerKind, err := entitiesProvider.FindController(pod.Namespace, pod.Name)
+		if err != nil {
+			kubelet.Logger.Errorf(
+				karma.Describe("pod_name", pod.Name).
+					Describe("namespace", pod.Namespace).
+					Reason(err),
+				"unable to find pod controller",
+			)
+		}
+
+		for _, container := range pod.Spec.Containers {
+			for _, measurement := range []struct {
+				Name  string
+				Value int64
+			}{
+				{"cpu/request", container.Resources.Requests.Cpu().MilliValue()},
+				{"cpu/limit", container.Resources.Limits.Cpu().MilliValue()},
+
+				{"memory/request", container.Resources.Requests.Memory().Value()},
+				{"memory/limit", container.Resources.Limits.Memory().Value()},
+			} {
+				addMetricValue(
+					TypePodContainer,
+					measurement.Name,
+					pod.Spec.NodeName,
+					pod.Namespace,
+					controllerName,
+					controllerKind,
+					container.Name,
+					pod.Name,
+					tickTime,
+					measurement.Value,
+				)
+			}
 		}
 	}
 
@@ -474,7 +503,7 @@ func (kubelet *Kubelet) GetMetrics(
 					)
 				}
 				if summaryInterface != nil {
-					addRawResponse(node.ID, &summaryInterface)
+					addRawResponse(node.Name, &summaryInterface)
 				}
 			}
 
@@ -504,10 +533,11 @@ func (kubelet *Kubelet) GetMetrics(
 				addMetricValue(
 					TypeNode,
 					measurement.Name,
-					node.ID,
-					uuid.Nil,
-					uuid.Nil,
-					uuid.Nil,
+					node.Name,
+					"",
+					"",
+					"",
+					"",
 					"",
 					measurement.Time,
 					measurement.Value,
@@ -529,13 +559,14 @@ func (kubelet *Kubelet) GetMetrics(
 
 				addMetricValueRate(
 					TypeNode,
-					"",
-					node.ID.String(),
+					node.Kind,
+					node.Name,
 					measurement.Name,
-					node.ID,
-					uuid.Nil,
-					uuid.Nil,
-					uuid.Nil,
+					node.Name,
+					"",
+					"",
+					"",
+					"",
 					"",
 					measurement.Time,
 					measurement.Value,
@@ -543,20 +574,20 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 
-			throttleMetrics := map[uuid.UUID]map[string]*containerMetricStore{}
+			throttleMetrics := map[string]*Metric{}
 
 			for _, pod := range summary.Pods {
-				applicationID, serviceID, ok := entitiesProvider.FindService(
+				controllerName, controllerKind, err := entitiesProvider.FindController(
 					pod.PodRef.Namespace, pod.PodRef.Name,
 				)
+				namespaceName := pod.PodRef.Namespace
 
-				if !ok {
+				if err != nil {
 					kubelet.Logger.Warningf(
 						karma.Describe("namespace", pod.PodRef.Namespace).
 							Describe("pod_name", pod.PodRef.Name).
-							Reason("not found"),
-						"can't find service for pod %s:%s",
-						pod.PodRef.Namespace, pod.PodRef.Name,
+							Reason(err),
+						"unable to find controller for pod",
 					)
 					continue
 				}
@@ -574,10 +605,11 @@ func (kubelet *Kubelet) GetMetrics(
 					addMetricValue(
 						TypePod,
 						measurement.Name,
-						node.ID,
-						applicationID,
-						serviceID,
-						uuid.Nil,
+						node.Name,
+						namespaceName,
+						controllerName,
+						controllerKind,
+						"",
 						pod.PodRef.Name,
 						measurement.Time,
 						measurement.Value,
@@ -596,13 +628,14 @@ func (kubelet *Kubelet) GetMetrics(
 				} {
 					addMetricValueRate(
 						TypePod,
-						pod.PodRef.Namespace,
+						"Pod",
 						pod.PodRef.Name,
 						measurement.Name,
-						node.ID,
-						applicationID,
-						serviceID,
-						uuid.Nil,
+						node.Name,
+						namespaceName,
+						controllerName,
+						controllerKind,
+						"",
 						pod.PodRef.Name,
 						measurement.Time,
 						measurement.Value,
@@ -633,23 +666,6 @@ func (kubelet *Kubelet) GetMetrics(
 				}
 
 				for _, container := range podContainers {
-					applicationID, serviceID, identifiedContainer, ok := entitiesProvider.FindContainer(
-						pod.PodRef.Namespace,
-						pod.PodRef.Name,
-						container.Name,
-					)
-					if !ok {
-						kubelet.Logger.Warningf(
-							karma.Describe("namespace", pod.PodRef.Namespace).
-								Describe("pod_name", pod.PodRef.Name).
-								Describe("container_name", container.Name).
-								Reason("not found"),
-							"can't find container for container %s:%s:%s",
-							pod.PodRef.Namespace, pod.PodRef.Name, container.Name,
-						)
-						continue
-					}
-
 					for _, measurement := range []struct {
 						Name  string
 						Time  time.Time
@@ -658,20 +674,15 @@ func (kubelet *Kubelet) GetMetrics(
 						{"cpu/usage", container.CPU.Time, container.CPU.UsageCoreNanoSeconds},
 						{"memory/rss", container.Memory.Time, container.Memory.RSSBytes},
 						{"filesystem/usage", container.RootFS.Time, container.RootFS.UsedBytes},
-
-						{"cpu/request", container.CPU.Time, identifiedContainer.Resources.SpecResourceRequirements.Requests.Cpu().MilliValue()},
-						{"cpu/limit", container.CPU.Time, identifiedContainer.Resources.SpecResourceRequirements.Limits.Cpu().MilliValue()},
-
-						{"memory/request", container.Memory.Time, identifiedContainer.Resources.SpecResourceRequirements.Requests.Memory().Value()},
-						{"memory/limit", container.Memory.Time, identifiedContainer.Resources.SpecResourceRequirements.Limits.Memory().Value()},
 					} {
 						addMetricValue(
 							TypePodContainer,
 							measurement.Name,
-							node.ID,
-							applicationID,
-							serviceID,
-							identifiedContainer.ID,
+							node.Name,
+							namespaceName,
+							controllerName,
+							controllerKind,
+							container.Name,
 							pod.PodRef.Name,
 							measurement.Time,
 							measurement.Value,
@@ -680,23 +691,78 @@ func (kubelet *Kubelet) GetMetrics(
 
 					addMetricValueRate(
 						TypePodContainer,
-						fmt.Sprintf("%s:%s", pod.PodRef.Namespace, pod.PodRef.Name),
-						container.Name,
+						controllerKind,
+						controllerName,
 						"cpu/usage_rate",
-						node.ID,
-						applicationID,
-						serviceID,
-						identifiedContainer.ID,
+						node.Name,
+						namespaceName,
+						controllerName,
+						controllerKind,
+						container.Name,
 						pod.PodRef.Name,
 						container.CPU.Time,
 						container.CPU.UsageCoreNanoSeconds,
 						1000, // cpu_rate is in millicore
 					)
 
-					throttleMetrics[identifiedContainer.ID] = map[string]*containerMetricStore{}
-					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs/periods_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
-					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/seconds_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
-					throttleMetrics[identifiedContainer.ID]["container_cpu_cfs_throttled/periods_total"] = defaultMetricStore(applicationID, serviceID, identifiedContainer, pod.PodRef.Namespace, pod.PodRef.Name, container)
+					// Set default zero values for throttled metrics
+					periodsKey := getKey(
+						"container_cpu_cfs/periods_total",
+						namespaceName,
+						controllerKind,
+						controllerName,
+						container.Name,
+					)
+					throttleMetrics[periodsKey] = &Metric{
+						Name: "container_cpu_cfs/periods_total",
+						Type: TypePodContainer,
+
+						NamespaceName:  namespaceName,
+						ControllerName: controllerName,
+						ControllerKind: controllerKind,
+						ContainerName:  container.Name,
+						PodName:        pod.PodRef.Name,
+						Timestamp:      container.CPU.Time,
+						Value:          0,
+					}
+					throttledSecondsKey := getKey(
+						"container_cpu_cfs_throttled/seconds_total",
+						namespaceName,
+						controllerKind,
+						controllerName,
+						container.Name,
+					)
+					throttleMetrics[throttledSecondsKey] = &Metric{
+						Name: "container_cpu_cfs_throttled/seconds_total",
+						Type: TypePodContainer,
+
+						NamespaceName:  namespaceName,
+						ControllerName: controllerName,
+						ControllerKind: controllerKind,
+						ContainerName:  container.Name,
+						PodName:        pod.PodRef.Name,
+						Timestamp:      container.CPU.Time,
+						Value:          0,
+					}
+					throttledPeriodsKey := getKey(
+						"container_cpu_cfs_throttled/periods_total",
+						namespaceName,
+						controllerKind,
+						controllerName,
+						container.Name,
+					)
+					throttleMetrics[throttledPeriodsKey] = &Metric{
+						Name: "container_cpu_cfs_throttled/periods_total",
+						Type: TypePodContainer,
+
+						NamespaceName:  namespaceName,
+						ControllerName: controllerName,
+						ControllerKind: controllerKind,
+						ContainerName:  container.Name,
+						PodName:        pod.PodRef.Name,
+						Timestamp:      container.CPU.Time,
+						Value:          0,
+					}
 				}
 			}
 
@@ -734,8 +800,6 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 
-			now := time.Now().UTC()
-
 			for _, metric := range []struct {
 				Name string
 				Ref  string
@@ -745,100 +809,60 @@ func (kubelet *Kubelet) GetMetrics(
 				{"container_cpu_cfs_throttled/seconds_total", "container_cpu_cfs_throttled_seconds_total"},
 			} {
 				for _, val := range cadvisor[metric.Ref] {
-					podUID, containerName, _, value, ok := getCAdvisorContainerValue(val)
+					namespaceName, podName, containerName, value, ok := getCAdvisorContainerValue(val)
+					ctx :=
+						karma.
+							Describe("namespace", namespaceName).
+							Describe("pod_name", podName).
+							Describe("container_name", containerName)
 					if ok {
-						_, _, containerID, _, ok := entitiesProvider.FindContainerByPodUIDContainerName(podUID, containerName)
-						if ok {
-							if storedMetrics, ok := throttleMetrics[containerID]; ok {
-								if storedMetric, ok := storedMetrics[metric.Name]; ok {
-									storedMetric.Value = value
-								} else {
-									kubelet.Error("no stored metric with name: %s", metric.Name)
-								}
-							} else {
-								kubelet.Warning("found a container: %s in cAdvisor response that don't exist at summary response", containerName)
-							}
+						controllerName, controllerKind, err := entitiesProvider.FindController(namespaceName, podName)
+						if err != nil {
+							kubelet.Logger.Errorf(
+								ctx.Reason(err),
+								"unable to find controller for pod",
+							)
+						}
+						key := getKey(
+							metric.Name,
+							namespaceName,
+							controllerKind,
+							controllerName,
+							containerName,
+						)
+						if storedMetric, ok := throttleMetrics[key]; ok {
+							storedMetric.Value = int64(value)
+						} else {
+							kubelet.Warningf(
+								ctx.Reason(nil),
+								"found a container in cAdvisor response that don't exist at summary response",
+							)
 						}
 					}
 				}
 			}
 
-			for _, storedMetrics := range throttleMetrics {
-				for metricName, storedMetric := range storedMetrics {
-					addMetricValue(
-						TypePodContainer,
-						metricName,
-						node.ID,
-						storedMetric.ApplicationID,
-						storedMetric.ServiceID,
-						storedMetric.ContainerID,
-						storedMetric.PodName,
-						summary.Node.CPU.Time,
-						// TODO: send as float
-						int64(storedMetric.Value),
-					)
+			for _, metric := range throttleMetrics {
+				addMetric(metric)
 
-					rateValue := storedMetric.Value
-					// TODO: cleanup when values are sent as floats
-					// covert seconds to milliseconds
-					if strings.Contains(metricName, "seconds") {
-						rateValue *= 1000
-					}
-
-					addMetricValueRate(
-						TypePodContainer,
-						fmt.Sprintf("%s:%s", storedMetric.Namespace, storedMetric.PodName),
-						storedMetric.ContainerName,
-						metricName+"_rate",
-						node.ID,
-						storedMetric.ApplicationID,
-						storedMetric.ServiceID,
-						storedMetric.ContainerID,
-						storedMetric.PodName,
-						now,
-						int64(rateValue),
-						1e9,
-					)
+				// TODO: cleanup when values are sent as floats
+				// covert seconds to milliseconds
+				if strings.Contains(metric.Name, "seconds") {
+					metric.Value *= 1000
 				}
+
+				// Container metrics use controller name & kind as entity name & kind
+				addMetricRate(
+					metric.ControllerKind,
+					metric.ControllerName,
+					1e9,
+					metric,
+				)
 			}
 
 			return nil
 		},
 	)
-
-	apps := entitiesProvider.GetApplications()
-	scanTime := entitiesProvider.AppsLastScanTime()
-	for _, app := range apps {
-		for _, service := range app.Services {
-			for _, container := range service.Containers {
-				for _, measurement := range []struct {
-					Name  string
-					Value int64
-				}{
-					{"cpu/request", container.Resources.Requests.Cpu().MilliValue()},
-					{"cpu/limit", container.Resources.Limits.Cpu().MilliValue()},
-
-					{"memory/request", container.Resources.Requests.Memory().Value()},
-					{"memory/limit", container.Resources.Limits.Memory().Value()},
-				} {
-					addMetricValue(
-						TypePodContainer,
-						measurement.Name,
-						uuid.Nil,
-						app.ID,
-						service.ID,
-						container.ID,
-						"",
-						scanTime,
-						measurement.Value,
-					)
-				}
-
-			}
-
-		}
-	}
-
 	if err != nil {
 		panic(err)
 	}
@@ -862,7 +886,7 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 	}
 
-	result := []*Metrics{}
+	result := []*Metric{}
 
 	var context *karma.Context
 	for _, metrics := range metrics {
@@ -903,23 +927,6 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	return result, rawResponses, nil
-}
-
-func defaultMetricStore(
-	applicationID uuid.UUID, serviceID uuid.UUID,
-	identifiedContainer *scanner.Container, namespace, podName string,
-	container KubeletSummaryContainer,
-) *containerMetricStore {
-	return &containerMetricStore{
-		ApplicationID: applicationID,
-		ServiceID:     serviceID,
-		ContainerID:   identifiedContainer.ID,
-		Namespace:     namespace,
-		PodName:       podName,
-		ContainerName: container.Name,
-		Timestamp:     container.CPU.Time,
-		Value:         0,
-	}
 }
 
 func (kubelet *Kubelet) collectGarbage() {

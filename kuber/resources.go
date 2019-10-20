@@ -70,6 +70,7 @@ var (
 	}
 )
 
+// TODO: Refactor to a map[kind]GVRK
 func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 	switch kind {
 	case Nodes.Kind:

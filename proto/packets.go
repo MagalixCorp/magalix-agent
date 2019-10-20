@@ -152,6 +152,7 @@ type PacketApplicationsStoreRequest []PacketRegisterApplicationItem
 type PacketApplicationsStoreResponse struct{}
 
 type PacketMetricsStoreRequest []MetricStoreRequest
+type PacketMetricsStoreV2Request []MetricStoreV2Request
 
 type MetricStoreRequest struct {
 	Name        string    `json:"name"`
@@ -163,6 +164,21 @@ type MetricStoreRequest struct {
 	Timestamp   time.Time `json:"timestamp"`
 	Value       int64     `json:"value"`
 	Pod         string    `json:"pod"`
+
+	AdditionalTags map[string]interface{} `json:"additional_tags"`
+}
+
+type MetricStoreV2Request struct {
+	Name           string    `json:"name"`
+	Type           string    `json:"type"`
+	NodeName       string    `json:"node_name"`
+	NamespaceName  string    `json:"namespace_name"`
+	ControllerName string    `json:"controller_name"`
+	ControllerKind string    `json:"controller_kind"`
+	ContainerName  string    `json:"container_name"`
+	Timestamp      time.Time `json:"timestamp"`
+	Value          int64     `json:"value"`
+	PodName        string    `json:"pod_name"`
 
 	AdditionalTags map[string]interface{} `json:"additional_tags"`
 }
@@ -340,10 +356,10 @@ const (
 )
 
 type ParentController struct {
-	Kind       string	`json:"kind"`
-	Name       string	`json:"name"`
-	APIVersion string	`json:"api_version"`
-	IsWatched  bool		`json:"is_watched"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	APIVersion string `json:"api_version"`
+	IsWatched  bool   `json:"is_watched"`
 
 	Parent *ParentController `json:"parent"`
 }

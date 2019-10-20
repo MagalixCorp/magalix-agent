@@ -1,13 +1,12 @@
 package metrics
 
 import (
-	"sync"
+	"github.com/MagalixCorp/magalix-agent/scanner"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/scanner"
 	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
@@ -64,17 +63,18 @@ type MetricsBatch struct {
 // map of metric_name:list of metric points
 type RawMetrics []*RawMetric
 
-// Metrics metrics struct
-type Metrics struct {
-	Name        string
-	Type        string
-	Node        uuid.UUID
-	Application uuid.UUID
-	Service     uuid.UUID
-	Container   uuid.UUID
-	Timestamp   time.Time
-	Value       int64
-	PodName     string
+// Metric metrics struct
+type Metric struct {
+	Name           string
+	Type           string
+	NodeName       string
+	NamespaceName  string
+	ControllerName string
+	ControllerKind string
+	ContainerName  string
+	Timestamp      time.Time
+	Value          int64
+	PodName        string
 
 	AdditionalTags map[string]interface{}
 }
@@ -92,20 +92,20 @@ const (
 	TypeSysContainer = "sys_container"
 )
 
-// Deprecated: watchMetrics is deprecated and will be removed in future releases.
 // Please consider using watchMetricsProm instead.
 func watchMetrics(
 	client *client.Client,
 	source MetricsSource,
-	scanner *scanner.Scanner,
+	entitiesProvider EntitiesProvider,
+	useMetricsPacketV2 bool,
 	interval time.Duration,
 ) {
-	metricsPipe := make(chan []*Metrics)
-	go sendMetrics(client, metricsPipe)
+	metricsPipe := make(chan []*Metric)
+	go sendMetrics(client, useMetricsPacketV2, metricsPipe)
 	defer close(metricsPipe)
 
 	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
-		metrics, raw, err := source.GetMetrics(scanner, tickTime)
+		metrics, raw, err := source.GetMetrics(entitiesProvider, tickTime)
 
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
@@ -166,15 +166,15 @@ func min(a, b int) int {
 	return b
 }
 
-func sendMetrics(client *client.Client, pipe chan []*Metrics) {
+func sendMetrics(client *client.Client, useMetricsPacketV2 bool, pipe chan []*Metric) {
 	queueLimit := 100
-	queue := make(chan []*Metrics, queueLimit)
+	queue := make(chan []*Metric, queueLimit)
 	defer close(queue)
 	go func() {
 		for metrics := range queue {
 			if len(metrics) > 0 {
 				client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "sending metrics")
-				sendMetricsBatch(client, metrics)
+				sendMetricsBatch(client, useMetricsPacketV2, metrics)
 				client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "metrics sent")
 			}
 		}
@@ -189,38 +189,120 @@ func sendMetrics(client *client.Client, pipe chan []*Metrics) {
 }
 
 // SendMetrics bulk send metrics
-func sendMetricsBatch(c *client.Client, metrics []*Metrics) {
-	var req proto.PacketMetricsStoreRequest
-	for _, metrics := range metrics {
-		req = append(req, proto.MetricStoreRequest{
-			Name:        metrics.Name,
-			Type:        metrics.Type,
-			Node:        metrics.Node,
-			Application: metrics.Application,
-			Service:     metrics.Service,
-			Container:   metrics.Container,
-			Timestamp:   metrics.Timestamp,
-			Value:       metrics.Value,
-			Pod:         metrics.PodName,
+func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metric) {
+	ctx := karma.
+		Describe("account_id", c.AccountID).
+		Describe("cluster_id", c.ClusterID)
 
-			AdditionalTags: metrics.AdditionalTags,
-		})
+	var packet interface{}
+	var packetKind proto.PacketKind
+	if useMetricsPacketV2 {
+		var req proto.PacketMetricsStoreV2Request
+		for _, metric := range metrics {
+			req = append(req, proto.MetricStoreV2Request{
+				Name:           metric.Name,
+				Type:           metric.Type,
+				NodeName:       metric.NodeName,
+				NamespaceName:  metric.NamespaceName,
+				ControllerName: metric.ControllerName,
+				ControllerKind: metric.ControllerKind,
+				ContainerName:  metric.ContainerName,
+				Timestamp:      metric.Timestamp,
+				Value:          metric.Value,
+				PodName:        metric.PodName,
+				AdditionalTags: metric.AdditionalTags,
+			})
+		}
+		packet = req
+		packetKind = proto.PacketKindMetricsStoreV2Request
+	} else {
+		var req proto.PacketMetricsStoreRequest
+		for _, metric := range metrics {
+			ctx.Describe("metric_type", metric.Type)
 
+			var nodeID, namespaceID, controllerID, containerID uuid.UUID
+			var err error
+
+			if metric.NodeName != "" {
+				nodeID, err = scanner.IdentifyEntity(metric.NodeName, c.ClusterID)
+				if err != nil {
+					c.Logger.Errorf(
+						ctx.Describe("node_name", metric.NodeName).Reason(err),
+						"unable to generate node id",
+					)
+					continue
+				}
+			}
+
+			if metric.NamespaceName != "" {
+				namespaceID, err = scanner.IdentifyEntity(metric.NamespaceName, c.ClusterID)
+				if err != nil {
+					c.Logger.Errorf(
+						ctx.Describe("namespace_name", metric.NamespaceName).Reason(err),
+						"unable to generate namespace id",
+					)
+					continue
+				}
+			}
+
+			if metric.ControllerName != "" {
+				controllerID, err = scanner.IdentifyEntity(metric.ControllerName, namespaceID)
+				if err != nil {
+					c.Logger.Errorf(
+						ctx.Describe("namespace_name", metric.NamespaceName).
+							Describe("controller_name", metric.ControllerName).
+							Reason(err),
+						"unable to generate controller id",
+					)
+					continue
+				}
+			}
+
+			if metric.ContainerName != "" {
+				containerID, err = scanner.IdentifyEntity(metric.ContainerName, controllerID)
+				if err != nil {
+					c.Logger.Errorf(
+						ctx.Describe("namespace_name", metric.NamespaceName).
+							Describe("controller_name", metric.ControllerName).
+							Describe("container_name", metric.ContainerName).
+							Reason(err),
+						"unable to generate controller id",
+					)
+					continue
+				}
+			}
+			req = append(req, proto.MetricStoreRequest{
+				Name:        metric.Name,
+				Type:        metric.Type,
+				Node:        nodeID,
+				Application: namespaceID,
+				Service:     controllerID,
+				Container:   containerID,
+				Timestamp:   metric.Timestamp,
+				Value:       metric.Value,
+				Pod:         metric.PodName,
+
+				AdditionalTags: metric.AdditionalTags,
+			})
+		}
+		packet = req
+		packetKind = proto.PacketKindMetricsStoreRequest
 	}
 	c.Pipe(client.Package{
-		Kind:        proto.PacketKindMetricsStoreRequest,
+		Kind:        packetKind,
 		ExpiryTime:  utils.After(2 * time.Hour),
 		ExpiryCount: 100,
 		Priority:    4,
 		Retries:     10,
-		Data:        req,
+		Data:        packet,
 	})
 }
 
 // InitMetrics init metrics source
 func InitMetrics(
 	client *client.Client,
-	scanner *scanner.Scanner,
+	nodesProvider NodesProvider,
+	entitiesProvider EntitiesProvider,
 	kube *kuber.Kube,
 	identifyEntities bool,
 	optInAnalysisData bool,
@@ -240,7 +322,7 @@ func InitMetrics(
 		failOnError = true
 	}
 
-	kubeletClient, err := NewKubeletClient(client.Logger, scanner, kube, args)
+	kubeletClient, err := NewKubeletClient(client.Logger, nodesProvider, kube, args)
 	if err != nil {
 		foundErrors = append(foundErrors, err)
 		failOnError = true

@@ -53,7 +53,12 @@ func (sl *ScannerListener) Start() {
 	stop := false
 	for {
 		select {
-		case <-sl.scanner.WaitForNextTick(): sl.pods <- sl.scanner.GetPods()
+		case <-sl.scanner.WaitForNextTick():
+			pods, err := sl.scanner.GetPods()
+			if err != nil {
+				sl.logger.Errorf(err, "unable to get pods")
+			}
+			sl.pods <- pods
 			break
 		case <-sl.stopCh:
 			stop = true

@@ -288,9 +288,21 @@ func main() {
 	}
 
 	if metricsEnabled {
+		var nodesProvider metrics.NodesProvider
+		var entitiesProvider metrics.EntitiesProvider
+
+		if deltasEnabled {
+			nodesProvider = observer_
+			entitiesProvider = observer_
+		} else {
+			nodesProvider = entityScanner
+			entitiesProvider = entityScanner
+		}
+
 		err := metrics.InitMetrics(
 			gwClient,
-			entityScanner,
+			nodesProvider,
+			entitiesProvider,
 			kube,
 			deltasEnabled,
 			optInAnalysisData,
