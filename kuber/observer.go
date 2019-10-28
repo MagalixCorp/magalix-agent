@@ -54,11 +54,26 @@ func (observer *Observer) Watch(
 	return watcher
 }
 
-func (observer *Observer) WatchAndWaitForSync(gvrk GroupVersionResourceKind) *watcher {
+func (observer *Observer) WatchAndWaitForSync(gvrk GroupVersionResourceKind) (*watcher, error) {
 	watcher := observer.Watch(gvrk)
-	cache.WaitForCacheSync(observer.stopCh, watcher.informer.Informer().HasSynced)
 
-	return watcher
+	done := make(chan struct{}, 1)
+
+	go func() {
+		cache.WaitForCacheSync(observer.stopCh, watcher.informer.Informer().HasSynced)
+		done <- struct{}{}
+	}()
+
+	timeout := 5 * time.Second
+	select {
+	case <-done:
+		return watcher, nil
+	case <-time.After(timeout):
+		return nil, karma.
+			Describe("GVRK", gvrk).
+			Describe("timeout", timeout).
+			Format(nil, "Time out waiting for informer sync")
+	}
 }
 
 func (observer *Observer) WatcherFor(
@@ -111,7 +126,10 @@ func (observer *Observer) WaitForCacheSync(timeout *time.Duration) error {
 }
 
 func (observer *Observer) GetNodes() ([]corev1.Node, error) {
-	watcher := observer.WatchAndWaitForSync(Nodes)
+	watcher, err := observer.WatchAndWaitForSync(Nodes)
+	if err != nil {
+		return nil, err
+	}
 	_nodes, err := watcher.Lister().List(labels.Everything())
 	if err != nil {
 		return nil, karma.Format(err, "unable to list nodes")
@@ -128,7 +146,10 @@ func (observer *Observer) GetNodes() ([]corev1.Node, error) {
 }
 
 func (observer *Observer) GetPods() ([]corev1.Pod, error) {
-	watcher := observer.WatchAndWaitForSync(Pods)
+	watcher, err := observer.WatchAndWaitForSync(Pods)
+	if err != nil {
+		return nil, err
+	}
 	_pods, err := watcher.Lister().List(labels.Everything())
 	if err != nil {
 		return nil, karma.Format(err, "unable to list pods")
@@ -149,7 +170,11 @@ func (observer *Observer) FindController(namespaceName string, podName string) (
 		Describe("pod_name", podName).
 		Describe("namespace_name", namespaceName)
 
-	watcher := observer.WatchAndWaitForSync(Pods)
+	watcher, err := observer.WatchAndWaitForSync(Pods)
+	if err != nil {
+		return "", "", err
+	}
+
 	pod, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(podName)
 	if err != nil {
 		return "", "", karma.Format(ctx.Reason(err), "unable to get pod")
@@ -162,7 +187,11 @@ func (observer *Observer) FindController(namespaceName string, podName string) (
 			return nil, false
 		}
 
-		watcher := observer.WatchAndWaitForSync(*gvrk)
+		watcher, err := observer.WatchAndWaitForSync(*gvrk)
+		if err != nil {
+			observer.logger.Errorf(err, "unable to get watcher for parent")
+			return nil, false
+		}
 
 		return watcher, true
 	})
