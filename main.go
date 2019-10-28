@@ -90,6 +90,7 @@ Options:
   --opt-in-analysis-data                     Send anonymous data for analysis.
   --analysis-data-interval <duration>        Analysis data send interval.
                                               [default: 5m]
+  --packets-v2                               Enable v2 packets (without ids).
   --disable-metrics                          Disable metrics collecting and sending.
   --disable-events                           Disable events collecting and sending.
   --disable-scalar                           Disable in-agent scalar.
@@ -190,7 +191,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	deltasEnabled := true
+	deltasEnabled := args["--packets-v2"].(bool)
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	observer_ := kuber.NewObserver(
