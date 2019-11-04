@@ -103,7 +103,7 @@ func RootParent(parent *ParentController) *ParentController {
 
 	p := parent
 
-	for parent.Parent != nil {
+	for p.Parent != nil {
 		p = parent.Parent
 	}
 
