@@ -105,13 +105,15 @@ func (ew *entitiesWatcher) Start() error {
 		return err
 	}
 
+	go ew.deltasWorker()
+
 	ew.snapshotIdentitiesTicker.Start(true, false, false)
 	ew.snapshotTicker.Start(true, false, false)
 
 	for _, watcher := range ew.watchers {
 		watcher.AddEventHandler(ew)
 	}
-	go ew.deltasWorker()
+
 
 	return nil
 }
