@@ -851,12 +851,15 @@ func (kubelet *Kubelet) GetMetrics(
 					metric.Value *= 1000
 				}
 
+				rateMetric := *metric
+				rateMetric.Name += "_rate"
+
 				// Container metrics use controller name & kind as entity name & kind
 				addMetricRate(
 					metric.ControllerKind,
 					metric.ControllerName,
 					1e9,
-					metric,
+					&rateMetric,
 				)
 			}
 
