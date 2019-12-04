@@ -106,6 +106,8 @@ func decodeCAdvisorResponse(r io.Reader) (cAdvisorMetrics, error) {
 			}
 		case 2:
 			if !comment {
+				parts := strings.Split(token, " ")
+				token = parts[0]
 				tmp, err := strconv.ParseFloat(token, 64)
 				if err != nil {
 					return nil, karma.Format(err, "unable to parse float %s", token)
