@@ -845,19 +845,19 @@ func (kubelet *Kubelet) GetMetrics(
 			for _, metric := range throttleMetrics {
 				addMetric(metric)
 
-				// TODO: cleanup when values are sent as floats
-				// covert seconds to milliseconds
-				if strings.Contains(metric.Name, "seconds") {
-					metric.Value *= 1000
-				}
-
 				rateMetric := *metric
 				rateMetric.Name += "_rate"
 
+				// TODO: cleanup when values are sent as floats
+				// covert seconds to milliseconds
+				if strings.Contains(rateMetric.Name, "seconds") {
+					rateMetric.Value *= 1000
+				}
+
 				// Container metrics use controller name & kind as entity name & kind
 				addMetricRate(
-					metric.ControllerKind,
-					metric.ControllerName,
+					rateMetric.ControllerKind,
+					rateMetric.ControllerName,
 					1e9,
 					&rateMetric,
 				)
