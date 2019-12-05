@@ -68,6 +68,7 @@ type Metric struct {
 	Name           string
 	Type           string
 	NodeName       string
+	NodeIP         string
 	NamespaceName  string
 	ControllerName string
 	ControllerKind string
@@ -224,7 +225,7 @@ func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metr
 			var err error
 
 			if metric.NodeName != "" {
-				nodeID, err = scanner.IdentifyEntity(metric.NodeName, c.ClusterID)
+				nodeID, err = scanner.IdentifyEntity(metric.NodeIP, c.ClusterID)
 				if err != nil {
 					c.Logger.Errorf(
 						ctx.Describe("node_name", metric.NodeName).Reason(err),
