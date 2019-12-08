@@ -12,6 +12,8 @@ import (
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -114,7 +116,6 @@ func (ew *entitiesWatcher) Start() error {
 		watcher.AddEventHandler(ew)
 	}
 
-
 	return nil
 }
 
@@ -165,11 +166,17 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 				)
 			}
 
+			status, err := getObjectStatus(&u, gvrk)
+			if err != nil {
+				ew.logger.Errorf(err, "unable to get object status data")
+			}
+
 			items[i] = &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"kind":       u.GetKind(),
 					"apiVersion": u.GetAPIVersion(),
 					"metadata":   meta,
+					"status":     status,
 				},
 			}
 		}
@@ -411,4 +418,58 @@ func packetParent(parent *kuber.ParentController) *proto.ParentController {
 		APIVersion: parent.APIVersion,
 		Parent:     packetParent(parent.Parent),
 	}
+}
+
+func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionResourceKind) (map[string]interface{}, error) {
+	switch gvrk {
+	case kuber.Nodes:
+		ip, found, err := getNodeInternalIP(obj)
+		if !found || err != nil {
+			return nil, karma.Format(err, "unable to find node internal ip")
+		}
+
+		return map[string]interface{}{
+			"addresses": []interface{}{
+				map[string]string{
+					"type":    "InternalIP",
+					"address": ip,
+				},
+			}}, nil
+	default:
+		return nil, nil
+	}
+}
+
+func getNodeInternalIP(node *unstructured.Unstructured) (string, bool, error) {
+	status, found := node.Object["status"]
+	if !found {
+		return "", false, karma.Format(nil, "unable to find node status")
+	}
+	statusMapPointer, ok := status.(*map[string]interface{})
+	if !ok {
+		return "", false, karma.Format(nil, "%v of type %T is not *map[string]interface{}", status, status)
+	}
+	statusMap := *statusMapPointer
+	addresses, found := statusMap["addresses"]
+	if !found {
+		return "", false, karma.Format(nil, "unable to find node addresses")
+	}
+	addressSlicePointer, ok := addresses.(*[]interface{})
+	if !ok {
+		return "", false, karma.Format(nil, "%v of type %T is not *[]interface{}", addresses, addresses)
+	}
+	addressesSlice := *addressSlicePointer
+
+	for _, addr := range addressesSlice {
+		addrPointer, ok := addr.(*map[string]interface{})
+		if !ok {
+			return "", false, karma.Format(nil, "%v of type %T is not *map[string]interface{}", status, status)
+		}
+		address := *addrPointer
+		addressType := address["type"].(string)
+		if addressType == string(corev1.NodeInternalIP) {
+			return address["address"].(string), true, nil
+		}
+	}
+	return "", false, nil
 }
