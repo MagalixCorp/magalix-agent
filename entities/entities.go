@@ -441,35 +441,28 @@ func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionReso
 }
 
 func getNodeInternalIP(node *unstructured.Unstructured) (string, bool, error) {
-	status, found := node.Object["status"]
-	if !found {
-		return "", false, karma.Format(nil, "unable to find node status")
+	addresses, found, err := unstructured.NestedSlice(node.Object, "status", "addresses")
+	if !found || err != nil {
+		return "", found, err
 	}
-	statusMapPointer, ok := status.(*map[string]interface{})
-	if !ok {
-		return "", false, karma.Format(nil, "%v of type %T is not *map[string]interface{}", status, status)
-	}
-	statusMap := *statusMapPointer
-	addresses, found := statusMap["addresses"]
-	if !found {
-		return "", false, karma.Format(nil, "unable to find node addresses")
-	}
-	addressSlicePointer, ok := addresses.(*[]interface{})
-	if !ok {
-		return "", false, karma.Format(nil, "%v of type %T is not *[]interface{}", addresses, addresses)
-	}
-	addressesSlice := *addressSlicePointer
 
-	for _, addr := range addressesSlice {
-		addrPointer, ok := addr.(*map[string]interface{})
+	for _, address := range addresses {
+		addressMap, ok := address.(map[string]interface{})
 		if !ok {
-			return "", false, karma.Format(nil, "%v of type %T is not *map[string]interface{}", status, status)
+			return "", false, karma.Format(nil, "%v of type %T is not map[string]interface{}", address, address)
 		}
-		address := *addrPointer
-		addressType := address["type"].(string)
+		addressType, ok := addressMap["type"].(string)
+		if !ok {
+			return "", false, karma.Format(nil, "%v of type %T is not string", addressMap["type"], addressMap["type"])
+		}
 		if addressType == string(corev1.NodeInternalIP) {
-			return address["address"].(string), true, nil
+			internalIP, ok := addressMap["address"].(string)
+			if !ok {
+				return "", false, karma.Format(nil, "%v of type %T is not string", addressMap["address"], addressMap["address"])
+			}
+			return internalIP, true, nil
 		}
 	}
+
 	return "", false, nil
 }
