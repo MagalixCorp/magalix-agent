@@ -430,7 +430,7 @@ func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionReso
 
 		return map[string]interface{}{
 			"addresses": []interface{}{
-				map[string]string{
+				map[string]interface{}{
 					"type":    "InternalIP",
 					"address": ip,
 				},
