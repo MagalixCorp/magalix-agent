@@ -371,7 +371,7 @@ type GroupVersionResourceKind struct {
 
 type PacketEntityDelta struct {
 	Gvrk      GroupVersionResourceKind  `json:"gvrk"`
-	DeltaKind EntityDeltaKind           `json:"delta_kink"`
+	DeltaKind EntityDeltaKind           `json:"delta_kind"`
 	Data      unstructured.Unstructured `json:"data"`
 	Parent    *ParentController         `json:"parents"`
 	Timestamp time.Time                 `json:"timestamp"`
