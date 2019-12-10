@@ -12,8 +12,6 @@ import (
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/kovetskiy/lorg"
 	satori "github.com/satori/go.uuid"
-	"k8s.io/api/apps/v1beta2"
-	"k8s.io/api/batch/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -27,23 +25,10 @@ var (
 		satori.UUID{},
 		[uuid.Size]byte{},
 
-		new(watcher.Status),
-		new(watcher.ContainerStatusSource),
+		watcher.Status(0),
 
-		new(corev1.NodeList),
-		new(corev1.LimitRangeList),
-		new(corev1.PodList),
-
-		new(v1beta1.CronJobList),
-
-		new(v1beta2.DaemonSetList),
-		new(v1beta2.StatefulSetList),
-		new(v1beta2.ReplicaSetList),
-		new(v1beta2.DeploymentList),
-
-		new(map[string]interface{}),
-		new(interface{}),
-		new([]interface{}),
+		make(map[string]interface{}),
+		make([]interface{}, 0),
 	}
 )
 
