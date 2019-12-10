@@ -25,7 +25,6 @@ var (
 		satori.UUID{},
 		[uuid.Size]byte{},
 
-		watcher.Status(0),
 		new(watcher.Status),
 
 		make(map[string]interface{}),
