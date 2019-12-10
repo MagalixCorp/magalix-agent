@@ -26,6 +26,7 @@ var (
 		[uuid.Size]byte{},
 
 		new(watcher.Status),
+		new(watcher.ContainerStatusSource),
 
 		make(map[string]interface{}),
 		make([]interface{}, 0),
