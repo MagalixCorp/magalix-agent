@@ -416,6 +416,7 @@ func packetParent(parent *kuber.ParentController) *proto.ParentController {
 		Kind:       parent.Kind,
 		Name:       parent.Name,
 		APIVersion: parent.APIVersion,
+		IsWatched:  parent.IsWatched,
 		Parent:     packetParent(parent.Parent),
 	}
 }
