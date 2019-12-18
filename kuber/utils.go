@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-type Identifyable interface {
+type Identifiable interface {
 	GetOwnerReferences() []apisv1.OwnerReference
 	GetNamespace() string
 	GetKind() string
@@ -27,7 +27,7 @@ type ParentController struct {
 }
 
 func GetParents(
-	obj Identifyable,
+	obj Identifiable,
 	getWatcher GetWatcherFromKindFunc,
 ) (*ParentController, error) {
 	ctx := karma.
