@@ -204,6 +204,7 @@ func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metr
 				Name:           metric.Name,
 				Type:           metric.Type,
 				NodeName:       metric.NodeName,
+				NodeIP:         metric.NodeIP,
 				NamespaceName:  metric.NamespaceName,
 				ControllerName: metric.ControllerName,
 				ControllerKind: metric.ControllerKind,
