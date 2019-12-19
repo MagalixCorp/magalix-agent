@@ -158,6 +158,7 @@ type MetricStoreV2Request struct {
 	Name           string    `json:"name"`
 	Type           string    `json:"type"`
 	NodeName       string    `json:"node_name"`
+	NodeIP         string    `json:"node_ip"`
 	NamespaceName  string    `json:"namespace_name"`
 	ControllerName string    `json:"controller_name"`
 	ControllerKind string    `json:"controller_kind"`
