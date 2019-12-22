@@ -5,6 +5,7 @@ import (
 	"github.com/reconquest/karma-go"
 	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sync"
 )
 
 type Identifiable interface {
@@ -26,6 +27,39 @@ type ParentController struct {
 	Parent *ParentController `json:"parent"`
 }
 
+// TODO: Extract into a dependency
+type ParentsStore struct {
+	parents map[string]*ParentController
+	sync.Mutex
+}
+func (s *ParentsStore) SetParents(namespace string, kind string, name string, parent *ParentController) {
+	s.Lock()
+	defer s.Unlock()
+	s.parents[GetEntityKey(namespace, kind, name)] = parent
+}
+
+func (s *ParentsStore) GetParents(namespace string, kind string, name string) (*ParentController, bool) {
+	parents, found := s.parents[GetEntityKey(namespace, kind, name)]
+	return parents, found
+}
+
+var parentsStore *ParentsStore
+
+func NewParentsStore() *ParentsStore {
+	if parentsStore == nil {
+		parentsStore = &ParentsStore{
+			parents: make(map[string]*ParentController),
+			Mutex:   sync.Mutex{},
+		}
+	}
+
+	return parentsStore
+}
+
+func GetEntityKey(namespace string, kind string, name string) string {
+	return fmt.Sprintf("%s:%s:%s", namespace, kind, name)
+}
+
 func GetParents(
 	obj Identifiable,
 	getWatcher GetWatcherFromKindFunc,
@@ -35,6 +69,12 @@ func GetParents(
 		Describe("object_kind", obj.GetKind()).
 		Describe("object_namespace", obj.GetNamespace()).
 		Describe("object_api_version", obj.GetAPIVersion())
+
+	store := NewParentsStore()
+	parents, found := store.GetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName())
+	if found {
+		return parents, nil
+	}
 
 	owners := obj.GetOwnerReferences()
 
@@ -93,6 +133,9 @@ func GetParents(
 			parent.Parent = parentParent
 		}
 	}
+
+	store.SetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName(), parent)
+
 	return parent, nil
 }
 
