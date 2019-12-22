@@ -27,25 +27,30 @@ type ParentController struct {
 	Parent *ParentController `json:"parent"`
 }
 
-type ParentsStore map[string]*ParentController
-func (s ParentsStore) SetParents(namespace string, kind string, name string, parent *ParentController) {
-	s[GetEntityKey(namespace, kind, name)] = parent
+// TODO: Extract into a dependency
+type ParentsStore struct {
+	parents map[string]*ParentController
+	sync.Mutex
+}
+func (s *ParentsStore) SetParents(namespace string, kind string, name string, parent *ParentController) {
+	s.Lock()
+	defer s.Unlock()
+	s.parents[GetEntityKey(namespace, kind, name)] = parent
 }
 
-func (s ParentsStore) GetParents(namespace string, kind string, name string) (*ParentController, bool) {
-	parents, found := s[GetEntityKey(namespace, kind, name)]
+func (s *ParentsStore) GetParents(namespace string, kind string, name string) (*ParentController, bool) {
+	parents, found := s.parents[GetEntityKey(namespace, kind, name)]
 	return parents, found
 }
 
-var parentsStore ParentsStore
-var parentsStoreLock = &sync.Mutex{}
+var parentsStore *ParentsStore
 
-func GetParentsStore() ParentsStore {
-	parentsStoreLock.Lock()
-	defer parentsStoreLock.Unlock()
-
+func NewParentsStore() *ParentsStore {
 	if parentsStore == nil {
-		parentsStore = make(ParentsStore)
+		parentsStore = &ParentsStore{
+			parents: make(map[string]*ParentController),
+			Mutex:   sync.Mutex{},
+		}
 	}
 
 	return parentsStore
@@ -65,7 +70,7 @@ func GetParents(
 		Describe("object_namespace", obj.GetNamespace()).
 		Describe("object_api_version", obj.GetAPIVersion())
 
-	store := GetParentsStore()
+	store := NewParentsStore()
 	parents, found := store.GetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName())
 	if found {
 		return parents, nil
