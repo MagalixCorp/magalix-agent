@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixTechnologies/log-go"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
@@ -189,6 +190,8 @@ func sendMetrics(client *client.Client, useMetricsPacketV2 bool, pipe chan []*Me
 	}
 }
 
+var logger = log.New(true, true, "agent.log")
+
 // SendMetrics bulk send metrics
 func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metric) {
 	ctx := karma.
@@ -200,10 +203,18 @@ func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metr
 	if useMetricsPacketV2 {
 		var req proto.PacketMetricsStoreV2Request
 		for _, metric := range metrics {
+			logger.Infof(
+				karma.
+					Describe("metric-name", metric.Name).
+					Describe("metric-type", metric.Type).
+					Describe("metric-node-name", metric.NodeName).
+					Describe("metric-node-ip", metric.NodeIP),
+					"METRIC NODE")
 			req = append(req, proto.MetricStoreV2Request{
 				Name:           metric.Name,
 				Type:           metric.Type,
 				NodeName:       metric.NodeName,
+				NodeIP:         metric.NodeIP,
 				NamespaceName:  metric.NamespaceName,
 				ControllerName: metric.ControllerName,
 				ControllerKind: metric.ControllerKind,
