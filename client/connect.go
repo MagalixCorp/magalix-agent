@@ -1,14 +1,16 @@
 package client
 
 import (
+	"github.com/MagalixTechnologies/channel"
 	"os"
-	"strings"
+	. "strings"
 	"sync"
 	"time"
 )
 
 func (client *Client) onConnect() error {
 	client.connected = true
+
 	expire := time.Now().Add(time.Minute * 10)
 	_ = client.WithBackoffLimit(func() error {
 
@@ -19,7 +21,7 @@ func (client *Client) onConnect() error {
 		err := client.hello()
 		if err != nil {
 			client.Errorf(err, "unable to verify protocol version with remote server")
-			if time.Now().After(expire) || strings.Contains(err.Error(), "unsupported version") {
+			if time.Now().After(expire) || Contains(err.Error(), "unsupported version") {
 				return nil // breaking condition for backoff
 			}
 			return err // continue condition for backoff
@@ -27,6 +29,14 @@ func (client *Client) onConnect() error {
 
 		err = client.authorize()
 		if err != nil {
+			connectionError, ok := err.(*channel.ProtocolError)
+			if ok {
+				if connectionError.Code == 410 && Contains(connectionError.Message, "Magalix Agent is already deleted") {
+					os.Exit(0)
+					return nil
+				}
+			}
+
 			client.Errorf(
 				err,
 				"unable to authorize client",

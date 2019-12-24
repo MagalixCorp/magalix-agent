@@ -1,7 +1,6 @@
 package client
 
 import (
-	"errors"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/proto"
@@ -70,7 +69,7 @@ func (client *Client) authorize() error {
 	if err != nil {
 		if e, ok := err.(*channel.ProtocolError); ok {
 			if e.Code == channel.InternalErrorCode {
-				return errors.New("authorization has failed")
+				return e
 			}
 		}
 		return err
