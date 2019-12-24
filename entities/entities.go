@@ -246,6 +246,7 @@ func (ew *entitiesWatcher) getParents(
 
 	parent, err := kuber.GetParents(
 		u,
+		ew.observer.ParentsStore,
 		func(kind string) (watcher kuber.Watcher, b bool) {
 			watcher, ok := ew.watchersByKind[kind]
 			return watcher, ok
@@ -323,6 +324,7 @@ func (ew *entitiesWatcher) OnDelete(
 	gvrk kuber.GroupVersionResourceKind,
 	obj unstructured.Unstructured,
 ) {
+	ew.observer.ParentsStore.Delete(obj.GetNamespace(), obj.GetKind(), obj.GetName())
 	delta, err := ew.deltaWrapper(
 		gvrk,
 		proto.PacketEntityDelta{

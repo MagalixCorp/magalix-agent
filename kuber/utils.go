@@ -32,6 +32,7 @@ type ParentsStore struct {
 	parents map[string]*ParentController
 	sync.Mutex
 }
+
 func (s *ParentsStore) SetParents(namespace string, kind string, name string, parent *ParentController) {
 	s.Lock()
 	defer s.Unlock()
@@ -43,17 +44,18 @@ func (s *ParentsStore) GetParents(namespace string, kind string, name string) (*
 	return parents, found
 }
 
-var parentsStore *ParentsStore
+func (s *ParentsStore) Delete(namespace string, kind string, name string) {
+	s.Lock()
+	defer s.Unlock()
+
+	delete(s.parents, GetEntityKey(namespace, kind, name))
+}
 
 func NewParentsStore() *ParentsStore {
-	if parentsStore == nil {
-		parentsStore = &ParentsStore{
-			parents: make(map[string]*ParentController),
-			Mutex:   sync.Mutex{},
-		}
+	return &ParentsStore{
+		parents: make(map[string]*ParentController),
+		Mutex:   sync.Mutex{},
 	}
-
-	return parentsStore
 }
 
 func GetEntityKey(namespace string, kind string, name string) string {
@@ -62,6 +64,7 @@ func GetEntityKey(namespace string, kind string, name string) string {
 
 func GetParents(
 	obj Identifiable,
+	parentsStore *ParentsStore,
 	getWatcher GetWatcherFromKindFunc,
 ) (*ParentController, error) {
 	ctx := karma.
@@ -70,8 +73,7 @@ func GetParents(
 		Describe("object_namespace", obj.GetNamespace()).
 		Describe("object_api_version", obj.GetAPIVersion())
 
-	store := NewParentsStore()
-	parents, found := store.GetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName())
+	parents, found := parentsStore.GetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName())
 	if found {
 		return parents, nil
 	}
@@ -123,7 +125,7 @@ func GetParents(
 					"unable to cast runtime.Object to *unstructured.Unstructured",
 				)
 			}
-			parentParent, err := GetParents(ownerU, getWatcher)
+			parentParent, err := GetParents(ownerU, parentsStore, getWatcher)
 			if err != nil {
 				return nil, ctx.Format(
 					err,
@@ -134,7 +136,7 @@ func GetParents(
 		}
 	}
 
-	store.SetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName(), parent)
+	parentsStore.SetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName(), parent)
 
 	return parent, nil
 }

@@ -194,9 +194,11 @@ func main() {
 	deltasEnabled := args["--packets-v2"].(bool)
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
+	parentsStore := kuber.NewParentsStore()
 	observer_ := kuber.NewObserver(
 		stderr,
 		dynamicClient,
+		parentsStore,
 		make(chan struct{}, 0),
 		time.Minute*5,
 	)

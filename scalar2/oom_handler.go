@@ -150,6 +150,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 
 	parents, err := kuber.GetParents(
 		&Pod{Pod: pod},
+		p.observer.ParentsStore,
 		func(kind string) (kuber.Watcher, bool) {
 			gvrk, err := kuber.KindToGvrk(kind)
 			if err != nil {
