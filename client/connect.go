@@ -31,7 +31,7 @@ func (client *Client) onConnect() error {
 		if err != nil {
 			connectionError, ok := err.(*channel.ProtocolError)
 			if ok {
-				if connectionError.Code == 410 && strings.Contains(connectionError.Message, "Magalix Agent is already deleted") {
+				if connectionError.Code == 404 && strings.Contains(connectionError.Message, "Magalix Agent is deleted") {
 					os.Exit(0)
 					return nil
 				}
