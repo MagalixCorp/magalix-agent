@@ -54,7 +54,7 @@ func (client *Client) onConnect() error {
 		client.blocked = sync.Map{}
 
 		return nil
-	}, 1000)
+	}, 100)
 
 	if client.authorized {
 		return nil
