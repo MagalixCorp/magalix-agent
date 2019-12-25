@@ -20,6 +20,7 @@ import (
 
 type Observer struct {
 	dynamicinformer.DynamicSharedInformerFactory
+	ParentsStore *ParentsStore
 
 	logger *log.Logger
 	stopCh chan struct{}
@@ -28,14 +29,15 @@ type Observer struct {
 func NewObserver(
 	logger *log.Logger,
 	client dynamic.Interface,
+	parentsStore *ParentsStore,
 	stopCh chan struct{},
 	defaultResync time.Duration,
 ) *Observer {
 	return &Observer{
 		DynamicSharedInformerFactory: dynamicinformer.NewDynamicSharedInformerFactory(client, defaultResync),
-
-		logger: logger,
-		stopCh: stopCh,
+		ParentsStore:                 parentsStore,
+		logger:                       logger,
+		stopCh:                       stopCh,
 	}
 }
 
@@ -180,7 +182,7 @@ func (observer *Observer) FindController(namespaceName string, podName string) (
 		return "", "", karma.Format(ctx.Reason(err), "unable to get pod")
 	}
 
-	parent, err := GetParents(pod.(*unstructured.Unstructured), func(kind string) (Watcher, bool) {
+	parent, err := GetParents(pod.(*unstructured.Unstructured), observer.ParentsStore, func(kind string) (Watcher, bool) {
 		gvrk, err := KindToGvrk(kind)
 		if err != nil {
 			observer.logger.Warningf(ctx.Describe("kind", kind).Reason(err), "unable to get GVRK for kind")
@@ -417,6 +419,7 @@ type ResourceEventHandler interface {
 // as few of the notification functions as you want while still implementing
 // ResourceEventHandler.
 type ResourceEventHandlerFuncs struct {
+	Observer *Observer
 	AddFunc    func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
 	UpdateFunc func(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
 	DeleteFunc func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
@@ -441,4 +444,6 @@ func (r ResourceEventHandlerFuncs) OnDelete(now time.Time, gvrk GroupVersionReso
 	if r.DeleteFunc != nil {
 		r.DeleteFunc(now, gvrk, obj)
 	}
+
+	r.Observer.ParentsStore.Delete(obj.GetNamespace(), obj.GetKind(), obj.GetName())
 }

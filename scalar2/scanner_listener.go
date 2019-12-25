@@ -46,6 +46,7 @@ func (sl *ScannerListener) Start() {
 	sl.podsWatcher = sl.observer.Watch(kuber.Pods)
 	sl.podsWatcher.AddEventHandler(
 		&kuber.ResourceEventHandlerFuncs{
+			Observer: sl.observer,
 			AddFunc: func(now time.Time, gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
 				sl.handleUnstructuredPod(&obj)
 			},
