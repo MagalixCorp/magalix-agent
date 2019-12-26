@@ -5,6 +5,7 @@ metadata:
   namespace: kube-system
 spec:
   replicas: 1
+  restartPolicy: "OnFailure"
   template:
     metadata:
       labels:
