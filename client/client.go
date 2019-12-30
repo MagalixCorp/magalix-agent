@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	ProtocolMajorVersion = 1
-	ProtocolMinorVersion = 5
+	ProtocolMajorVersion = 2
+	ProtocolMinorVersion = 0
 
 	logsQueueSize = 1024
 )
@@ -182,7 +182,7 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 // send sends a packet to the agent-gateway
 // it uses the default proto encoding to encode and decode in/out parameters
 func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{}) error {
-	req, err := proto.Encode(in)
+	req, err := proto.EncodeSnappy(in)
 	if err != nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 		return err
 	}
 	client.lastSent = time.Now()
-	return proto.Decode(res, out)
+	return proto.DecodeSnappy(res, out)
 }
 
 // Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send

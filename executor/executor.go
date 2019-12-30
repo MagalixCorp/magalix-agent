@@ -180,19 +180,19 @@ func (executor *Executor) handleExecutionSkipping(
 
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	var decision proto.PacketDecision
-	if err = proto.Decode(in, &decision); err != nil {
+	if err = proto.DecodeSnappy(in, &decision); err != nil {
 		return
 	}
 
 	err = executor.submitDecision(&decision, decisionsBufferTimeout)
 	if err != nil {
 		errMessage := err.Error()
-		return proto.Encode(proto.PacketDecisionResponse{
+		return proto.EncodeSnappy(proto.PacketDecisionResponse{
 			Error: &errMessage,
 		})
 	}
 
-	return proto.Encode(proto.PacketDecisionResponse{})
+	return proto.EncodeSnappy(proto.PacketDecisionResponse{})
 }
 
 func (executor *Executor) submitDecision(

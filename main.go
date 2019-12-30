@@ -273,7 +273,7 @@ func main() {
 	gwClient.AddListener(proto.PacketKindDecision, e.Listener)
 	gwClient.AddListener(proto.PacketKindRestart, func(in []byte) (out []byte, err error) {
 		var restart proto.PacketRestart
-		if err = proto.Decode(in, &restart); err != nil {
+		if err = proto.DecodeSnappy(in, &restart); err != nil {
 			return
 		}
 		defer gwClient.Done(restart.Status)
