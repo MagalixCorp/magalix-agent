@@ -31,9 +31,12 @@ func (client *Client) onConnect() error {
 		if err != nil {
 			connectionError, ok := err.(*channel.ProtocolError)
 			if ok {
-				if connectionError.Code == 404 && strings.Contains(connectionError.Message, "Magalix Agent is deleted") {
-					os.Exit(0)
-					return nil
+				if connectionError.Code == 404 {
+					// TODO: Remove this loop once we get permission to delete the agent
+					for {
+						time.Sleep(time.Hour * 8760)
+					}
+
 				}
 			}
 
