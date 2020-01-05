@@ -5,13 +5,11 @@ go 1.13
 require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759
-	github.com/MagalixTechnologies/channel v0.0.0-20190201194606-4bd72c2c4609
+	github.com/MagalixTechnologies/channel v1.1.0
 	github.com/MagalixTechnologies/log-go v0.0.0-20191209143418-aff8f3a92a31
-	github.com/MagalixTechnologies/uuid-go v0.0.0-20191003092420-742176f3bcb7
+	github.com/MagalixTechnologies/uuid-go v0.0.0-20200102125057-aa0bb55c403a
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
-	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8 // indirect
 	github.com/golang/snappy v0.0.1
-	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/kovetskiy/lorg v0.0.0-20190701130800-9c6042b7edb0
 	github.com/reconquest/cog v0.0.0-20191208202052-266c2467b936
 	github.com/reconquest/health-go v0.0.0-20181113092653-ea90ecace101
