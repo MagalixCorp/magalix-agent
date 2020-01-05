@@ -1,9 +1,8 @@
 module github.com/MagalixCorp/magalix-agent
 
-go 1.13
+go 1.12
 
 require (
-	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759
 	github.com/MagalixTechnologies/channel v1.1.0
 	github.com/MagalixTechnologies/log-go v0.0.0-20191209143418-aff8f3a92a31
@@ -26,6 +25,6 @@ require (
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	k8s.io/api v0.17.0
 	k8s.io/apimachinery v0.17.0
-	k8s.io/client-go v11.0.0+incompatible
+	k8s.io/client-go v0.0.0-20191225195628-9f2f78dfcb40
 	k8s.io/utils v0.0.0-20191218082557-f07c713de883 // indirect
 )
