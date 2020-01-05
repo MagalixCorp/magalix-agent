@@ -388,6 +388,16 @@ type PacketEntitiesResyncRequest struct {
 }
 type PacketEntitiesResyncResponse struct{}
 
+// Deprecated: Fall back to EncodeGOB. Kept only for backward compatibility. Should be removed.
+func Encode(in interface{}) (out []byte, err error) {
+	return EncodeGOB(in)
+}
+
+// Deprecated: Falls back to DecodeGOB. Kept only for backward compatibility. Should be removed.
+func Decode(in []byte, out interface{}) error {
+	return DecodeGOB(in, out)
+}
+
 func EncodeSnappy(in interface{}) (out []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
