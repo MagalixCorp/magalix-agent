@@ -34,7 +34,7 @@ func (client *Client) onConnect() error {
 				if connectionError.Code == 404 && strings.Contains(connectionError.Message, "Agent is deleted") {
 					// TODO: Remove this loop once we get permission to delete the agent
 					for {
-						time.Sleep(time.Hour * 8544)
+						time.Sleep(time.Hour * 8760)
 					}
 
 				}
