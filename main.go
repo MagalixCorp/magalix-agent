@@ -181,7 +181,8 @@ func main() {
 		skipNamespaces = namespaces
 	}
 
-	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, stderr)
+	connected := make(chan bool)
+	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, stderr, connected)
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
@@ -191,129 +192,135 @@ func main() {
 		os.Exit(1)
 	}
 
-	deltasEnabled := args["--packets-v2"].(bool)
+	for {
+		select {
 
-	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
-	parentsStore := kuber.NewParentsStore()
-	observer_ := kuber.NewObserver(
-		stderr,
-		dynamicClient,
-		parentsStore,
-		make(chan struct{}, 0),
-		time.Minute*5,
-	)
-	t := entitiesSyncTimeout
-	err = observer_.WaitForCacheSync(&t)
-	if err != nil {
-		stderr.Errorf(err, "unable to start entities watcher")
-		deltasEnabled = false // fallback to old scanner implementation
-	}
+		case <-connected:
+			deltasEnabled := args["--packets-v2"].(bool)
 
-	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
-	if err != nil {
-		stderr.Fatalf(err, "unable to initialize Kubernetes")
-		os.Exit(1)
-	}
+			dynamicClient, err := dynamic.NewForConfig(kRestConfig)
+			parentsStore := kuber.NewParentsStore()
+			observer_ := kuber.NewObserver(
+				stderr,
+				dynamicClient,
+				parentsStore,
+				make(chan struct{}, 0),
+				time.Minute*5,
+			)
+			t := entitiesSyncTimeout
+			err = observer_.WaitForCacheSync(&t)
+			if err != nil {
+				stderr.Errorf(err, "unable to start entities watcher")
+				deltasEnabled = false // fallback to old scanner implementation
+			}
 
-	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
-	analysisDataInterval := utils.MustParseDuration(
-		args,
-		"--analysis-data-interval",
-	)
+			kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
+			if err != nil {
+				stderr.Fatalf(err, "unable to initialize Kubernetes")
+				os.Exit(1)
+			}
 
-	var entityScanner *scanner.Scanner
+			optInAnalysisData := args["--opt-in-analysis-data"].(bool)
+			analysisDataInterval := utils.MustParseDuration(
+				args,
+				"--analysis-data-interval",
+			)
 
-	if deltasEnabled {
-		ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
-		err := ew.Start()
-		if err != nil {
-			stderr.Fatalf(err, "unable to start entities watcher")
-		}
+			var entityScanner *scanner.Scanner
 
-		if scalarEnabled {
-			scalar2.InitScalars(stderr, kube, observer_, dryRun)
-		}
+			if deltasEnabled {
+				ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
+				err := ew.Start()
+				if err != nil {
+					stderr.Fatalf(err, "unable to start entities watcher")
+				}
 
-		entityScanner = scanner.InitScanner(
-			gwClient,
-			scanner.NewKuberFromObserver(ew),
-			skipNamespaces,
-			accountID,
-			clusterID,
-			optInAnalysisData,
-			analysisDataInterval,
-			false,
-		)
+				if scalarEnabled {
+					scalar2.InitScalars(stderr, kube, observer_, dryRun)
+				}
 
-	} else {
-		entityScanner = scanner.InitScanner(
-			gwClient,
-			kube,
-			skipNamespaces,
-			accountID,
-			clusterID,
-			optInAnalysisData,
-			analysisDataInterval,
-			true,
-		)
+				entityScanner = scanner.InitScanner(
+					gwClient,
+					scanner.NewKuberFromObserver(ew),
+					skipNamespaces,
+					accountID,
+					clusterID,
+					optInAnalysisData,
+					analysisDataInterval,
+					false,
+				)
 
-		if scalarEnabled {
-			scalar.InitScalars(stderr, entityScanner, kube, dryRun)
-		}
-	}
+			} else {
+				entityScanner = scanner.InitScanner(
+					gwClient,
+					kube,
+					skipNamespaces,
+					accountID,
+					clusterID,
+					optInAnalysisData,
+					analysisDataInterval,
+					true,
+				)
 
-	e := executor.InitExecutor(
-		gwClient,
-		kube,
-		entityScanner,
-		executorWorkers,
-		dryRun,
-	)
+				if scalarEnabled {
+					scalar.InitScalars(stderr, entityScanner, kube, dryRun)
+				}
+			}
 
-	gwClient.AddListener(proto.PacketKindDecision, e.Listener)
-	gwClient.AddListener(proto.PacketKindRestart, func(in []byte) (out []byte, err error) {
-		var restart proto.PacketRestart
-		if err = proto.Decode(in, &restart); err != nil {
-			return
-		}
-		defer gwClient.Done(restart.Status)
-		return nil, nil
-	})
+			e := executor.InitExecutor(
+				gwClient,
+				kube,
+				entityScanner,
+				executorWorkers,
+				dryRun,
+			)
 
-	if eventsEnabled {
-		events.InitEvents(
-			gwClient,
-			kube,
-			skipNamespaces,
-			entityScanner,
-			args,
-		)
-	}
+			gwClient.AddListener(proto.PacketKindDecision, e.Listener)
+			gwClient.AddListener(proto.PacketKindRestart, func(in []byte) (out []byte, err error) {
+				var restart proto.PacketRestart
+				if err = proto.Decode(in, &restart); err != nil {
+					return
+				}
+				defer gwClient.Done(restart.Status)
+				return nil, nil
+			})
 
-	if metricsEnabled {
-		var nodesProvider metrics.NodesProvider
-		var entitiesProvider metrics.EntitiesProvider
+			if eventsEnabled {
+				events.InitEvents(
+					gwClient,
+					kube,
+					skipNamespaces,
+					entityScanner,
+					args,
+				)
+			}
 
-		if deltasEnabled {
-			nodesProvider = observer_
-			entitiesProvider = observer_
-		} else {
-			nodesProvider = entityScanner
-			entitiesProvider = entityScanner
-		}
+			if metricsEnabled {
+				var nodesProvider metrics.NodesProvider
+				var entitiesProvider metrics.EntitiesProvider
 
-		err := metrics.InitMetrics(
-			gwClient,
-			nodesProvider,
-			entitiesProvider,
-			kube,
-			deltasEnabled,
-			optInAnalysisData,
-			args,
-		)
-		if err != nil {
-			gwClient.Fatalf(err, "unable to initialize metrics sources")
-			os.Exit(1)
+				if deltasEnabled {
+					nodesProvider = observer_
+					entitiesProvider = observer_
+				} else {
+					nodesProvider = entityScanner
+					entitiesProvider = entityScanner
+				}
+
+				err := metrics.InitMetrics(
+					gwClient,
+					nodesProvider,
+					entitiesProvider,
+					kube,
+					deltasEnabled,
+					optInAnalysisData,
+					args,
+				)
+				if err != nil {
+					gwClient.Fatalf(err, "unable to initialize metrics sources")
+					os.Exit(1)
+				}
+			}
 		}
 	}
 
