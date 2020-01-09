@@ -240,6 +240,7 @@ func InitClient(
 	accountID, clusterID uuid.UUID,
 	secret []byte,
 	parentLogger *log.Logger,
+	connected chan bool,
 ) (*Client, error) {
 	client := newClient(
 		args["--gateway"].(string), version, startID, accountID, clusterID, secret,
@@ -272,7 +273,7 @@ func InitClient(
 		return true
 	}, syscall.SIGHUP)
 
-	err := client.Connect()
+	err := client.Connect(connected)
 
 	return client, err
 }
