@@ -147,6 +147,7 @@ func (kubelet *Kubelet) GetMetrics(
 		namespaceName string,
 		entityKind string,
 		entityName string,
+		podName string,
 		containerName string,
 	) string {
 		key := fmt.Sprintf(
@@ -157,6 +158,9 @@ func (kubelet *Kubelet) GetMetrics(
 			entityName,
 		)
 
+		if podName != "" {
+			key = fmt.Sprintf("%s/%s", key, podName)
+		}
 		if containerName != "" {
 			key = fmt.Sprintf("%s/%s", key, containerName)
 		}
@@ -285,7 +289,7 @@ func (kubelet *Kubelet) GetMetrics(
 			metric.Timestamp = tickTime
 		}
 
-		key := getKey(metric.Name, metric.NamespaceName, entityKind, entityName, metric.ContainerName)
+		key := getKey(metric.Name, metric.NamespaceName, entityKind, entityName, metric.PodName, metric.ContainerName)
 		rate, err := calcRate(key, metric.Timestamp, metric.Value, multiplier)
 		kubelet.updatePreviousValue(key, &KubeletValue{
 			Timestamp: metric.Timestamp,
@@ -728,14 +732,15 @@ func (kubelet *Kubelet) GetMetrics(
 						namespaceName,
 						controllerKind,
 						controllerName,
+						pod.PodRef.Name,
 						container.Name,
 					)
 					throttleMetrics[periodsKey] = &Metric{
 						Name: "container_cpu_cfs/periods_total",
 						Type: TypePodContainer,
 
-						NodeName: node.Name,
-						NodeIP: nodeIP,
+						NodeName:       node.Name,
+						NodeIP:         nodeIP,
 						NamespaceName:  namespaceName,
 						ControllerName: controllerName,
 						ControllerKind: controllerKind,
@@ -749,14 +754,15 @@ func (kubelet *Kubelet) GetMetrics(
 						namespaceName,
 						controllerKind,
 						controllerName,
+						pod.PodRef.Name,
 						container.Name,
 					)
 					throttleMetrics[throttledSecondsKey] = &Metric{
 						Name: "container_cpu_cfs_throttled/seconds_total",
 						Type: TypePodContainer,
 
-						NodeName: node.Name,
-						NodeIP: nodeIP,
+						NodeName:       node.Name,
+						NodeIP:         nodeIP,
 						NamespaceName:  namespaceName,
 						ControllerName: controllerName,
 						ControllerKind: controllerKind,
@@ -770,14 +776,15 @@ func (kubelet *Kubelet) GetMetrics(
 						namespaceName,
 						controllerKind,
 						controllerName,
+						pod.PodRef.Name,
 						container.Name,
 					)
 					throttleMetrics[throttledPeriodsKey] = &Metric{
 						Name: "container_cpu_cfs_throttled/periods_total",
 						Type: TypePodContainer,
 
-						NodeName: node.Name,
-						NodeIP: nodeIP,
+						NodeName:       node.Name,
+						NodeIP:         nodeIP,
 						NamespaceName:  namespaceName,
 						ControllerName: controllerName,
 						ControllerKind: controllerKind,
@@ -851,6 +858,7 @@ func (kubelet *Kubelet) GetMetrics(
 							namespaceName,
 							controllerKind,
 							controllerName,
+							podName,
 							containerName,
 						)
 						if storedMetric, ok := throttleMetrics[key]; ok {
