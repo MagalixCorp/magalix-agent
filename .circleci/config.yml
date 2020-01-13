@@ -48,34 +48,8 @@ jobs:
             fi
 
       - run:
-          name: Should build?
-          command: |
-            cd $SOURCE_PATH
-
-            RANGE=${CIRCLE_COMPARE_URL##*/}
-
-            if ! git rev-parse -q --verify "${RANGE%%..*}" > /dev/null; then
-              echo :: force push detected, building anyway
-              echo 'export SHOULD_BUILD=true' >> $BASH_ENV
-
-              exit 0
-            fi
-
-            if git diff "$RANGE" --name-only \
-                | grep -qE -e '\.(go|ya?ml)' -e '(\w+)file' -e '\.(\w+)ignore'
-            then
-              echo 'export SHOULD_BUILD=true' >> $BASH_ENV
-            fi
-
-      - run:
           name: Should push?
           command: |
-            if [[ ! "$SHOULD_BUILD" ]]; then
-              echo :: will not push, no build
-
-              exit 0
-            fi
-
             if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" ]]
             then
               echo 'export SHOULD_PUSH=true' >> $BASH_ENV
@@ -90,11 +64,6 @@ jobs:
       - run:
           name: Build binary
           command: |
-            if [[ ! "$SHOULD_BUILD" ]]; then
-              echo :: no build
-
-              exit 0
-            fi
 
             export GOCACHE=/go/cache/
 
