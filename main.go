@@ -178,17 +178,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	for {
-		select {
-
-		case <-connected:
-			initAgent(args, gwClient, logger, accountID, clusterID)
-		}
-	}
+	logger.Infof(nil, "Waiting for connection and authorization")
+	<-connected
+	logger.Infof(nil, "Connected and authorized")
+	initAgent(args, gwClient, logger, accountID, clusterID)
 
 }
 
 func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, accountID uuid.UUID, clusterID uuid.UUID) {
+	logger.Infof(nil, "Initializing Agent")
 	var (
 		metricsEnabled  = !args["--disable-metrics"].(bool)
 		eventsEnabled   = !args["--disable-events"].(bool)
