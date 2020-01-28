@@ -18,7 +18,7 @@ import (
 
 const (
 	snapshotResyncTickerInterval = 30 * time.Minute
-	snapshotTickerInterval       = 10 * time.Minute
+	snapshotTickerInterval       = 3 * time.Hour
 
 	deltasBufferChanSize       = 1024
 	deltasPacketFlushAfterSize = 100
