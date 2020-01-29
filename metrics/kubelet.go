@@ -537,15 +537,15 @@ func (kubelet *Kubelet) GetMetrics(
 				Time  time.Time
 				Value int64
 			}{
-				{"cpu/usage", summary.Node.CPU.Time, summary.Node.CPU.UsageCoreNanoSeconds},
-				{"memory/rss", summary.Node.Memory.Time, summary.Node.Memory.RSSBytes},
-				{"filesystem/usage", summary.Node.FS.Time, summary.Node.FS.UsedBytes},
-				{"filesystem/node_capacity", summary.Node.FS.Time, summary.Node.FS.CapacityBytes},
-				{"filesystem/node_allocatable", summary.Node.FS.Time, summary.Node.FS.CapacityBytes},
-				{"network/tx", summary.Node.Network.Time, summary.Node.Network.TxBytes},
-				{"network/rx", summary.Node.Network.Time, summary.Node.Network.RxBytes},
-				{"network/tx_errors", summary.Node.Network.Time, summary.Node.Network.TxErrors},
-				{"network/rx_errors", summary.Node.Network.Time, summary.Node.Network.RxErrors},
+				{"cpu/usage", tickTime, summary.Node.CPU.UsageCoreNanoSeconds},
+				{"memory/rss", tickTime, summary.Node.Memory.RSSBytes},
+				{"filesystem/usage", tickTime, summary.Node.FS.UsedBytes},
+				{"filesystem/node_capacity", tickTime, summary.Node.FS.CapacityBytes},
+				{"filesystem/node_allocatable", tickTime, summary.Node.FS.CapacityBytes},
+				{"network/tx", tickTime, summary.Node.Network.TxBytes},
+				{"network/rx", tickTime, summary.Node.Network.RxBytes},
+				{"network/tx_errors", tickTime, summary.Node.Network.TxErrors},
+				{"network/rx_errors", tickTime, summary.Node.Network.RxErrors},
 			} {
 				addMetricValue(
 					TypeNode,
@@ -568,11 +568,11 @@ func (kubelet *Kubelet) GetMetrics(
 				Value      int64
 				Multiplier int64
 			}{
-				{"cpu/usage_rate", summary.Node.CPU.Time, summary.Node.CPU.UsageCoreNanoSeconds, 1000},
-				{"network/tx_rate", summary.Node.Network.Time, summary.Node.Network.TxBytes, 1e9},
-				{"network/rx_rate", summary.Node.Network.Time, summary.Node.Network.RxBytes, 1e9},
-				{"network/tx_errors_rate", summary.Node.Network.Time, summary.Node.Network.TxErrors, 1e9},
-				{"network/rx_errors_rate", summary.Node.Network.Time, summary.Node.Network.RxErrors, 1e9},
+				{"cpu/usage_rate", tickTime, summary.Node.CPU.UsageCoreNanoSeconds, 1000},
+				{"network/tx_rate", tickTime, summary.Node.Network.TxBytes, 1e9},
+				{"network/rx_rate", tickTime, summary.Node.Network.RxBytes, 1e9},
+				{"network/tx_errors_rate", tickTime, summary.Node.Network.TxErrors, 1e9},
+				{"network/rx_errors_rate", tickTime, summary.Node.Network.RxErrors, 1e9},
 			} {
 
 				addMetricValueRate(
@@ -616,10 +616,10 @@ func (kubelet *Kubelet) GetMetrics(
 					Time  time.Time
 					Value int64
 				}{
-					{"network/tx", pod.Network.Time, pod.Network.TxBytes},
-					{"network/rx", pod.Network.Time, pod.Network.TxBytes},
-					{"network/tx_errors", pod.Network.Time, pod.Network.TxErrors},
-					{"network/rx_errors", pod.Network.Time, pod.Network.RxErrors},
+					{"network/tx", tickTime, pod.Network.TxBytes},
+					{"network/rx", tickTime, pod.Network.TxBytes},
+					{"network/tx_errors", tickTime, pod.Network.TxErrors},
+					{"network/rx_errors", tickTime, pod.Network.RxErrors},
 				} {
 					addMetricValue(
 						TypePod,
@@ -641,10 +641,10 @@ func (kubelet *Kubelet) GetMetrics(
 					Time  time.Time
 					Value int64
 				}{
-					{"network/tx_rate", pod.Network.Time, pod.Network.TxBytes},
-					{"network/rx_rate", pod.Network.Time, pod.Network.TxBytes},
-					{"network/tx_errors_rate", pod.Network.Time, pod.Network.TxErrors},
-					{"network/rx_errors_rate", pod.Network.Time, pod.Network.RxErrors},
+					{"network/tx_rate", tickTime, pod.Network.TxBytes},
+					{"network/rx_rate", tickTime, pod.Network.TxBytes},
+					{"network/tx_errors_rate", tickTime, pod.Network.TxErrors},
+					{"network/rx_errors_rate", tickTime, pod.Network.RxErrors},
 				} {
 					addMetricValueRate(
 						TypePod,
@@ -692,9 +692,9 @@ func (kubelet *Kubelet) GetMetrics(
 						Time  time.Time
 						Value int64
 					}{
-						{"cpu/usage", container.CPU.Time, container.CPU.UsageCoreNanoSeconds},
-						{"memory/rss", container.Memory.Time, container.Memory.RSSBytes},
-						{"filesystem/usage", container.RootFS.Time, container.RootFS.UsedBytes},
+						{"cpu/usage", tickTime, container.CPU.UsageCoreNanoSeconds},
+						{"memory/rss", tickTime, container.Memory.RSSBytes},
+						{"filesystem/usage", tickTime, container.RootFS.UsedBytes},
 					} {
 						addMetricValue(
 							TypePodContainer,
@@ -723,7 +723,7 @@ func (kubelet *Kubelet) GetMetrics(
 						controllerKind,
 						container.Name,
 						pod.PodRef.Name,
-						container.CPU.Time,
+						tickTime,
 						container.CPU.UsageCoreNanoSeconds,
 						1000, // cpu_rate is in millicore
 					)
@@ -748,7 +748,7 @@ func (kubelet *Kubelet) GetMetrics(
 						ControllerKind: controllerKind,
 						ContainerName:  container.Name,
 						PodName:        pod.PodRef.Name,
-						Timestamp:      container.CPU.Time,
+						Timestamp:      tickTime,
 						Value:          0,
 					}
 					throttledSecondsKey := getKey(
@@ -770,7 +770,7 @@ func (kubelet *Kubelet) GetMetrics(
 						ControllerKind: controllerKind,
 						ContainerName:  container.Name,
 						PodName:        pod.PodRef.Name,
-						Timestamp:      container.CPU.Time,
+						Timestamp:      tickTime,
 						Value:          0,
 					}
 					throttledPeriodsKey := getKey(
@@ -792,7 +792,7 @@ func (kubelet *Kubelet) GetMetrics(
 						ControllerKind: controllerKind,
 						ContainerName:  container.Name,
 						PodName:        pod.PodRef.Name,
-						Timestamp:      container.CPU.Time,
+						Timestamp:      tickTime,
 						Value:          0,
 					}
 				}
