@@ -203,13 +203,6 @@ func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metr
 	if useMetricsPacketV2 {
 		var req proto.PacketMetricsStoreV2Request
 		for _, metric := range metrics {
-			logger.Infof(
-				karma.
-					Describe("metric-name", metric.Name).
-					Describe("metric-type", metric.Type).
-					Describe("metric-node-name", metric.NodeName).
-					Describe("metric-node-ip", metric.NodeIP),
-					"METRIC NODE")
 			req = append(req, proto.MetricStoreV2Request{
 				Name:           metric.Name,
 				Type:           metric.Type,
@@ -224,6 +217,7 @@ func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metr
 				PodName:        metric.PodName,
 				AdditionalTags: metric.AdditionalTags,
 			})
+
 		}
 		packet = req
 		packetKind = proto.PacketKindMetricsStoreV2Request

@@ -137,7 +137,7 @@ func (kubelet *Kubelet) GetMetrics(
 	kubelet.collectGarbage()
 
 	metricsMutex := &sync.Mutex{}
-	metrics := []*Metric{}
+	metrics := make([]*Metric, 0)
 
 	rawMutex := &sync.Mutex{}
 	rawResponses := map[string]interface{}{}
@@ -174,7 +174,6 @@ func (kubelet *Kubelet) GetMetrics(
 		value int64,
 		multiplier int64,
 	) (int64, error) {
-
 		previous, err := kubelet.getPreviousValue(key)
 
 		if err != nil {
@@ -211,6 +210,9 @@ func (kubelet *Kubelet) GetMetrics(
 			)
 			metric.Timestamp = tickTime
 		}
+
+		metric.Timestamp = metric.Timestamp.Truncate(time.Minute)
+
 		metrics = append(metrics, metric)
 	}
 	addMetricValue := func(
@@ -254,9 +256,7 @@ func (kubelet *Kubelet) GetMetrics(
 		value int64,
 		additionalTags map[string]interface{},
 	) {
-		metricsMutex.Lock()
-		defer metricsMutex.Unlock()
-		metrics = append(metrics, &Metric{
+		addMetric(&Metric{
 			Name:           measurement,
 			Type:           measurementType,
 			NodeName:       nodeName,
@@ -288,6 +288,8 @@ func (kubelet *Kubelet) GetMetrics(
 			)
 			metric.Timestamp = tickTime
 		}
+
+		metric.Timestamp = metric.Timestamp.Truncate(time.Minute)
 
 		key := getKey(metric.Name, metric.NamespaceName, entityKind, entityName, metric.PodName, metric.ContainerName)
 		rate, err := calcRate(key, metric.Timestamp, metric.Value, multiplier)
@@ -591,7 +593,7 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 
-			throttleMetrics := map[string]*Metric{}
+			throttleMetrics := make(map[string]*Metric)
 
 			for _, pod := range summary.Pods {
 				controllerName, controllerKind, err := entitiesProvider.FindController(
@@ -920,7 +922,7 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 	}
 
-	result := []*Metric{}
+	result := make([]*Metric, 0)
 
 	var context *karma.Context
 	for _, metrics := range metrics {
