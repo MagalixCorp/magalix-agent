@@ -287,7 +287,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		if err = proto.DecodeSnappy(in, &restart); err != nil {
 			return
 		}
-		defer gwClient.Done(restart.Status)
+		defer gwClient.Done(restart.Status, true)
 		return nil, nil
 	})
 
