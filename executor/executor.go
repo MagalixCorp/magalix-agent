@@ -39,7 +39,7 @@ type Executor struct {
 	oomKilled     chan uuid.UUID
 	workersCount  int
 	decisionsChan chan *proto.PacketDecision
-	currentJobs   map[string]bool
+	inProgressJobs   map[string]bool
 }
 
 // InitExecutor creates a new excecutor then starts it
@@ -72,7 +72,7 @@ func NewExecutor(
 		dryRun:  dryRun,
 
 		workersCount:  workersCount,
-		currentJobs:   map[string]bool{},
+		inProgressJobs:   map[string]bool{},
 		decisionsChan: make(chan *proto.PacketDecision, decisionsBufferLength),
 	}
 
@@ -183,9 +183,9 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	if err = proto.DecodeSnappy(in, &decision); err != nil {
 		return
 	}
-	_, exist := executor.currentJobs[decision.ID.String()]
+	_, exist := executor.inProgressJobs[decision.ID.String()]
 	if !exist {
-		executor.currentJobs[decision.ID.String()] = true
+		executor.inProgressJobs[decision.ID.String()] = true
 		err = executor.submitDecision(&decision, decisionsBufferTimeout)
 		if err != nil {
 			errMessage := err.Error()
@@ -224,7 +224,7 @@ func (executor *Executor) executorWorker() {
 			)
 		}
 
-		delete(executor.currentJobs, decision.ID.String())
+		delete(executor.inProgressJobs, decision.ID.String())
 
 		executor.client.Pipe(
 			client.Package{

@@ -1,5 +1,5 @@
 /agent
-/trace.log
+/.log
 /build
 /.idea
 /vendor
