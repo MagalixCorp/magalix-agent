@@ -31,16 +31,15 @@ const (
 
 // Executor decision executor
 type Executor struct {
-	client    *client.Client
-	logger    *log.Logger
-	kube      *kuber.Kube
-	scanner   *scanner.Scanner
-	dryRun    bool
-	oomKilled chan uuid.UUID
-
-	workersCount int
-
+	client        *client.Client
+	logger        *log.Logger
+	kube          *kuber.Kube
+	scanner       *scanner.Scanner
+	dryRun        bool
+	oomKilled     chan uuid.UUID
+	workersCount  int
 	decisionsChan chan *proto.PacketDecision
+	currentJobs   map[string]bool
 }
 
 // InitExecutor creates a new excecutor then starts it
@@ -72,8 +71,8 @@ func NewExecutor(
 		scanner: scanner,
 		dryRun:  dryRun,
 
-		workersCount: workersCount,
-
+		workersCount:  workersCount,
+		currentJobs:   map[string]bool{},
 		decisionsChan: make(chan *proto.PacketDecision, decisionsBufferLength),
 	}
 
@@ -179,17 +178,21 @@ func (executor *Executor) handleExecutionSkipping(
 }
 
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
+
 	var decision proto.PacketDecision
 	if err = proto.DecodeSnappy(in, &decision); err != nil {
 		return
 	}
-
-	err = executor.submitDecision(&decision, decisionsBufferTimeout)
-	if err != nil {
-		errMessage := err.Error()
-		return proto.EncodeSnappy(proto.PacketDecisionResponse{
-			Error: &errMessage,
-		})
+	_, exist := executor.currentJobs[decision.ID.String()]
+	if !exist {
+		executor.currentJobs[decision.ID.String()] = true
+		err = executor.submitDecision(&decision, decisionsBufferTimeout)
+		if err != nil {
+			errMessage := err.Error()
+			return proto.EncodeSnappy(proto.PacketDecisionResponse{
+				Error: &errMessage,
+			})
+		}
 	}
 
 	return proto.EncodeSnappy(proto.PacketDecisionResponse{})
@@ -220,6 +223,9 @@ func (executor *Executor) executorWorker() {
 				"unable to execute decision",
 			)
 		}
+
+		delete(executor.currentJobs, decision.ID.String())
+
 		executor.client.Pipe(
 			client.Package{
 				Kind:        proto.PacketKindDecisionFeedback,
