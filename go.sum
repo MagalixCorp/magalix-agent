@@ -12,6 +12,7 @@ github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759 h1:8V72GSS3c1fQTxT7vZVBTxjmSLlWtUgzTu1ffNmDFAA=
 github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759/go.mod h1:k5aVAieJKYXm5TWn/r5DX046/0TlgevYd/mWdY243Dw=
+github.com/MagalixTechnologies/channel v1.1.0 h1:qsVt/QiTr1crOgJiwxhgNWDWbRC2/vsJ0YFr9/dYwok=
 github.com/MagalixTechnologies/channel v1.1.0/go.mod h1:RPmBuLy/nk8lDIDKucBb6YxCaSM4PJeUkD5Cuynna3s=
 github.com/MagalixTechnologies/log-go v0.0.0-20191209143418-aff8f3a92a31 h1:c85TW89gtGgHv08tvevENdbdY2UOsHMsfJSw+zOgFqQ=
 github.com/MagalixTechnologies/log-go v0.0.0-20191209143418-aff8f3a92a31/go.mod h1:o73Cm0pMVqKgGLDQuaZXkYxmwIVqzfF7URcLloyCmP8=

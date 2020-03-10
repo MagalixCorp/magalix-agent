@@ -184,6 +184,8 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 		return
 	}
 
+	convertDecisionMemoryFromKiloByteToMegabyte(&decision)
+
 	err = executor.submitDecision(&decision, decisionsBufferTimeout)
 	if err != nil {
 		errMessage := err.Error()
@@ -193,6 +195,11 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	}
 
 	return proto.EncodeSnappy(proto.PacketDecisionResponse{})
+}
+
+func convertDecisionMemoryFromKiloByteToMegabyte(decision *proto.PacketDecision) {
+	*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
+	*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
 }
 
 func (executor *Executor) submitDecision(
