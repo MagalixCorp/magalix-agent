@@ -127,7 +127,7 @@ func main() {
 		panic(err)
 	}
 
-	stderr := log.New(
+	logger := log.New(
 		args["--debug"].(bool),
 		args["--trace"].(bool),
 		args["--trace-log"].(string),
@@ -136,22 +136,20 @@ func main() {
 	// need to send fatal messages on the remote server and send bye packet
 	// after fatal message (if we can), therefore all exits will be controlled
 	// manually
-	stderr.SetExiter(func(int) {})
-	utils.SetLogger(stderr)
+	logger.SetExiter(func(int) {})
+	utils.SetLogger(logger)
 
-	stderr.Infof(
+	logger.Infof(
 		karma.Describe("version", version).
 			Describe("args", fmt.Sprintf("%q", utils.GetSanitizedArgs())),
 		"magalix agent started",
 	)
 
-	kRestConfig, err := getKRestConfig(stderr, args)
-
 	secret, err := base64.StdEncoding.DecodeString(
 		utils.ExpandEnv(args, "--client-secret", false),
 	)
 	if err != nil {
-		stderr.Fatalf(
+		logger.Fatalf(
 			err,
 			"unable to decode base64 secret specified as --client-secret flag",
 		)
@@ -167,11 +165,34 @@ func main() {
 	var (
 		accountID = utils.ExpandEnvUUID(args, "--account-id")
 		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
+	)
 
+	connected := make(chan bool)
+	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, logger, connected)
+
+	defer gwClient.WaitExit()
+	defer gwClient.Recover()
+
+	if err != nil {
+		logger.Fatalf(err, "unable to connect to gateway")
+		os.Exit(1)
+	}
+
+	logger.Infof(nil, "Waiting for connection and authorization")
+	<-connected
+	logger.Infof(nil, "Connected and authorized")
+	initAgent(args, gwClient, logger, accountID, clusterID)
+
+}
+
+func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, accountID uuid.UUID, clusterID uuid.UUID) {
+	logger.Infof(nil, "Initializing Agent")
+	var (
 		metricsEnabled  = !args["--disable-metrics"].(bool)
 		eventsEnabled   = !args["--disable-events"].(bool)
 		scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
+		deltasEnabled   = args["--packets-v2"].(bool)
 		dryRun          = args["--dry-run"].(bool)
 
 		skipNamespaces []string
@@ -181,22 +202,12 @@ func main() {
 		skipNamespaces = namespaces
 	}
 
-	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, stderr)
-
-	defer gwClient.WaitExit()
-	defer gwClient.Recover()
-
-	if err != nil {
-		stderr.Fatalf(err, "unable to connect to gateway")
-		os.Exit(1)
-	}
-
-	deltasEnabled := args["--packets-v2"].(bool)
+	kRestConfig, err := getKRestConfig(logger, args)
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
 	observer_ := kuber.NewObserver(
-		stderr,
+		logger,
 		dynamicClient,
 		parentsStore,
 		make(chan struct{}, 0),
@@ -205,13 +216,13 @@ func main() {
 	t := entitiesSyncTimeout
 	err = observer_.WaitForCacheSync(&t)
 	if err != nil {
-		stderr.Errorf(err, "unable to start entities watcher")
+		logger.Errorf(err, "unable to start entities watcher")
 		deltasEnabled = false // fallback to old scanner implementation
 	}
 
 	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
 	if err != nil {
-		stderr.Fatalf(err, "unable to initialize Kubernetes")
+		logger.Fatalf(err, "unable to initialize Kubernetes")
 		os.Exit(1)
 	}
 
@@ -224,14 +235,14 @@ func main() {
 	var entityScanner *scanner.Scanner
 
 	if deltasEnabled {
-		ew := entities.NewEntitiesWatcher(stderr, observer_, gwClient)
+		ew := entities.NewEntitiesWatcher(logger, observer_, gwClient)
 		err := ew.Start()
 		if err != nil {
-			stderr.Fatalf(err, "unable to start entities watcher")
+			logger.Fatalf(err, "unable to start entities watcher")
 		}
 
 		if scalarEnabled {
-			scalar2.InitScalars(stderr, kube, observer_, dryRun)
+			scalar2.InitScalars(logger, kube, observer_, dryRun)
 		}
 
 		entityScanner = scanner.InitScanner(
@@ -258,7 +269,7 @@ func main() {
 		)
 
 		if scalarEnabled {
-			scalar.InitScalars(stderr, entityScanner, kube, dryRun)
+			scalar.InitScalars(logger, entityScanner, kube, dryRun)
 		}
 	}
 
@@ -273,10 +284,10 @@ func main() {
 	gwClient.AddListener(proto.PacketKindDecision, e.Listener)
 	gwClient.AddListener(proto.PacketKindRestart, func(in []byte) (out []byte, err error) {
 		var restart proto.PacketRestart
-		if err = proto.Decode(in, &restart); err != nil {
+		if err = proto.DecodeSnappy(in, &restart); err != nil {
 			return
 		}
-		defer gwClient.Done(restart.Status)
+		defer gwClient.Done(restart.Status, true)
 		return nil, nil
 	})
 
@@ -316,7 +327,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
 }
 
 func getKRestConfig(

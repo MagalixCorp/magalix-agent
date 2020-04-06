@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func (client *Client) onConnect() error {
+func (client *Client) onConnect(connected chan bool) error {
 	client.connected = true
 
 	expire := time.Now().Add(time.Minute * 10)
@@ -31,9 +31,12 @@ func (client *Client) onConnect() error {
 		if err != nil {
 			connectionError, ok := err.(*channel.ProtocolError)
 			if ok {
-				if connectionError.Code == 404 && strings.Contains(connectionError.Message, "Magalix Agent is deleted") {
-					os.Exit(0)
-					return nil
+				if connectionError.Code == 404 {
+					// TODO: Remove this loop once we get permission to delete the agent
+					for {
+						time.Sleep(time.Hour * 8760)
+					}
+
 				}
 			}
 
@@ -44,6 +47,7 @@ func (client *Client) onConnect() error {
 			return err // continue condition for backoff
 		}
 		client.authorized = true
+		connected <- true
 
 		client.blockedM.Lock()
 		defer client.blockedM.Unlock()
@@ -71,9 +75,9 @@ func (client *Client) onDisconnect() {
 }
 
 // Connect starts the client
-func (client *Client) Connect() error {
+func (client *Client) Connect(connect chan bool) error {
 	go client.StartWatchdog()
-	oc := client.onConnect
+	oc := func() error { return client.onConnect(connect) }
 	odc := client.onDisconnect
 	client.channel.SetHooks(&oc, &odc)
 	go client.channel.Listen()

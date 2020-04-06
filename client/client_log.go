@@ -93,7 +93,7 @@ func (client *Client) watchLogsQueue() {
 			})
 
 			if fatal {
-				client.Done(1)
+				client.Done(1, false)
 				goto done
 			}
 		}

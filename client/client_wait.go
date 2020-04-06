@@ -2,8 +2,10 @@ package client
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"runtime"
+	"time"
 
 	karma "github.com/reconquest/karma-go"
 )
@@ -40,7 +42,14 @@ func (client *Client) Recover() {
 }
 
 // Done sends the exit signal
-func (client *Client) Done(exitcode int) {
+func (client *Client) Done(exitcode int, jitter bool) {
+	waitTime := 0 * time.Second
+	if jitter{
+		// Set a random wait time of up to 600 seconds (10 minutes)
+		waitTime = time.Duration(rand.Intn(600)) * time.Second
+	}
+	client.parentLogger.Infof(nil, "Agent will exit with status code %d in %f seconds", exitcode, waitTime.Seconds())
+	time.Sleep(waitTime)
 	client.exit <- exitcode
 }
 

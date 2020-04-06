@@ -180,19 +180,26 @@ func (executor *Executor) handleExecutionSkipping(
 
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	var decision proto.PacketDecision
-	if err = proto.Decode(in, &decision); err != nil {
+	if err = proto.DecodeSnappy(in, &decision); err != nil {
 		return
 	}
+
+	convertDecisionMemoryFromKiloByteToMegabyte(&decision)
 
 	err = executor.submitDecision(&decision, decisionsBufferTimeout)
 	if err != nil {
 		errMessage := err.Error()
-		return proto.Encode(proto.PacketDecisionResponse{
+		return proto.EncodeSnappy(proto.PacketDecisionResponse{
 			Error: &errMessage,
 		})
 	}
 
-	return proto.Encode(proto.PacketDecisionResponse{})
+	return proto.EncodeSnappy(proto.PacketDecisionResponse{})
+}
+
+func convertDecisionMemoryFromKiloByteToMegabyte(decision *proto.PacketDecision) {
+	*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
+	*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
 }
 
 func (executor *Executor) submitDecision(

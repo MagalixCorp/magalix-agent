@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	ProtocolMajorVersion = 1
-	ProtocolMinorVersion = 5
+	ProtocolMajorVersion = 2
+	ProtocolMinorVersion = 0
 
 	logsQueueSize = 1024
 )
@@ -182,16 +182,36 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 // send sends a packet to the agent-gateway
 // it uses the default proto encoding to encode and decode in/out parameters
 func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{}) error {
-	req, err := proto.Encode(in)
-	if err != nil {
-		return err
+	var (
+		req []byte
+		err error
+	)
+	if kind == proto.PacketKindHello {
+		req, err = proto.EncodeGOB(in)
+		if err != nil {
+			return err
+		}
+	} else {
+		req, err = proto.EncodeSnappy(in)
+		if err != nil {
+			return err
+		}
 	}
 	res, err := client.channel.Send(kind.String(), req)
 	if err != nil {
 		return err
 	}
 	client.lastSent = time.Now()
-	return proto.Decode(res, out)
+
+	if out == nil {
+		return nil
+	}
+
+	if kind == proto.PacketKindHello {
+		return proto.DecodeGOB(res, out)
+	} else {
+		return proto.DecodeSnappy(res, out)
+	}
 }
 
 // Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send
@@ -240,6 +260,7 @@ func InitClient(
 	accountID, clusterID uuid.UUID,
 	secret []byte,
 	parentLogger *log.Logger,
+	connected chan bool,
 ) (*Client, error) {
 	client := newClient(
 		args["--gateway"].(string), version, startID, accountID, clusterID, secret,
@@ -272,7 +293,7 @@ func InitClient(
 		return true
 	}, syscall.SIGHUP)
 
-	err := client.Connect()
+	err := client.Connect(connected)
 
 	return client, err
 }

@@ -6,15 +6,19 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
+	"github.com/reconquest/karma-go"
+	"runtime/debug"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
+	"github.com/golang/snappy"
 	"github.com/kovetskiy/lorg"
-	satori "github.com/satori/go.uuid"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	satori "github.com/satori/go.uuid"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -384,12 +388,38 @@ type PacketEntitiesResyncRequest struct {
 }
 type PacketEntitiesResyncResponse struct{}
 
+// Deprecated: Fall back to EncodeGOB. Kept only for backward compatibility. Should be removed.
+func Encode(in interface{}) (out []byte, err error) {
+	return EncodeGOB(in)
+}
+
+// Deprecated: Falls back to DecodeGOB. Kept only for backward compatibility. Should be removed.
 func Decode(in []byte, out interface{}) error {
 	return DecodeGOB(in, out)
 }
 
-func Encode(in interface{}) ([]byte, error) {
-	return EncodeGOB(in)
+func EncodeSnappy(in interface{}) (out []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			stack := string(debug.Stack())
+			err = karma.Format(stack, fmt.Sprintf("panic: %v", r))
+		}
+	}()
+
+	jsonIn, err := json.Marshal(in)
+	if err != nil {
+		return nil, karma.Format(err, "unable to encode to snappy")
+	}
+	out = snappy.Encode(nil, jsonIn)
+	return out, err
+}
+
+func DecodeSnappy(in []byte, out interface{}) error {
+	jsonIn, err := snappy.Decode(nil, in)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(jsonIn, out)
 }
 
 func DecodeGOB(in []byte, out interface{}) error {

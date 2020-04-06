@@ -30,15 +30,15 @@ func NewTicker(name string, interval time.Duration, fn func(time.Time)) *Ticker 
 
 func (ticker *Ticker) nextTick() <-chan time.Time {
 	interval := ticker.interval
-	if time.Hour%interval == 0 {
-		now := time.Now()
-		// TODO: sub seconds
-		nanos := time.Second*time.Duration(now.Second()) + time.Minute*time.Duration(now.Minute())
-		next := interval - nanos%interval
-		stderr.Infof(nil, "{%s ticker} next tick after %v", ticker.name, next)
-		return time.After(next)
-	}
-	stderr.Infof(nil, "{%s ticker} next tick after interval %v", ticker.name, interval)
+	//if time.Hour%interval == 0 {
+	//	now := time.Now()
+	//	// TODO: sub seconds
+	//	nanos := time.Second*time.Duration(now.Second()) + time.Minute*time.Duration(now.Minute())
+	//	next := interval - nanos%interval
+	//	stderr.Infof(nil, "{%s ticker} next tick after %v", ticker.name, next)
+	//	return time.After(next)
+	//}
+	stderr.Infof(nil, "{%s ticker} next tick after interval %v at %v", ticker.name, interval, time.Now().Add(interval))
 	return time.After(interval)
 }
 
