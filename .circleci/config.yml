@@ -110,7 +110,7 @@ jobs:
               exit 0
             fi
 
-            export AGENT_TAG_MAJOR=1.5
+            export AGENT_TAG_MAJOR=2.0
 
             cd $SOURCE_PATH
 
