@@ -1,4 +1,4 @@
-module github.com/MagalixCorp/magalix-agent
+module github.com/MagalixCorp/magalix-agent/v2
 
 go 1.13
 

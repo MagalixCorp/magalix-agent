@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -89,13 +89,13 @@ func newClient(
 	client := &Client{
 		parentLogger: parentLogger,
 
-		address:        address,
-		version:        version,
-		startID:        startID,
-		AccountID:      accountID,
-		ClusterID:      clusterID,
-		secret:         secret,
-		shouldSendLogs: shouldSendLogs,
+		address:         address,
+		version:         version,
+		startID:         startID,
+		AccountID:       accountID,
+		ClusterID:       clusterID,
+		secret:          secret,
+		shouldSendLogs:  shouldSendLogs,
 		packetV2Enabled: packetV2Enabled,
 
 		channel: channel.NewClient(*url, channel.ChannelOptions{

@@ -9,17 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/client"
-	"github.com/MagalixCorp/magalix-agent/entities"
-	"github.com/MagalixCorp/magalix-agent/events"
-	"github.com/MagalixCorp/magalix-agent/executor"
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/metrics"
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/scalar"
-	"github.com/MagalixCorp/magalix-agent/scalar2"
-	"github.com/MagalixCorp/magalix-agent/scanner"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v2/entities"
+	"github.com/MagalixCorp/magalix-agent/v2/events"
+	"github.com/MagalixCorp/magalix-agent/v2/executor"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/metrics"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/scalar"
+	"github.com/MagalixCorp/magalix-agent/v2/scalar2"
+	"github.com/MagalixCorp/magalix-agent/v2/scanner"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
@@ -166,7 +166,6 @@ func main() {
 		accountID = utils.ExpandEnvUUID(args, "--account-id")
 		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 	)
-
 
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, logger, connected)

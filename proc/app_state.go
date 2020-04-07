@@ -3,7 +3,7 @@ package proc
 import (
 	"sync"
 
-	"github.com/MagalixCorp/magalix-agent/watcher"
+	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	uuid "github.com/MagalixTechnologies/uuid-go"
 	karma "github.com/reconquest/karma-go"
 )

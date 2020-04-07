@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"regexp"
 
-	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/uuid-go"
 	kv1 "k8s.io/api/core/v1"
 )

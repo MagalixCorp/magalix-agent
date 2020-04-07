@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/watcher"
+	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
 	"github.com/reconquest/karma-go"

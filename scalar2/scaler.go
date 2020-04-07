@@ -3,7 +3,7 @@ package scalar2
 import (
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixTechnologies/log-go"
 )
 

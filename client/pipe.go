@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 )
