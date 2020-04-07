@@ -167,6 +167,7 @@ func main() {
 		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 	)
 
+
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, logger, connected)
 
@@ -192,7 +193,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		eventsEnabled   = !args["--disable-events"].(bool)
 		scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
-		deltasEnabled   = args["--packets-v2"].(bool)
+		packetV2Enabled = args["--packets-v2"].(bool)
 		dryRun          = args["--dry-run"].(bool)
 
 		skipNamespaces []string
@@ -217,7 +218,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	err = observer_.WaitForCacheSync(&t)
 	if err != nil {
 		logger.Errorf(err, "unable to start entities watcher")
-		deltasEnabled = false // fallback to old scanner implementation
+		packetV2Enabled = false // fallback to old scanner implementation
 	}
 
 	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
@@ -234,7 +235,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 
 	var entityScanner *scanner.Scanner
 
-	if deltasEnabled {
+	if packetV2Enabled {
 		ew := entities.NewEntitiesWatcher(logger, observer_, gwClient)
 		err := ew.Start()
 		if err != nil {
@@ -305,7 +306,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		var nodesProvider metrics.NodesProvider
 		var entitiesProvider metrics.EntitiesProvider
 
-		if deltasEnabled {
+		if packetV2Enabled {
 			nodesProvider = observer_
 			entitiesProvider = observer_
 		} else {
@@ -318,7 +319,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			nodesProvider,
 			entitiesProvider,
 			kube,
-			deltasEnabled,
+			packetV2Enabled,
 			optInAnalysisData,
 			args,
 		)

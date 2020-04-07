@@ -19,6 +19,7 @@ func (client *Client) hello() error {
 		StartID:   client.startID,
 		AccountID: client.AccountID,
 		ClusterID: client.ClusterID,
+		PacketV2Enabled: client.packetV2Enabled,
 	}, &hello)
 	if err != nil {
 		return err
