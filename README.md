@@ -38,35 +38,37 @@ You can install Magalix agent through GKE marketplace.
 
 ### First Time User
 1. Insert your email in GKE installation/configuration form. The deployment container will create an account and connect the agent to this account.
-2. Once installation is successfully complete, you will receive an email with instructions to see your clusters dashboard at [Magalix console](https://console.magalix.com)
-3. If you didn't receive that welcome email for some reason, you can just go thorugh the [reset password process](https://console.magalix.com/auth/#/forgot-password).
+2. Once installation is successfully complete, you will receive an email with instructions to see your clusters dashboard at [Magalix console](https://console.magalix.com).
+3. If you didn't receive that welcome email for some reason, you can just go through the [reset password process](https://console.magalix.com/auth/#/forgot-password).
 
 ### If you have an Existing Magalix Account
-1. Insert your email and password in GKE installation/configuration form. The deployment container will define a new cluster under your account and use generated secrets to connect installed agent with your account. 
+1. Insert your email and password in GKE installation/configuration form. The deployment container will define a new cluster under your account and use generated secrets to connect the installed agent with your account. 
 2. Once installation is successfully complete, you will receive an email confirming cluster connectivity.
 
 **Notes**
 
 * Your first cluster analytics are free.
-* No recommendations will be applied to your cluster till you turn on the Autopilot feature at the [console](https://console.magalix.com)
+
+* No recommendations will be applied to your cluster till you turn on the Autopilot feature at the [console](https://console.magalix.com).
 * Cluster nodes must have Devstorage.read_only scope to install Magalix agent. Otherwise, you will get an error message of `insufficient Oauth scope`. Refer to [this Stackoverflow](https://stackoverflow.com/questions/51750479/insufficient-oauth-scope-when-trying-to-deploy-jenkins-click-to-deploy-on-an-exi) issue. Google also published [this article](https://medium.com/google-cloud/updating-google-container-engine-vm-scopes-with-zero-downtime-50bff87e5f80) explaining 
+
 * The Autopilot feature is a Pro feature. You need to buy a subscription to enable it. 
 
 # Accessing Insights and Recommendations
-Few minutes after agent installation, metrics will start to flow. Magalix analytics and recommendations engine will generate predictions and recommendations in few hours. You will also receive email notifications when recommendations are generated.
+Few minutes after agent installation, metrics will start to flow. Magalix analytics and recommendations engine will generate predictions and recommendations in a few hours. You will also receive email notifications when recommendations are generated.
 
-![Few snapshots of recommenations, resources distributions, and namespace resources timeseries](https://github.com/MagalixCorp/magalix-agent/blob/master/pics/snapshots-decision-distribution-timeseries-ns-shadow.png "Generated Decision and Resources Distribution")
+![Snapshots of recommendations, resources distributions, and namespace resources in a time series](https://github.com/MagalixCorp/magalix-agent/blob/master/pics/snapshots-decision-distribution-timeseries-ns-shadow.png "Generated Decision and Resources Distribution")
 
 # Get Slack Notifications
-You can add slack webhook to receive notifications when a container or the cluster is having issues or when recommendations are generated. Go to [cluster's dashboard](https://console.magalix.com/) and click on the watch icon. 
+You can add slack webhook to receive notifications when a container or the cluster is having issues or when recommendations are generated. Go to the [cluster's dashboard](https://console.magalix.com/) and click on the watch icon. 
 
 ![How to watch a cluster](https://github.com/MagalixCorp/magalix-agent/blob/master/pics/snapshots-watch-cluster.png "Watch cluster popup")
 
 **Note**
-Your first cluster watch feature is enabled by default. It will send you email only notifications. 
+Your first cluster watch feature is enabled by default. It will send you email-only notifications. 
 
 # Updating The Agent's Image
-If you need to update the running agent's installation, you will receive email that you should do. Because the image pull policy is set to Always, everytime you delete the pod, a fresh image will be installed. 
+If you need to update the running agent's installation, you will receive an email that you should do. Because the image pull policy is set to Always, everytime you delete the pod, a fresh image will be installed. 
 
 # Removing Magalix Agent
 
@@ -74,8 +76,8 @@ You can remove Magalix agent by simply deleting its Deployment controller, which
 
 # Troubleshooting 
 
-The most common issues that users face installing Magalix agent is RBAC. Please read our [troubelshooting guide](https://docs.magalix.com/docs/connecting-clusters) to resolve initial setup issues you may encounter. 
+The most common issues that users face installing Magalix agent is RBAC. Please read our [troubleshooting guide](https://docs.magalix.com/docs/connecting-clusters) to resolve initial setup issues you may encounter. 
 
 # Questions and Support
-Please reach out to us at our [support forum](https://docs.magalix.com/discuss), or send us an email at <support@magalix.com>
+Please reach out to us at our [support forum](https://docs.magalix.com/discuss) or send us an email at <support@magalix.com>.
 
