@@ -15,7 +15,8 @@ import (
 
 // Database eventer
 type Database interface {
-	WriteEvent(event watcher.Event) error
+	WriteEvent(event *watcher.Event) error
+	WriteEvents(events []*watcher.Event) error
 }
 
 // Proc events processor
@@ -69,21 +70,21 @@ func NewProc(
 }
 
 // Start starts the processor
-func (proc *Proc) Start(oomKilled chan uuid.UUID) {
+func (proc *Proc) Start() {
 	go proc.runThreads()
 
 	go func() {
 		for {
-			proc.process(oomKilled)
+			proc.process()
 		}
 	}()
 }
 
-func (proc *Proc) process(oomKilled chan uuid.UUID) {
+func (proc *Proc) process() {
 	select {
 	case pod := <-proc.pipes.pods:
 		proc.threadpool <- func() {
-			proc.handlePod(pod, oomKilled)
+			proc.handlePod(pod)
 		}
 	case spec := <-proc.pipes.replicas:
 		proc.threadpool <- func() {
@@ -112,7 +113,7 @@ func (proc *Proc) runThreads() {
 	}
 }
 
-func (proc *Proc) handlePod(pod Pod, oomKilled chan uuid.UUID) {
+func (proc *Proc) handlePod(pod Pod) {
 	proc.sync.RLock()
 	defer proc.sync.RUnlock()
 
@@ -139,9 +140,6 @@ func (proc *Proc) handlePod(pod Pod, oomKilled chan uuid.UUID) {
 
 	for container, state := range pod.Containers {
 		updated := false
-		if service.IsOOMKilled(state) {
-			oomKilled <- container
-		}
 		WithLock(service, func() {
 			updated = !service.IsSameContainerState(container, state)
 			if updated {
@@ -449,7 +447,7 @@ func (proc *Proc) writeEvent(event watcher.Event) bool {
 	if proc.database == nil {
 		return false
 	}
-	err := proc.database.WriteEvent(event)
+	err := proc.database.WriteEvent(&event)
 	if err != nil {
 		errorf(err, "unable to write event to database")
 

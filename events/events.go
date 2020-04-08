@@ -1,14 +1,14 @@
 package events
 
 import (
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/utils"
 	"sync"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/kuber"
 	"github.com/MagalixCorp/magalix-agent/proc"
 	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixCorp/magalix-agent/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
@@ -48,12 +48,11 @@ func InitEvents(
 	kube *kuber.Kube,
 	skipNamespaces []string,
 	scanner *scanner.Scanner,
-	oomKilled chan uuid.UUID,
 	args map[string]interface{},
 ) *Eventer {
 	eventsBufferFlushInterval := utils.MustParseDuration(args, "--events-buffer-flush-interval")
 	eventsBufferSize := utils.MustParseInt(args, "--events-buffer-size")
-	eventer := NewEventer(client, kube, skipNamespaces, scanner, eventsBufferFlushInterval, eventsBufferSize, oomKilled)
+	eventer := NewEventer(client, kube, skipNamespaces, scanner, eventsBufferFlushInterval, eventsBufferSize)
 	eventer.Start()
 	return eventer
 }
@@ -66,7 +65,6 @@ func NewEventer(
 	scanner *scanner.Scanner,
 	bufferFlushInterval time.Duration,
 	bufferSize int,
-	oomKilled chan uuid.UUID,
 ) *Eventer {
 	eventer := &Eventer{
 		client:              client,
@@ -77,7 +75,6 @@ func NewEventer(
 
 		skipNamespaces: skipNamespaces,
 		scanner:        scanner,
-		oomKilled:      oomKilled,
 
 		m: sync.Mutex{},
 	}
@@ -121,7 +118,7 @@ func NewEventer(
 // Start starts the eventer
 func (eventer *Eventer) Start() {
 	go eventer.observer.Start()
-	eventer.proc.Start(eventer.oomKilled)
+	eventer.proc.Start()
 	eventer.startBatchWriter()
 }
 
@@ -163,18 +160,28 @@ func (eventer *Eventer) ChangeStatus(
 	status watcher.Status,
 	source *watcher.ContainerStatusSource,
 ) {
-	eventer.sendStatus(entity, id, status, source)
+	eventer.sendStatus(entity, id, status, source, time.Now())
 }
 
 // WriteEvent writes an event
-func (eventer *Eventer) WriteEvent(event watcher.Event) error {
+func (eventer *Eventer) WriteEvent(event *watcher.Event) error {
 	eventer.client.Tracef(
 		karma.Describe("event", eventer.client.TraceJSON(event)),
 		"adding event to batch writer buffer",
 	)
 
 	// sending events to channel, batch writer is running in background
-	eventer.buffer <- event
+	eventer.buffer <- *event
+	// need to return nil because eventer implements watcher.Database interface
+	return nil
+}
+
+// WriteEvents writes batch of events
+func (eventer *Eventer) WriteEvents(events []*watcher.Event) error {
+	// sending events to channel, batch writer is running in background
+	for _, event := range events {
+		_ = eventer.WriteEvent(event)
+	}
 	// need to return nil because eventer implements watcher.Database interface
 	return nil
 }

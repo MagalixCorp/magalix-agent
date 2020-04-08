@@ -3,7 +3,9 @@ package events
 import (
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/client"
 	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixCorp/magalix-agent/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
@@ -72,9 +74,13 @@ func (eventer *Eventer) sendEvents(events []watcher.Event) {
 
 // sendEventsBatch bulk send events
 func (eventer *Eventer) sendEventsBatch(events []watcher.Event) {
-	eventer.client.WithBackoff(func() error {
-		var response proto.PacketEventsStoreResponse
-		return eventer.client.Send(proto.PacketKindEventsStoreRequest, proto.PacketEventsStoreRequest(events), &response)
+	eventer.client.Pipe(client.Package{
+		Kind:        proto.PacketKindEventsStoreRequest,
+		ExpiryTime:  utils.After(2 * time.Hour),
+		ExpiryCount: 100,
+		Priority:    6,
+		Retries:     10,
+		Data:        proto.PacketEventsStoreRequest(events),
 	})
 }
 
@@ -84,6 +90,7 @@ func (eventer *Eventer) sendStatus(
 	id uuid.UUID,
 	status watcher.Status,
 	source *watcher.ContainerStatusSource,
+	timestamp time.Time,
 ) {
 	eventer.client.Debugf(
 		karma.
@@ -94,14 +101,19 @@ func (eventer *Eventer) sendStatus(
 		"{eventer} changing status",
 	)
 
-	// TODO: make non blocking, it was changed to be blocking as a quick fix to a race condition where old values override new ones
-	eventer.client.WithBackoff(func() error {
-		var response proto.PacketStatusStoreResponse
-		return eventer.client.Send(proto.PacketKindStatusStoreRequest, proto.PacketStatusStoreRequest{
-			Entity:   entity,
-			EntityID: id,
-			Status:   status,
-			Source:   source,
-		}, &response)
+	eventer.client.PipeStatus(client.Package{
+		Kind:        proto.PacketKindStatusStoreRequest,
+		ExpiryTime:  utils.After(2 * time.Hour),
+		ExpiryCount: 1000,
+		// given low priority as these are generated a lot and it blocks lower priority packages
+		Priority: 12,
+		Retries:  10,
+		Data: proto.PacketStatusStoreRequest{
+			Entity:    entity,
+			EntityID:  id,
+			Status:    status,
+			Source:    source,
+			Timestamp: timestamp,
+		},
 	})
 }

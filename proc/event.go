@@ -2,18 +2,18 @@ package proc
 
 import (
 	"github.com/MagalixCorp/magalix-agent/watcher"
-	uuid "github.com/MagalixTechnologies/uuid-go"
+	"github.com/MagalixTechnologies/uuid-go"
 )
 
 // Pod pod type
 type Pod struct {
-	Name          string                               `json:"name"`
-	ID            string                               `json:"id"`
-	AccountID     uuid.UUID                            `json:"account_id"`
-	ApplicationID uuid.UUID                            `json:"application_id"`
-	ServiceID     uuid.UUID                            `json:"service_id"`
-	Status        watcher.Status                       `json:"status"`
-	Containers    map[uuid.UUID]watcher.ContainerState `json:"containers"`
+	Name          string                       `json:"name"`
+	ID            string                       `json:"id"`
+	AccountID     uuid.UUID                    `json:"account_id"`
+	ApplicationID uuid.UUID                    `json:"application_id"`
+	ServiceID     uuid.UUID                    `json:"service_id"`
+	Status        watcher.Status               `json:"status"`
+	Containers    map[uuid.UUID]ContainerState `json:"containers"`
 }
 
 // GetIdentity returns an identity for the pod

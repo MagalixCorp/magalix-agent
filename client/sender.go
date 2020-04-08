@@ -1,10 +1,10 @@
 package client
 
 import (
-	"errors"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/reconquest/karma-go"
 )
@@ -12,9 +12,13 @@ import (
 // hello Sends hello package
 func (client *Client) hello() error {
 	var hello proto.PacketHello
-	err := client.Send(proto.PacketKindHello, proto.PacketHello{
-		Major: ProtocolMajorVersion,
-		Minor: ProtocolMinorVersion,
+	err := client.send(proto.PacketKindHello, proto.PacketHello{
+		Major:     ProtocolMajorVersion,
+		Minor:     ProtocolMinorVersion,
+		Build:     client.version,
+		StartID:   client.startID,
+		AccountID: client.AccountID,
+		ClusterID: client.ClusterID,
 	}, &hello)
 	if err != nil {
 		return err
@@ -35,7 +39,7 @@ func (client *Client) hello() error {
 // authorize authorizes the client
 func (client *Client) authorize() error {
 	var question proto.PacketAuthorizationQuestion
-	err := client.Send(proto.PacketKindAuthorizationRequest, proto.PacketAuthorizationRequest{
+	err := client.send(proto.PacketKindAuthorizationRequest, proto.PacketAuthorizationRequest{
 		AccountID: client.AccountID,
 		ClusterID: client.ClusterID,
 	}, &question)
@@ -59,13 +63,13 @@ func (client *Client) authorize() error {
 	}
 
 	var success proto.PacketAuthorizationSuccess
-	err = client.Send(proto.PacketKindAuthorizationAnswer, proto.PacketAuthorizationAnswer{
+	err = client.send(proto.PacketKindAuthorizationAnswer, proto.PacketAuthorizationAnswer{
 		Token: token,
 	}, &success)
 	if err != nil {
 		if e, ok := err.(*channel.ProtocolError); ok {
 			if e.Code == channel.InternalErrorCode {
-				return errors.New("authorization has failed")
+				return e
 			}
 		}
 		return err
@@ -117,9 +121,14 @@ func (client *Client) sendBye(reason string) error {
 // SendRaw sends arbitrary raw data to be stored in magalix BE
 func (client *Client) SendRaw(rawResources map[string]interface{}) {
 	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}
-	client.WithBackoff(func() error {
-		var response proto.PacketRawResponse
-		err:= client.Send(proto.PacketKindRawStoreRequest, &packet, &response)
-		return err
+	context := karma.Describe("timestamp", packet.Timestamp)
+	client.Logger.Infof(context, "sending raw data")
+	client.Pipe(Package{
+		Kind:        proto.PacketKindRawStoreRequest,
+		ExpiryTime:  utils.After(time.Hour),
+		ExpiryCount: 10,
+		Priority:    8,
+		Retries:     4,
+		Data:        &packet,
 	})
 }

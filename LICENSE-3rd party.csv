@@ -10,3 +10,7 @@ core,https://github.com/ryanuber/go-glob/blob/master/LICENSE,MIT
 core,https://github.com/kubernetes/client-go/blob/master/LICENSE,Apache License 2.0
 core,https://github.com/kubernetes/apimachinery/blob/master/LICENSE,Apache License 2.0
 core,https://github.com/kubernetes/api/blob/master/LICENSE,Apache License 2.0
+core,github.com/prometheus/client_model/blob/master/LICENSE,Apache License 2.0
+core,https://github.com/prometheus/common/blob/master/LICENSE,Apache License 2.0
+core,https://github.com/prometheus/prom2json/blob/master/LICENSE,Apache License 2.0
+core,https://github.com/matttproud/golang_protobuf_extensions/blob/master/LICENSE,Apache License 2.0

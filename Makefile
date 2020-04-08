@@ -27,9 +27,14 @@ strip: upx
 	#strip build/agent
 	#upx --brute build/agent
 
+checkout:
+	@go list -f '{{.Dir}}' k8s.io/klog \
+		| xargs -n1 -I{} bash -c 'git -C {} checkout -q v0.4.0 || true'
+
 build@go:
 	@echo :: building go binary $(VERSION)
 	@go get -v -d
+	@make checkout
 	@rm -rf build/agent
 	CGO_ENABLED=0 GOOS=linux go build -o build/agent \
 		-ldflags "-X main.version=$(VERSION)" \
@@ -48,3 +53,4 @@ push@%:
 
 	@if [[ "$(tag-file)" ]]; then echo "$(TAG)" > "$(tag-file)"; fi
 	@if [[ "$(version-file)" ]]; then echo "$(VERSION)" > "$(version-file)"; fi
+

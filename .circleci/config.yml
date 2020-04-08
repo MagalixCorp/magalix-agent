@@ -8,7 +8,8 @@ jobs:
       - run:
           name: Set up source path directory
           command: |
-            echo 'export SOURCE_PATH=/go/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME' >> $BASH_ENV
+            echo 'export SOURCE_PATH=/home/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME' >> $BASH_ENV
+            echo 'export GO111MODULE=on' >> $BASH_ENV
             echo 'export PATH=/usr/local/bin/upx:$PATH' >> $BASH_ENV
             echo 'export PATH=/usr/bin/gcloud:$PATH' >> $BASH_ENV
             echo 'export PATH=/root/google-cloud-sdk/bin:$PATH' >> $BASH_ENV
@@ -48,35 +49,9 @@ jobs:
             fi
 
       - run:
-          name: Should build?
-          command: |
-            cd $SOURCE_PATH
-
-            RANGE=${CIRCLE_COMPARE_URL##*/}
-
-            if ! git rev-parse -q --verify "${RANGE%%..*}" > /dev/null; then
-              echo :: force push detected, building anyway
-              echo 'export SHOULD_BUILD=true' >> $BASH_ENV
-
-              exit 0
-            fi
-
-            if git diff "$RANGE" --name-only \
-                | grep -qE -e '\.(go|ya?ml)' -e '(\w+)file' -e '\.(\w+)ignore'
-            then
-              echo 'export SHOULD_BUILD=true' >> $BASH_ENV
-            fi
-
-      - run:
           name: Should push?
           command: |
-            if [[ ! "$SHOULD_BUILD" ]]; then
-              echo :: will not push, no build
-
-              exit 0
-            fi
-
-            if [[ "$CIRCLE_BRANCH" == "master" || "$CIRCLE_BRANCH" == "stable" ]]
+            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" ]]
             then
               echo 'export SHOULD_PUSH=true' >> $BASH_ENV
             else
@@ -85,16 +60,11 @@ jobs:
 
       - restore_cache:
           keys:
-            - go-src-pkg-cache
+            - go-src-pkg-cache-v2
 
       - run:
           name: Build binary
           command: |
-            if [[ ! "$SHOULD_BUILD" ]]; then
-              echo :: no build
-
-              exit 0
-            fi
 
             export GOCACHE=/go/cache/
 
@@ -102,7 +72,7 @@ jobs:
             make build
 
       - save_cache:
-          key: go-src-pkg-cache
+          key: go-src-pkg-cache-v2
           paths:
             - /go/src/k8s.io/
             - /go/pkg/
@@ -123,32 +93,13 @@ jobs:
 
             docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_PASSWORD"
 
-            if [[ "$CIRCLE_BRANCH" == "stable" ]]; then
+            if [[ "$CIRCLE_BRANCH" == "master" ]]; then
               export VERSION=latest
             else
               export VERSION=dev
             fi
 
             make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
-
-
-            push_to_gcr() {
-              GCLOUD_SERVICE_KEY=$1
-              GOOGLE_COMPUTE_ZONE=$2
-              GOOGLE_PROJECT_ID=$3
-
-              echo "pushing to GCP  $GOOGLE_PROJECT_ID"
-              gcloud --quiet components update
-              echo $GCLOUD_SERVICE_KEY | base64 -d - | gcloud auth activate-service-account --key-file=-
-              gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
-              gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
-              gcloud auth configure-docker
-              docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2 -f Dockerfile .
-              gcloud docker -- push gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2
-            }
-
-            push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID}
-            push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD}
 
       - deploy:
           name: Build image & Push to GCR Registry
@@ -159,12 +110,15 @@ jobs:
               exit 0
             fi
 
+            export AGENT_TAG_MAJOR=2.0
+
             cd $SOURCE_PATH
 
             push_to_gcr() {
               GCLOUD_SERVICE_KEY=$1
               GOOGLE_COMPUTE_ZONE=$2
               GOOGLE_PROJECT_ID=$3
+              TAG=$4
 
               echo "pushing to GCP  $GOOGLE_PROJECT_ID"
               gcloud --quiet components update
@@ -172,14 +126,14 @@ jobs:
               gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
               gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
               gcloud auth configure-docker
-              docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2 -f Dockerfile .
-              gcloud docker -- push gcr.io/${GOOGLE_PROJECT_ID}/agent:1.2
+              docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:${TAG} -f Dockerfile .
+              docker push gcr.io/${GOOGLE_PROJECT_ID}/agent:${TAG}
             }
 
-            if [[ "$CIRCLE_BRANCH" == "stable" ]]; then
-              push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD}
+            if [[ "$CIRCLE_BRANCH" == "master" ]]; then
+              push_to_gcr ${GCLOUD_SERVICE_KEY_PROD} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID_PROD} ${AGENT_TAG_MAJOR}
             else
-              push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID}
+              push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} ${AGENT_TAG_MAJOR}
             fi
 
 

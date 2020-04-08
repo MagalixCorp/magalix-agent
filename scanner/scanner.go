@@ -1,8 +1,6 @@
 package scanner
 
 import (
-	"fmt"
-	"regexp"
 	"sync"
 	"time"
 
@@ -13,7 +11,8 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
-	kv1 "k8s.io/api/core/v1"
+
+	corev1 "k8s.io/api/core/v1"
 	kresource "k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -22,176 +21,174 @@ const (
 	intervalScanner       = time.Minute * 1
 )
 
+type ResourcesProvider interface {
+	GetNodes() (*corev1.NodeList, error)
+	GetPods() (*corev1.PodList, error)
+	GetResources() (
+		pods []corev1.Pod,
+		limitRanges []corev1.LimitRange,
+		resources []kuber.Resource,
+		rawResources map[string]interface{},
+		err error,
+	)
+}
+
 // Scanner cluster scanner
 type Scanner struct {
-	client         *client.Client
-	logger         *log.Logger
-	kube           *kuber.Kube
-	skipNamespaces []string
-	accountID      uuid.UUID
-	clusterID      uuid.UUID
+	*utils.Ticker
+
+	client            *client.Client
+	logger            *log.Logger
+	resourcesProvider ResourcesProvider
+	skipNamespaces    []string
+	accountID         uuid.UUID
+	clusterID         uuid.UUID
 
 	apps         []*Application
 	appsLastScan time.Time
 
-	pods []kv1.Pod
+	pods []corev1.Pod
 
 	nodes         []kuber.Node
+	nodeList      []corev1.Node
 	nodesLastScan time.Time
 
 	history History
 	mutex   *sync.Mutex
 
+	optInAnalysisData  bool
+	analysisDataSender func(args ...interface{})
+
 	dones []chan struct{}
+
+	enableSender bool
 }
 
+// deprecated: please use entities/EntitiesWatcher instead
 // InitScanner creates a new scanner then Start it
 func InitScanner(
 	client *client.Client,
-	kube *kuber.Kube,
+	resourcesProvider ResourcesProvider,
 	skipNamespaces []string,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
-) *Scanner {
-	scanner := NewScanner(client, kube, skipNamespaces, accountID, clusterID)
-	scanner.Start()
-	return scanner
-}
-
-// NewScanner creates a new scanner
-func NewScanner(
-	client *client.Client,
-	kube *kuber.Kube,
-	skipNamespaces []string,
-	accountID uuid.UUID,
-	clusterID uuid.UUID,
+	optInAnalysisData bool,
+	analysisDataInterval time.Duration,
+	enableSender bool,
 ) *Scanner {
 	scanner := &Scanner{
-		client:         client,
-		logger:         client.Logger,
-		kube:           kube,
-		skipNamespaces: skipNamespaces,
-		accountID:      accountID,
-		clusterID:      clusterID,
-		history:        NewHistory(),
+		client:            client,
+		logger:            client.Logger,
+		resourcesProvider: resourcesProvider,
+		skipNamespaces:    skipNamespaces,
+		accountID:         accountID,
+		clusterID:         clusterID,
+		history:           NewHistory(),
+
+		optInAnalysisData: optInAnalysisData,
 
 		mutex: &sync.Mutex{},
 		dones: make([]chan struct{}, 0),
-	}
 
+		enableSender: enableSender,
+	}
+	if optInAnalysisData {
+		scanner.analysisDataSender = utils.Throttle(
+			"analysis-data",
+			analysisDataInterval,
+			2, // we call analysisDataSender twice in each tick
+			func(args ...interface{}) {
+				if data, ok := args[0].(map[string]interface{}); ok {
+					go scanner.client.SendRaw(data)
+				} else {
+					scanner.logger.Error(
+						"invalid raw data type! Please contact developer",
+					)
+				}
+			},
+		)
+	} else {
+		// noop function
+		scanner.analysisDataSender = func(args ...interface{}) {}
+	}
+	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, func(_ time.Time) {
+		scanner.scan()
+	})
+	// Note: we set immediate to true so that the scanner blocks for the first
+	// run. Other components depends on scanner having a history to function correctly.
+	// The other solution is to let the dependent components to wait for scanner
+	// ticks which will make code more coupled and complex.
+	scanner.Start(true, false, false)
 	return scanner
 }
 
-func nextTick(interval time.Duration) <-chan time.Time {
-	if time.Hour%interval == 0 {
-		now := time.Now()
-		// TODO: sub seconds
-		nanos := time.Second*time.Duration(now.Second()) + time.Minute*time.Duration(now.Minute())
-		next := interval - nanos%interval
-		return time.After(next)
-	}
-	return time.After(interval)
-}
-
-// Start start scanner
-func (scanner *Scanner) Start() {
-	scanner.mutex.Lock()
-	defer scanner.mutex.Unlock()
-
-	// block for first scan
-	scanner.scanNodes()
-	scanner.scanApplications()
-
+func (scanner *Scanner) scan() {
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 	go func() {
-		ticker := nextTick(intervalScanner)
-		for {
-			<-ticker
-			scanner.scanNodes()
-			scanner.scanApplications()
-
-			// unlocks all go routines waiting for the next scan
-			scanner.sendDones()
-			ticker = nextTick(intervalScanner)
-		}
+		scanner.scanNodes()
+		wg.Done()
 	}()
+	go func() {
+		scanner.scanApplications()
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
-// WaitForNextScan returns a signal channel that gets unblocked after the next scan
-// Example usage:
-//  <- scanner.WaitForNextScan()
-func (scanner *Scanner) WaitForNextScan() chan struct{} {
-	scanner.mutex.Lock()
-	defer scanner.mutex.Unlock()
-	done := make(chan struct{})
-	scanner.dones = append(scanner.dones, done)
-	return done
-}
+func (scanner *Scanner) scanNodes() {
+	for {
+		scanner.logger.Infof(nil, "scanning kubernetes nodes")
 
-func (scanner *Scanner) sendDones() {
-	scanner.mutex.Lock()
-	defer scanner.mutex.Unlock()
-	for _, done := range scanner.dones {
-		done <- struct{}{}
-		close(done)
-	}
-	scanner.dones = make([]chan struct{}, 0)
-}
-
-// GetApplications get scanned applications
-func (scanner *Scanner) GetApplications() []*Application {
-	scanner.mutex.Lock()
-	defer scanner.mutex.Unlock()
-
-	apps := make([]*Application, len(scanner.apps))
-	copy(apps, scanner.apps)
-	return apps
-}
-
-// GetNodes get scanned nodes
-func (scanner *Scanner) GetNodes() []kuber.Node {
-	scanner.mutex.Lock()
-	defer scanner.mutex.Unlock()
-
-	nodes := make([]kuber.Node, len(scanner.nodes))
-	copy(nodes, scanner.nodes)
-
-	return nodes
-}
-
-// GetNodesAddresses get addresses of scanned nodes
-func (scanner *Scanner) GetNodesAddresses() []string {
-	nodes := scanner.GetNodes()
-
-	addresses := []string{}
-	for _, node := range nodes {
-		if node.IP != "" {
-			addresses = append(addresses, node.IP)
+		nodes, nodeList, err := scanner.getNodes()
+		if err != nil {
+			scanner.logger.Errorf(err, "unable to scan kubernetes nodes")
+			time.Sleep(timeoutScannerBackoff)
+			continue
 		}
-	}
 
-	//return []string{"127.0.0.1"}
-	return addresses
+		scanner.logger.Infof(
+			nil,
+			"found %d kubernetes nodes, sending to the gateway",
+			len(nodes),
+		)
+
+		scanner.nodes = nodes
+		scanner.nodeList = nodeList.Items
+		scanner.nodesLastScan = time.Now().UTC()
+
+		scanner.SendNodes(nodes)
+		scanner.SendAnalysisData(map[string]interface{}{
+			"nodes": nodeList,
+		})
+
+		scanner.logger.Infof(
+			nil,
+			"nodes sent",
+		)
+		break
+	}
 }
 
-func (scanner *Scanner) getNodes() ([]kuber.Node, *kv1.NodeList, error) {
-	nodeList, err := scanner.kube.GetNodes()
+func (scanner *Scanner) getNodes() ([]kuber.Node, *corev1.NodeList, error) {
+	nodeList, err := scanner.resourcesProvider.GetNodes()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	pods, err := scanner.kube.GetPods()
+	podList, err := scanner.resourcesProvider.GetPods()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	nodes := kuber.UpdateNodesContainers(
 		kuber.GetNodes(nodeList.Items),
-		kuber.GetContainersByNode(pods),
+		kuber.GetContainersByNode(podList.Items),
 	)
 
 	nodes = kuber.AddContainerListToNodes(
 		nodes,
-		pods,
+		podList.Items,
 		nil,
 		nil,
 		nil,
@@ -231,10 +228,10 @@ func (scanner *Scanner) scanApplications() {
 		)
 
 		scanner.apps = apps
-		scanner.appsLastScan = time.Now()
+		scanner.appsLastScan = time.Now().UTC()
 
 		scanner.SendApplications(apps)
-		scanner.client.SendRaw(rawResources)
+		scanner.SendAnalysisData(rawResources)
 
 		scanner.logger.Infof(
 			nil,
@@ -244,310 +241,22 @@ func (scanner *Scanner) scanApplications() {
 	}
 }
 
-func (scanner *Scanner) scanNodes() {
-	for {
-		scanner.logger.Infof(nil, "scanning kubernetes nodes")
-
-		nodes, nodeList, err := scanner.getNodes()
-		if err != nil {
-			scanner.logger.Errorf(err, "unable to scan kubernetes nodes")
-			time.Sleep(timeoutScannerBackoff)
-			continue
-		}
-
-		scanner.logger.Infof(
-			nil,
-			"found %d kubernetes nodes, sending to the gateway",
-			len(nodes),
-		)
-
-		scanner.nodes = nodes
-		scanner.nodesLastScan = time.Now()
-
-		scanner.SendNodes(nodes)
-		scanner.client.SendRaw(map[string]interface{}{
-			"nodes": nodeList,
-		})
-
-		scanner.logger.Infof(
-			nil,
-			"nodes sent",
-		)
-		break
-	}
-}
-
-// getLimitRangesForNamespace returns all LimitRanges for a specific namespace.
-func getLimitRangesForNamespace(
-	limitRanges []kv1.LimitRange,
-	namespace string,
-) []kv1.LimitRange {
-	var ranges []kv1.LimitRange
-
-	for index, limit := range limitRanges {
-		if limit.GetNamespace() == namespace {
-			ranges = append(ranges, limitRanges[index])
-		}
-	}
-
-	return ranges
-}
-
-func (scanner *Scanner) getApplications() ([]*Application, map[string]interface{}, error) {
-	controllers, err := scanner.kube.GetReplicationControllers()
+func (scanner *Scanner) getApplications() (
+	[]*Application, map[string]interface{}, error,
+) {
+	pods, limitRanges, resources, rawResources, err := scanner.resourcesProvider.GetResources()
 	if err != nil {
-		scanner.logger.Errorf(
+		return nil, nil, karma.Format(
 			err,
-			"unable to get replication controllers",
+			"can't get kube resources",
 		)
 	}
 
-	pods, err := scanner.kube.GetPods()
-	if err != nil {
-		scanner.logger.Errorf(
-			err,
-			"unable to get pods",
-		)
-	}
+	scanner.mutex.Lock()
 	scanner.pods = pods
+	scanner.mutex.Unlock()
 
-	deployments, err := scanner.kube.GetDeployments()
-	if err != nil {
-		scanner.logger.Errorf(
-			err,
-			"unable to get deployments",
-		)
-	}
-
-	statefulSets, err := scanner.kube.GetStatefulSets()
-	if err != nil {
-		scanner.logger.Errorf(
-			err,
-			"unable to get statefulSets",
-		)
-	}
-
-	daemonSets, err := scanner.kube.GetDaemonSets()
-	if err != nil {
-		scanner.logger.Errorf(
-			err,
-			"unable to get daemonSets",
-		)
-	}
-
-	replicaSets, err := scanner.kube.GetReplicaSets()
-	if err != nil {
-		scanner.logger.Errorf(
-			err,
-			"unable to get replicasets",
-		)
-	}
-
-	cronJobs, err := scanner.kube.GetCronJobs()
-	if err != nil {
-		scanner.logger.Errorf(
-			err,
-			"unable to get cron jobs",
-		)
-	}
-
-	limitRanges, err := scanner.kube.GetLimitRanges()
-	if err != nil {
-		scanner.logger.Errorf(
-			err,
-			"unable to get limitRanges",
-		)
-	}
-
-	rawResources := map[string]interface{}{
-		"pods":         pods,
-		"deployments":  deployments,
-		"statefulSets": statefulSets,
-		"daemonSets":   daemonSets,
-		"replicaSets":  replicaSets,
-		"cronJobs":     cronJobs,
-		"limitRanges":  limitRanges,
-	}
-
-	type Resource struct {
-		Namespace      string
-		Name           string
-		Kind           string
-		Annotations    map[string]string
-		ReplicasStatus proto.ReplicasStatus
-		Containers     []kv1.Container
-		PodRegexp      *regexp.Regexp
-	}
-
-	resources := []Resource{}
-
-	if pods != nil {
-		for _, pod := range pods {
-			if len(pod.OwnerReferences) > 0 {
-				continue
-			}
-			resources = append(resources, Resource{
-				Kind:       "OrphanPod",
-				Namespace:  pod.Namespace,
-				Name:       pod.Name,
-				Containers: pod.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s$",
-						regexp.QuoteMeta(pod.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(1),
-					Ready:     newInt32Pointer(1),
-					Available: newInt32Pointer(1),
-				},
-			})
-		}
-	}
-
-	if controllers != nil {
-		for _, controller := range controllers.Items {
-			resources = append(resources, Resource{
-				Kind:        "ReplicationController",
-				Annotations: controller.Annotations,
-				Namespace:   controller.Namespace,
-				Name:        controller.Name,
-				Containers:  controller.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+$",
-						regexp.QuoteMeta(controller.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(controller.Status.Replicas),
-					Ready:     newInt32Pointer(controller.Status.ReadyReplicas),
-					Available: newInt32Pointer(controller.Status.AvailableReplicas),
-				},
-			})
-		}
-	}
-
-	if deployments != nil {
-		for _, deployment := range deployments.Items {
-			resources = append(resources, Resource{
-				Kind:        "Deployment",
-				Annotations: deployment.Annotations,
-				Namespace:   deployment.Namespace,
-				Name:        deployment.Name,
-				Containers:  deployment.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+-[^-]+$",
-						regexp.QuoteMeta(deployment.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(deployment.Status.Replicas),
-					Ready:     newInt32Pointer(deployment.Status.ReadyReplicas),
-					Available: newInt32Pointer(deployment.Status.AvailableReplicas),
-				},
-			})
-		}
-	}
-
-	if statefulSets != nil {
-		for _, set := range statefulSets.Items {
-			resources = append(resources, Resource{
-				Kind:        "StatefulSet",
-				Annotations: set.Annotations,
-				Namespace:   set.Namespace,
-				Name:        set.Name,
-				Containers:  set.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-([0-9]+)$",
-						regexp.QuoteMeta(set.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(set.Status.Replicas),
-					Ready:     newInt32Pointer(set.Status.ReadyReplicas),
-					Available: newInt32Pointer(set.Status.CurrentReplicas),
-				},
-			})
-		}
-	}
-
-	if daemonSets != nil {
-		for _, daemon := range daemonSets.Items {
-			resources = append(resources, Resource{
-				Kind:        "DaemonSet",
-				Annotations: daemon.Annotations,
-				Namespace:   daemon.Namespace,
-				Name:        daemon.Name,
-				Containers:  daemon.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+$",
-						regexp.QuoteMeta(daemon.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(daemon.Status.DesiredNumberScheduled),
-					Ready:     newInt32Pointer(daemon.Status.NumberReady),
-					Available: newInt32Pointer(daemon.Status.NumberAvailable),
-				},
-			})
-		}
-	}
-
-	if replicaSets != nil {
-		for _, replicaSet := range replicaSets.Items {
-			// skipping when it is a part of another service
-			if len(replicaSet.GetOwnerReferences()) > 0 {
-				continue
-			}
-			resources = append(resources, Resource{
-				Kind:        "ReplicaSet",
-				Annotations: replicaSet.Annotations,
-				Namespace:   replicaSet.Namespace,
-				Name:        replicaSet.Name,
-				Containers:  replicaSet.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+$",
-						regexp.QuoteMeta(replicaSet.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Desired:   newInt32Pointer(replicaSet.Status.Replicas),
-					Ready:     newInt32Pointer(replicaSet.Status.ReadyReplicas),
-					Available: newInt32Pointer(replicaSet.Status.AvailableReplicas),
-				},
-			})
-		}
-	}
-
-	if cronJobs != nil {
-		for _, cronJob := range cronJobs.Items {
-			activeCount := int32(len(cronJob.Status.Active))
-			resources = append(resources, Resource{
-				Kind:        "CronJob",
-				Annotations: cronJob.Annotations,
-				Namespace:   cronJob.Namespace,
-				Name:        cronJob.Name,
-				Containers:  cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers,
-				PodRegexp: regexp.MustCompile(
-					fmt.Sprintf(
-						"^%s-[^-]+-[^-]+$",
-						regexp.QuoteMeta(cronJob.Name),
-					),
-				),
-				ReplicasStatus: proto.ReplicasStatus{
-					Ready: newInt32Pointer(activeCount),
-				},
-			})
-		}
-	}
-
-	apps := []*Application{}
+	var apps []*Application
 
 	namespaces := map[string]*Application{}
 
@@ -567,13 +276,12 @@ func (scanner *Scanner) getApplications() ([]*Application, map[string]interface{
 		var ok bool
 
 		if app, ok = namespaces[resource.Namespace]; !ok {
-			// 3d709b8f-d6c5-f629-bdd2-fb0ef6f71539
 			app = &Application{
 				Entity: Entity{
 					Name: resource.Namespace,
 				},
 				LimitRanges: getLimitRangesForNamespace(
-					limitRanges.Items,
+					limitRanges,
 					resource.Namespace,
 				),
 			}
@@ -598,10 +306,10 @@ func (scanner *Scanner) getApplications() ([]*Application, map[string]interface{
 
 		// NOTE: we consider the default value is the neutral multiplier `1`
 		var replicas int64 = 1
-		if resource.ReplicasStatus.Ready != nil {
-			// NOTE: we consider the Ready replicas count as it represent the running pods
+		if resource.ReplicasStatus.Current != nil {
+			// NOTE: we consider the Current replicas count as it represent the running pods
 			// NOTE: that reserve actual resources
-			replicas = int64(*resource.ReplicasStatus.Ready)
+			replicas = int64(*resource.ReplicasStatus.Current)
 		}
 
 		for _, container := range resource.Containers {
@@ -615,6 +323,9 @@ func (scanner *Scanner) getApplications() ([]*Application, map[string]interface{
 
 				Image:     container.Image,
 				Resources: resources,
+
+				LivenessProbe:  container.LivenessProbe,
+				ReadinessProbe: container.ReadinessProbe,
 			})
 
 			scanner.logger.Tracef(
@@ -641,74 +352,84 @@ func (scanner *Scanner) getApplications() ([]*Application, map[string]interface{
 	return apps, rawResources, nil
 }
 
-func newInt32Pointer(val int32) *int32 {
-	res := new(int32)
-	*res = val
-	return res
+// getLimitRangesForNamespace returns all LimitRanges for a specific namespace.
+func getLimitRangesForNamespace(
+	limitRanges []corev1.LimitRange,
+	namespace string,
+) []corev1.LimitRange {
+	var ranges []corev1.LimitRange
+
+	for index, limit := range limitRanges {
+		if limit.GetNamespace() == namespace {
+			ranges = append(ranges, limitRanges[index])
+		}
+	}
+
+	return ranges
 }
 
 func withDefaultResources(
-	resources kv1.ResourceRequirements,
-	defaultRequests kv1.ResourceList,
-	defaultLimits kv1.ResourceList,
+	resources corev1.ResourceRequirements,
+	defaultRequests corev1.ResourceList,
+	defaultLimits corev1.ResourceList,
 ) *proto.ContainerResourceRequirements {
 	limitsKinds := proto.ResourcesRequirementsKind{}
 	requestsKinds := proto.ResourcesRequirementsKind{}
 	limits := resources.Limits
 	if limits == nil {
-		limits = kv1.ResourceList{}
+		limits = corev1.ResourceList{}
 	}
 	requests := resources.Requests
 	if requests == nil {
-		requests = kv1.ResourceList{}
+		requests = corev1.ResourceList{}
 	}
-	if !quantityHasValue(requests, kv1.ResourceCPU) {
-		if quantityHasValue(limits, kv1.ResourceCPU) {
+	if !quantityHasValue(requests, corev1.ResourceCPU) {
+		if quantityHasValue(limits, corev1.ResourceCPU) {
 			limit := limits.Cpu()
-			requests[kv1.ResourceCPU] = *limit
-			requestsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindDefaultFromLimits
-		} else if quantityHasValue(defaultRequests, kv1.ResourceCPU) {
+			requests[corev1.ResourceCPU] = *limit
+			requestsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindDefaultFromLimits
+		} else if quantityHasValue(defaultRequests, corev1.ResourceCPU) {
 			request := defaultRequests.Cpu()
-			requests[kv1.ResourceCPU] = *request
-			requestsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
+			requests[corev1.ResourceCPU] = *request
+			requestsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		requestsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindSet
+		requestsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindSet
 	}
-	if !quantityHasValue(requests, kv1.ResourceMemory) {
-		if quantityHasValue(limits, kv1.ResourceMemory) {
+	if !quantityHasValue(requests, corev1.ResourceMemory) {
+		if quantityHasValue(limits, corev1.ResourceMemory) {
 			limit := limits.Memory()
-			requests[kv1.ResourceMemory] = *limit
-			requestsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindDefaultFromLimits
-		} else if quantityHasValue(defaultRequests, kv1.ResourceMemory) {
+			requests[corev1.ResourceMemory] = *limit
+			requestsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindDefaultFromLimits
+		} else if quantityHasValue(defaultRequests, corev1.ResourceMemory) {
 			request := defaultRequests.Memory()
-			requests[kv1.ResourceMemory] = *request
-			requestsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
+			requests[corev1.ResourceMemory] = *request
+			requestsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		requestsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindSet
+		requestsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindSet
 	}
 
-	if !quantityHasValue(limits, kv1.ResourceCPU) {
-		if quantityHasValue(defaultLimits, kv1.ResourceCPU) {
+	if !quantityHasValue(limits, corev1.ResourceCPU) {
+		if quantityHasValue(defaultLimits, corev1.ResourceCPU) {
 			limit := defaultLimits.Cpu()
-			limits[kv1.ResourceCPU] = *limit
-			limitsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
+			limits[corev1.ResourceCPU] = *limit
+			limitsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		limitsKinds[kv1.ResourceCPU] = proto.ResourceRequirementKindSet
+		limitsKinds[corev1.ResourceCPU] = proto.ResourceRequirementKindSet
 	}
-	if !quantityHasValue(limits, kv1.ResourceMemory) {
-		if quantityHasValue(defaultLimits, kv1.ResourceMemory) {
+	if !quantityHasValue(limits, corev1.ResourceMemory) {
+		if quantityHasValue(defaultLimits, corev1.ResourceMemory) {
 			limit := defaultLimits.Memory()
-			limits[kv1.ResourceMemory] = *limit
-			limitsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
+			limits[corev1.ResourceMemory] = *limit
+			limitsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindDefaultsLimitRange
 		}
 	} else {
-		limitsKinds[kv1.ResourceMemory] = proto.ResourceRequirementKindSet
+		limitsKinds[corev1.ResourceMemory] = proto.ResourceRequirementKindSet
 	}
 	return &proto.ContainerResourceRequirements{
-		SpecResourceRequirements: kv1.ResourceRequirements{
+		SpecResourceRequirements: corev1.ResourceRequirements{
 			Limits:   limits,
 			Requests: requests,
 		},
@@ -717,33 +438,33 @@ func withDefaultResources(
 	}
 }
 
-func applyReplicas(resources kv1.ResourceRequirements, replicas int64) kv1.ResourceRequirements {
-	requests := kv1.ResourceList{}
-	limits := kv1.ResourceList{}
+func applyReplicas(resources corev1.ResourceRequirements, replicas int64) corev1.ResourceRequirements {
+	requests := corev1.ResourceList{}
+	limits := corev1.ResourceList{}
 
-	if cpu, ok := resources.Requests[kv1.ResourceCPU]; ok {
-		requests[kv1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
+	if cpu, ok := resources.Requests[corev1.ResourceCPU]; ok {
+		requests[corev1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
 	}
 
-	if memory, ok := resources.Requests[kv1.ResourceMemory]; ok {
-		requests[kv1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
+	if memory, ok := resources.Requests[corev1.ResourceMemory]; ok {
+		requests[corev1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
 	}
 
-	if cpu, ok := resources.Limits[kv1.ResourceCPU]; ok {
-		limits[kv1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
+	if cpu, ok := resources.Limits[corev1.ResourceCPU]; ok {
+		limits[corev1.ResourceCPU] = multiplyQuantity(cpu, replicas, kresource.Milli)
 	}
 
-	if memory, ok := resources.Limits[kv1.ResourceMemory]; ok {
-		limits[kv1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
+	if memory, ok := resources.Limits[corev1.ResourceMemory]; ok {
+		limits[corev1.ResourceMemory] = multiplyQuantity(memory, replicas, kresource.Scale(0))
 	}
 
-	return kv1.ResourceRequirements{
+	return corev1.ResourceRequirements{
 		Requests: requests,
 		Limits:   limits,
 	}
 }
 
-func quantityHasValue(resources kv1.ResourceList, resource kv1.ResourceName) bool {
+func quantityHasValue(resources corev1.ResourceList, resource corev1.ResourceName) bool {
 	_, ok := resources[resource]
 	return ok
 }
@@ -754,34 +475,174 @@ func multiplyQuantity(q kresource.Quantity, multiplier int64, scale kresource.Sc
 	return mq
 }
 
-func getDefaultResources(limitRanges []kv1.LimitRange) (kv1.ResourceList, kv1.ResourceList) {
-	defaultRequests, defaultLimits := kv1.ResourceList{}, kv1.ResourceList{}
+func getDefaultResources(limitRanges []corev1.LimitRange) (corev1.ResourceList, corev1.ResourceList) {
+	defaultRequests, defaultLimits := corev1.ResourceList{}, corev1.ResourceList{}
 	for _, limitRange := range limitRanges {
 		for _, limitItem := range limitRange.Spec.Limits {
-			if limitItem.Type == kv1.LimitTypeContainer {
+			if limitItem.Type == corev1.LimitTypeContainer {
 
-				if quantityHasValue(limitItem.DefaultRequest, kv1.ResourceCPU) {
+				if quantityHasValue(limitItem.DefaultRequest, corev1.ResourceCPU) {
 					cpu := limitItem.DefaultRequest.Cpu()
-					defaultRequests[kv1.ResourceCPU] = *cpu
+					defaultRequests[corev1.ResourceCPU] = *cpu
 				}
-				if quantityHasValue(limitItem.DefaultRequest, kv1.ResourceMemory) {
+				if quantityHasValue(limitItem.DefaultRequest, corev1.ResourceMemory) {
 					memory := limitItem.DefaultRequest.Memory()
-					defaultRequests[kv1.ResourceMemory] = *memory
+					defaultRequests[corev1.ResourceMemory] = *memory
 				}
 
-				if quantityHasValue(limitItem.Default, kv1.ResourceCPU) {
+				if quantityHasValue(limitItem.Default, corev1.ResourceCPU) {
 					cpu := limitItem.Default.Cpu()
-					defaultLimits[kv1.ResourceCPU] = *cpu
+					defaultLimits[corev1.ResourceCPU] = *cpu
 				}
 
-				if quantityHasValue(limitItem.Default, kv1.ResourceMemory) {
+				if quantityHasValue(limitItem.Default, corev1.ResourceMemory) {
 					memory := limitItem.Default.Memory()
-					defaultLimits[kv1.ResourceMemory] = *memory
+					defaultLimits[corev1.ResourceMemory] = *memory
 				}
 			}
 		}
 	}
 	return defaultRequests, defaultLimits
+}
+
+func (scanner *Scanner) findContainer(
+	apps []*Application,
+	namespace string,
+	podName string,
+	containerName string,
+) (uuid.UUID, uuid.UUID, *Container, bool) {
+	var (
+		appID     uuid.UUID
+		serviceID uuid.UUID
+		container *Container
+		found     bool
+	)
+
+	for _, app := range apps {
+		if app.Name != namespace {
+			continue
+		}
+
+		appID = app.ID
+
+		for _, service := range app.Services {
+			if !service.PodRegexp.MatchString(podName) {
+				continue
+			}
+
+			serviceID = service.ID
+
+			if containerName != "" {
+				for _, searchContainer := range service.Containers {
+					if searchContainer.Name != containerName {
+						continue
+					}
+
+					container = searchContainer
+
+					found = true
+
+					break
+				}
+			}
+
+			break
+		}
+
+		break
+	}
+
+	return appID, serviceID, container, found
+}
+
+func (scanner *Scanner) findService(
+	apps []*Application,
+	namespace string,
+	podName string,
+) (uuid.UUID, uuid.UUID, bool) {
+	var (
+		appID     uuid.UUID
+		serviceID uuid.UUID
+		found     bool
+	)
+
+	for _, app := range apps {
+		if app.Name != namespace {
+			continue
+		}
+
+		appID = app.ID
+
+		for _, service := range app.Services {
+			if !service.PodRegexp.MatchString(podName) {
+				continue
+			}
+
+			serviceID = service.ID
+
+			found = true
+
+			break
+		}
+
+		break
+	}
+
+	return appID, serviceID, found
+}
+
+// GetApplications get scanned applications
+func (scanner *Scanner) GetApplications() []*Application {
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
+
+	apps := make([]*Application, len(scanner.apps))
+	copy(apps, scanner.apps)
+	return apps
+}
+
+// GetNodes get scanned nodes
+func (scanner *Scanner) GetNodes() ([]corev1.Node, error) {
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
+
+	nodeList := make([]corev1.Node, len(scanner.nodeList))
+	copy(nodeList, scanner.nodeList)
+
+	return nodeList, nil
+}
+
+// GetPods get scanned pods
+func (scanner *Scanner) GetPods() ([]corev1.Pod, error) {
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
+
+	pods := make([]corev1.Pod, len(scanner.pods))
+	copy(pods, scanner.pods)
+
+	return pods, nil
+}
+
+func (scanner *Scanner) FindController(namespaceName string, podName string) (string, string, error) {
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
+
+	for _, namespace := range scanner.apps {
+		if namespace.Name != namespaceName {
+			continue
+		}
+
+		for _, controller := range namespace.Services {
+			if controller.PodRegexp.MatchString(podName) {
+				return controller.Name, controller.Kind, nil
+			}
+		}
+	}
+
+	return "", "", karma.
+		Describe("namespace_name", namespaceName).
+		Describe("pod_name", podName).
+		Format(nil, "unable to find controller")
 }
 
 // FindService find app and service id from pod name and namespace
@@ -861,56 +722,6 @@ func (scanner *Scanner) FindContainer(
 	return appID, serviceID, container, found
 }
 
-func (scanner *Scanner) findContainer(
-	apps []*Application,
-	namespace string,
-	podName string,
-	containerName string,
-) (uuid.UUID, uuid.UUID, *Container, bool) {
-	var (
-		appID     uuid.UUID
-		serviceID uuid.UUID
-		container *Container
-		found     bool
-	)
-
-	for _, app := range apps {
-		if app.Name != namespace {
-			continue
-		}
-
-		appID = app.ID
-
-		for _, service := range app.Services {
-			if !service.PodRegexp.MatchString(podName) {
-				continue
-			}
-
-			serviceID = service.ID
-
-			if containerName != "" {
-				for _, searchContainer := range service.Containers {
-					if searchContainer.Name != containerName {
-						continue
-					}
-
-					container = searchContainer
-
-					found = true
-
-					break
-				}
-			}
-
-			break
-		}
-
-		break
-	}
-
-	return appID, serviceID, container, found
-}
-
 // FindServiceByID returns namespace, name and kind of a service by service id
 func (scanner *Scanner) FindServiceByID(
 	apps []*Application,
@@ -973,32 +784,38 @@ func (scanner *Scanner) FindContainerNameByID(
 	return
 }
 
-func (scanner *Scanner) findService(
-	apps []*Application,
+// FindContainerByID returns container, service and application from container name
+func (scanner *Scanner) FindContainerWithParents(
 	namespace string,
 	podName string,
-) (uuid.UUID, uuid.UUID, bool) {
-	var (
-		appID     uuid.UUID
-		serviceID uuid.UUID
-		found     bool
-	)
+	containerName string,
+) (c *Container, s *Service, a *Application, found bool) {
+	scanner.mutex.Lock()
+	defer scanner.mutex.Unlock()
 
-	for _, app := range apps {
+	for _, app := range scanner.apps {
 		if app.Name != namespace {
 			continue
 		}
-
-		appID = app.ID
 
 		for _, service := range app.Services {
 			if !service.PodRegexp.MatchString(podName) {
 				continue
 			}
 
-			serviceID = service.ID
+			for _, searchContainer := range service.Containers {
+				if searchContainer.Name != containerName {
+					continue
+				}
 
-			found = true
+				a = app
+				s = service
+				c = searchContainer
+
+				found = true
+
+				break
+			}
 
 			break
 		}
@@ -1006,7 +823,7 @@ func (scanner *Scanner) findService(
 		break
 	}
 
-	return appID, serviceID, found
+	return
 }
 
 // FindContainerByPodUIDContainerName find application, service, container id

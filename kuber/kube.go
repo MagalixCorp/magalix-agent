@@ -4,28 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
+	"regexp"
+	"strings"
+	"sync"
 
 	"github.com/MagalixCorp/magalix-agent/client"
+	"github.com/MagalixCorp/magalix-agent/proto"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
+	"golang.org/x/sync/errgroup"
+	"k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	beta2client "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
 	kapps "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
 	batch "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	kcore "k8s.io/client-go/kubernetes/typed/core/v1"
 	krest "k8s.io/client-go/rest"
-	certutil "k8s.io/client-go/util/cert"
 )
 
 const (
-	milliCore = 1000
+	milliCore   = 1000
+	maskedValue = "**MASKED**"
 )
 
 // Kube kube struct
@@ -60,59 +65,32 @@ type TotalResources struct {
 	Containers []ContainerResourcesRequirements
 }
 
+type Resource struct {
+	Namespace      string
+	Name           string
+	Kind           string
+	Annotations    map[string]string
+	ReplicasStatus proto.ReplicasStatus
+	Containers     []kv1.Container
+	PodRegexp      *regexp.Regexp
+}
+
+type RawResources struct {
+	PodList        *kv1.PodList
+	LimitRangeList *kv1.LimitRangeList
+
+	CronJobList *kbeta1.CronJobList
+
+	DeploymentList  *kbeta2.DeploymentList
+	StatefulSetList *kbeta2.StatefulSetList
+	DaemonSetList   *kbeta2.DaemonSetList
+	ReplicaSetList  *kbeta2.ReplicaSetList
+}
+
 func InitKubernetes(
-	args map[string]interface{},
+	config *krest.Config,
 	client *client.Client,
 ) (*Kube, error) {
-	var config *krest.Config
-	var err error
-
-	if args["--kube-incluster"].(bool) {
-		client.Infof(nil, "initializing kubernetes incluster config")
-
-		config, err = krest.InClusterConfig()
-		if err != nil {
-			return nil, karma.Format(
-				err,
-				"unable to get incluster config",
-			)
-		}
-
-	} else {
-		client.Infof(
-			nil,
-			"initializing kubernetes user-defined config",
-		)
-
-		token, _ := args["--kube-token"].(string)
-		if token == "" {
-			token = os.Getenv("KUBE_TOKEN")
-		}
-
-		config = &krest.Config{}
-		config.ContentType = kruntime.ContentTypeJSON
-		config.APIPath = "/api"
-		config.Host = args["--kube-url"].(string)
-		config.BearerToken = token
-
-		{
-			tlsClientConfig := krest.TLSClientConfig{}
-			rootCAFile, ok := args["--kube-root-ca-cert"].(string)
-			if ok {
-				if _, err := certutil.NewPool(rootCAFile); err != nil {
-					fmt.Printf("Expected to load root CA config from %s, but got err: %v", rootCAFile, err)
-				} else {
-					tlsClientConfig.CAFile = rootCAFile
-				}
-				config.TLSClientConfig = tlsClientConfig
-			}
-		}
-
-		if args["--kube-insecure"].(bool) {
-			config.Insecure = true
-		}
-	}
-
 	client.Debugf(
 		karma.
 			Describe("url", config.Host).
@@ -172,10 +150,347 @@ func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
 	return nodes, nil
 }
 
+func (kube *Kube) GetResources() (
+	pods []kv1.Pod,
+	limitRanges []kv1.LimitRange,
+	resources []Resource,
+	rawResources map[string]interface{},
+	err error,
+) {
+	rawResources = map[string]interface{}{}
+
+	m := sync.Mutex{}
+	group := errgroup.Group{}
+
+	group.Go(func() error {
+		controllers, err := kube.GetReplicationControllers()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get replication controllers",
+			)
+		}
+
+		if controllers != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["controllers"] = controllers
+
+			for _, controller := range controllers.Items {
+				resources = append(resources, Resource{
+					Kind:        "ReplicationController",
+					Annotations: controller.Annotations,
+					Namespace:   controller.Namespace,
+					Name:        controller.Name,
+					Containers:  controller.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+$",
+							regexp.QuoteMeta(controller.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   controller.Spec.Replicas,
+						Current:   newInt32Pointer(controller.Status.Replicas),
+						Ready:     newInt32Pointer(controller.Status.ReadyReplicas),
+						Available: newInt32Pointer(controller.Status.AvailableReplicas),
+					},
+				})
+			}
+		}
+		return nil
+	})
+
+	group.Go(func() error {
+		podList, err := kube.GetPods()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get pods",
+			)
+		}
+
+		if podList != nil {
+			pods = podList.Items
+
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["pods"] = podList
+
+			for _, pod := range pods {
+				if len(pod.OwnerReferences) > 0 {
+					continue
+				}
+				resources = append(resources, Resource{
+					Kind:        "OrphanPod",
+					Annotations: pod.Annotations,
+					Namespace:   pod.Namespace,
+					Name:        pod.Name,
+					Containers:  pod.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s$",
+							regexp.QuoteMeta(pod.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(1),
+						Current:   newInt32Pointer(1),
+						Ready:     newInt32Pointer(1),
+						Available: newInt32Pointer(1),
+					},
+				})
+			}
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		deployments, err := kube.GetDeployments()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get deployments",
+			)
+		}
+
+		if deployments != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["deployments"] = deployments
+
+			for _, deployment := range deployments.Items {
+				resources = append(resources, Resource{
+					Kind:        "Deployment",
+					Annotations: deployment.Annotations,
+					Namespace:   deployment.Namespace,
+					Name:        deployment.Name,
+					Containers:  deployment.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+-[^-]+$",
+							regexp.QuoteMeta(deployment.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   deployment.Spec.Replicas,
+						Current:   newInt32Pointer(deployment.Status.Replicas),
+						Ready:     newInt32Pointer(deployment.Status.ReadyReplicas),
+						Available: newInt32Pointer(deployment.Status.AvailableReplicas),
+					},
+				})
+			}
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		statefulSets, err := kube.GetStatefulSets()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get statefulSets",
+			)
+		}
+
+		if statefulSets != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["statefulSets"] = statefulSets
+
+			for _, set := range statefulSets.Items {
+				resources = append(resources, Resource{
+					Kind:        "StatefulSet",
+					Annotations: set.Annotations,
+					Namespace:   set.Namespace,
+					Name:        set.Name,
+					Containers:  set.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-([0-9]+)$",
+							regexp.QuoteMeta(set.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   set.Spec.Replicas,
+						Current:   newInt32Pointer(set.Status.Replicas),
+						Ready:     newInt32Pointer(set.Status.ReadyReplicas),
+						Available: newInt32Pointer(set.Status.CurrentReplicas),
+					},
+				})
+			}
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		daemonSets, err := kube.GetDaemonSets()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get daemonSets",
+			)
+		}
+
+		if daemonSets != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["daemonSets"] = daemonSets
+
+			for _, daemon := range daemonSets.Items {
+				resources = append(resources, Resource{
+					Kind:        "DaemonSet",
+					Annotations: daemon.Annotations,
+					Namespace:   daemon.Namespace,
+					Name:        daemon.Name,
+					Containers:  daemon.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+$",
+							regexp.QuoteMeta(daemon.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   newInt32Pointer(daemon.Status.DesiredNumberScheduled),
+						Current:   newInt32Pointer(daemon.Status.CurrentNumberScheduled),
+						Ready:     newInt32Pointer(daemon.Status.NumberReady),
+						Available: newInt32Pointer(daemon.Status.NumberAvailable),
+					},
+				})
+			}
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		replicaSets, err := kube.GetReplicaSets()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get replicasets",
+			)
+		}
+
+		if replicaSets != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["replicaSets"] = replicaSets
+
+			for _, replicaSet := range replicaSets.Items {
+				// skipping when it is a part of another service
+				if len(replicaSet.GetOwnerReferences()) > 0 {
+					continue
+				}
+				resources = append(resources, Resource{
+					Kind:        "ReplicaSet",
+					Annotations: replicaSet.Annotations,
+					Namespace:   replicaSet.Namespace,
+					Name:        replicaSet.Name,
+					Containers:  replicaSet.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+$",
+							regexp.QuoteMeta(replicaSet.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Desired:   replicaSet.Spec.Replicas,
+						Current:   newInt32Pointer(replicaSet.Status.Replicas),
+						Ready:     newInt32Pointer(replicaSet.Status.ReadyReplicas),
+						Available: newInt32Pointer(replicaSet.Status.AvailableReplicas),
+					},
+				})
+			}
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		cronJobs, err := kube.GetCronJobs()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get cron jobs",
+			)
+		}
+
+		if cronJobs != nil {
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["cronJobs"] = cronJobs
+
+			for _, cronJob := range cronJobs.Items {
+				activeCount := int32(len(cronJob.Status.Active))
+				resources = append(resources, Resource{
+					Kind:        "CronJob",
+					Annotations: cronJob.Annotations,
+					Namespace:   cronJob.Namespace,
+					Name:        cronJob.Name,
+					Containers:  cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers,
+					PodRegexp: regexp.MustCompile(
+						fmt.Sprintf(
+							"^%s-[^-]+-[^-]+$",
+							regexp.QuoteMeta(cronJob.Name),
+						),
+					),
+					ReplicasStatus: proto.ReplicasStatus{
+						Current: newInt32Pointer(activeCount),
+					},
+				})
+			}
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		limitRangeList, err := kube.GetLimitRanges()
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get limitRanges",
+			)
+		}
+
+		if limitRangeList != nil {
+			limitRanges = limitRangeList.Items
+
+			m.Lock()
+			defer m.Unlock()
+
+			rawResources["limitRanges"] = limitRangeList
+		}
+
+		return nil
+	})
+
+	err = group.Wait()
+
+	return
+}
+
+func newInt32Pointer(val int32) *int32 {
+	res := new(int32)
+	*res = val
+	return res
+}
+
 // GetPods get kubernetes pods
-func (kube *Kube) GetPods() ([]kv1.Pod, error) {
+func (kube *Kube) GetPods() (*kv1.PodList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of pods")
-	pods, err := kube.core.Pods("").List(kmeta.ListOptions{})
+	podList, err := kube.core.Pods("").List(kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -183,7 +498,7 @@ func (kube *Kube) GetPods() ([]kv1.Pod, error) {
 		)
 	}
 
-	return pods.Items, nil
+	return podList, nil
 }
 
 // GetReplicationControllers get replication controllers
@@ -200,6 +515,12 @@ func (kube *Kube) GetReplicationControllers() (
 		)
 	}
 
+	if controllers != nil {
+		for _, item := range controllers.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
+	}
+
 	return controllers, nil
 }
 
@@ -212,6 +533,12 @@ func (kube *Kube) GetDeployments() (*kbeta2.DeploymentList, error) {
 			err,
 			"unable to retrieve deployments from all namespaces",
 		)
+	}
+
+	if deployments != nil {
+		for _, item := range deployments.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
 	}
 
 	return deployments, nil
@@ -232,6 +559,12 @@ func (kube *Kube) GetStatefulSets() (
 		)
 	}
 
+	if statefulSets != nil {
+		for _, item := range statefulSets.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
+	}
+
 	return statefulSets, nil
 }
 
@@ -248,6 +581,12 @@ func (kube *Kube) GetDaemonSets() (
 			err,
 			"unable to retrieve daemon sets from all namespaces",
 		)
+	}
+
+	if daemonSets != nil {
+		for _, item := range daemonSets.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
 	}
 
 	return daemonSets, nil
@@ -268,6 +607,12 @@ func (kube *Kube) GetReplicaSets() (
 		)
 	}
 
+	if replicaSets != nil {
+		for _, item := range replicaSets.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
+	}
+
 	return replicaSets, nil
 }
 
@@ -284,6 +629,12 @@ func (kube *Kube) GetCronJobs() (
 			err,
 			"unable to retrieve cron jobs from all namespaces",
 		)
+	}
+
+	if cronJobs != nil {
+		for _, item := range cronJobs.Items {
+			maskPodSpec(&item.Spec.JobTemplate.Spec.Template.Spec)
+		}
 	}
 
 	return cronJobs, nil
@@ -306,62 +657,147 @@ func (kube *Kube) GetLimitRanges() (
 	return limitRanges, nil
 }
 
-// SetResources set resources for a service
-func (kube *Kube) SetResources(kind string, name string, namespace string, totalResources TotalResources) error {
-	containerSpecs := []map[string]interface{}{}
-	for containerIndex := range totalResources.Containers {
-		container := totalResources.Containers[containerIndex]
+func (kube *Kube) GetStatefulSet(namespace, name string) (
+	*v1.StatefulSet, error,
+) {
+	statefulSet, err := kube.Clientset.AppsV1().
+		StatefulSets(namespace).
+		Get(name, kmeta.GetOptions{})
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to retrieve statefulset %s/%s",
+			namespace, name,
+		)
+	}
 
-		var memoryLimits *string
+	if statefulSet != nil {
+		maskPodSpec(&statefulSet.Spec.Template.Spec)
+	}
+
+	return statefulSet, nil
+}
+
+// SetResources set resources for a service
+func (kube *Kube) SetResources(
+	kind string,
+	name string,
+	namespace string,
+	totalResources TotalResources,
+) (skipped bool, err error) {
+	if len(totalResources.Containers) == 0 && totalResources.Replicas == nil {
+		return false, fmt.Errorf("invalid resources passed, nothing to change")
+	}
+
+	if strings.ToLower(kind) == "statefulset" {
+		statefulSet, err := kube.GetStatefulSet(namespace, name)
+		if err != nil {
+			return false, karma.Format(err, "unable to get sts definition")
+		}
+
+		updateStrategy := statefulSet.Spec.UpdateStrategy.Type
+
+		ctx := karma.
+			Describe("replicas", statefulSet.Spec.Replicas).
+			Describe("update-strategy", updateStrategy)
+
+		if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
+
+			// no rollingUpdate spec, then Partition = 0
+			if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil {
+				partition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
+				ctx = ctx.
+					Describe("rolling-update-partition", partition)
+
+				if partition != nil && *partition != 0 {
+					return true, karma.Format(
+						ctx.Reason(nil),
+						"Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
+					)
+				}
+			}
+
+		} else {
+			return true, karma.Format(
+				ctx.Reason(nil),
+				"Spec.UpdateStrategy not equal 'RollingUpdate'",
+			)
+		}
+	}
+
+	var containerSpecs = make([]map[string]interface{}, len(totalResources.Containers))
+	for i := range totalResources.Containers {
+
+		container := totalResources.Containers[i]
+		resources := map[string]map[string]interface{}{}
+
 		if container.Limits.Memory != nil {
-			tmp := fmt.Sprintf("%dMi", *container.Limits.Memory)
-			memoryLimits = &tmp
+			memoryLimits := fmt.Sprintf("%dMi", *container.Limits.Memory)
+			if _, ok := resources["limits"]; !ok {
+				resources["limits"] = map[string]interface{}{}
+			}
+			resources["limits"]["memory"] = memoryLimits
 		}
-		var memoryRequests *string
-		if container.Requests.Memory != nil {
-			tmp := fmt.Sprintf("%dMi", *container.Requests.Memory)
-			memoryRequests = &tmp
-		}
-		var cpuLimits float64
 		if container.Limits.CPU != nil {
-			cpuLimits = float64(*container.Limits.CPU) / milliCore
+			cpuLimits := float64(*container.Limits.CPU) / milliCore
+			if _, ok := resources["limits"]; !ok {
+				resources["limits"] = map[string]interface{}{}
+			}
+			resources["limits"]["cpu"] = cpuLimits
 		}
-		var cpuRequests float64
+
+		if container.Requests.Memory != nil {
+			memoryRequests := fmt.Sprintf("%dMi", *container.Requests.Memory)
+			if _, ok := resources["requests"]; !ok {
+				resources["requests"] = map[string]interface{}{}
+			}
+			resources["requests"]["memory"] = memoryRequests
+		}
 		if container.Requests.CPU != nil {
-			cpuRequests = float64(*container.Requests.CPU) / milliCore
+			cpuRequests := float64(*container.Requests.CPU) / milliCore
+			if _, ok := resources["requests"]; !ok {
+				resources["requests"] = map[string]interface{}{}
+			}
+			resources["requests"]["cpu"] = cpuRequests
 		}
-		limits := map[string]interface{}{}
-		limits["memory"] = memoryLimits
-		limits["cpu"] = cpuLimits
-		requests := map[string]interface{}{}
-		requests["memory"] = memoryRequests
-		requests["cpu"] = cpuRequests
+
+		if len(resources) == 0 {
+			return false, fmt.Errorf(
+				"invalid resources for container: %s",
+				container.Name,
+			)
+		}
 
 		spec := map[string]interface{}{
-			"name": container.Name,
-			"resources": map[string]interface{}{
-				"limits":   limits,
-				"requests": requests,
-			},
+			"name":      container.Name,
+			"resources": resources,
 		}
-		containerSpecs = append(containerSpecs, spec)
+		containerSpecs[i] = spec
 	}
 
 	body := map[string]interface{}{
 		"kind": kind,
-		"spec": map[string]interface{}{
-			"replicas": totalResources.Replicas,
-			"template": map[string]interface{}{
-				"spec": map[string]interface{}{
-					"containers": containerSpecs,
-				},
+		"spec": map[string]interface{}{},
+	}
+
+	if len(containerSpecs) > 0 {
+		spec := body["spec"].(map[string]interface{})
+		spec["template"] = map[string]interface{}{
+			"spec": map[string]interface{}{
+				"containers": containerSpecs,
 			},
-		},
+		}
+	}
+
+	// setting replicas=nil makes k8s set the replicas to 1
+	if totalResources.Replicas != nil && *totalResources.Replicas > 0 {
+		spec := body["spec"].(map[string]interface{})
+		spec["replicas"] = totalResources.Replicas
 	}
 
 	b, err := json.Marshal(body)
 	if err != nil {
-		return err
+		return false, err
 	}
 	req := kube.ClientV1Beta2.RESTClient().Patch(types.StrategicMergePatchType).
 		Resource(kind + "s").
@@ -372,5 +808,41 @@ func (kube *Kube) SetResources(kind string, name string, namespace string, total
 	res := req.Do()
 
 	_, err = res.Get()
-	return err
+	return false, err
+}
+
+func maskPodSpec(podSpec *kv1.PodSpec) {
+	podSpec.Containers = maskContainers(podSpec.Containers)
+	podSpec.InitContainers = maskContainers(podSpec.InitContainers)
+
+}
+
+func maskContainers(containers []kv1.Container) (
+	masked []kv1.Container,
+) {
+	for _, container := range containers {
+		container.Env = maskEnvVars(container.Env)
+		container.Args = maskArgs(container.Args)
+		masked = append(masked, container)
+	}
+	return
+}
+
+func maskEnvVars(env [] kv1.EnvVar) (masked [] kv1.EnvVar) {
+	masked = make([]kv1.EnvVar, len(env))
+	for i, envVar := range env {
+		if envVar.Value != "" {
+			envVar.Value = maskedValue
+		}
+		masked[i] = envVar
+	}
+	return
+}
+
+func maskArgs(args []string) (masked []string) {
+	masked = make([]string, len(args))
+	for i := range args {
+		masked[i] = maskedValue
+	}
+	return
 }

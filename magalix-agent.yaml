@@ -53,8 +53,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: magalix-agent
 rules:
-- apiGroups: ["", "extensions", "apps", "batch"]
-  resources: ["nodes", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "cronjobs"]
+- apiGroups: ["", "extensions", "apps", "batch", "metrics.k8s.io"]
+  resources: ["nodes", "nodes/stats", "nodes/metrics", "nodes/proxy", "namespaces", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"]
   verbs: ["get", "watch", "list", "patch"]
 
 ---

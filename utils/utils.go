@@ -1,15 +1,18 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/ryanuber/go-glob"
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
+	"github.com/reconquest/karma-go"
+	"github.com/ryanuber/go-glob"
 )
 
 var stderr *log.Logger
@@ -193,4 +196,88 @@ func InSkipNamespace(skipNamespacePatterns []string, namespace string) bool {
 	}
 
 	return false
+}
+
+func Throttle(
+	name string,
+	interval time.Duration,
+	tickLimit int32,
+	fn func(args ...interface{})) func(args ...interface{},
+) {
+	getNextTick := func() time.Time {
+		return time.Now().
+			Truncate(time.Second).
+			Truncate(interval).
+			Add(interval)
+	}
+
+	nextTick := getNextTick()
+
+	stderr.Info("{%s throttler} next tick at %s", name, nextTick.Format(time.RFC3339))
+
+	var tickFires int32 = 0
+
+	return func(args ...interface{}) {
+		now := time.Now()
+		if now.After(nextTick) || now.Equal(nextTick) {
+			stderr.Infof(nil, "{%s throttler} ticking", name)
+			fn(args...)
+
+			atomic.AddInt32(&tickFires, 1)
+			if tickFires >= tickLimit {
+				atomic.StoreInt32(&tickFires, 0)
+				nextTick = getNextTick()
+			}
+
+			stderr.Infof(nil,
+				"{%s throttler} next tick at %s",
+				name,
+				nextTick.Format(time.RFC3339),
+			)
+		} else {
+			stderr.Infof(nil, "{%s throttler} throttled", name)
+		}
+	}
+}
+
+// After returns pointer to time after specific duration
+func After(d time.Duration) *time.Time {
+	t := time.Now().Add(d)
+	return &t
+}
+
+func TruncateString(str string, num int) string {
+	truncated := str
+	if len(str) > num {
+		if num > 3 {
+			num -= 3
+		}
+		truncated = str[0:num] + "..."
+	}
+	return truncated
+}
+
+func Transcode(
+	u interface{},
+	v interface{},
+) error {
+	b, err := json.Marshal(u)
+	if err != nil {
+		return karma.Format(
+			err,
+			"unable to marshal %T to json",
+			u,
+		)
+	}
+
+	err = json.Unmarshal(b, v)
+	if err != nil {
+		return karma.Format(
+			err,
+			"unable to unmarshal json into %T",
+			v,
+		)
+	}
+
+	return nil
 }

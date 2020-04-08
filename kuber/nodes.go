@@ -1,17 +1,23 @@
 package kuber
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/MagalixTechnologies/uuid-go"
-	kapi "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
+
+const NodeRoleLabelPrefix = "node-role.kubernetes.io/"
 
 type Node struct {
 	ID            uuid.UUID    `json:"id,omitempty"`
 	Name          string       `json:"name"`
 	IP            string       `json:"ip"`
+	Roles         string       `json:"roles"`
+	KubeletPort   int32        `json:"port"`
+	Provider      string       `json:"provider,omitempty"`
 	Region        string       `json:"region,omitempty"`
 	InstanceType  string       `json:"instance_type,omitempty"`
 	InstanceSize  string       `json:"instance_size,omitempty"`
@@ -47,7 +53,7 @@ type ContainerResources struct {
 	Memory int `json:"memory"`
 }
 
-func resourceListToContainerResources(resourceList kapi.ResourceList) *ContainerResources {
+func resourceListToContainerResources(resourceList corev1.ResourceList) *ContainerResources {
 	res := &ContainerResources{}
 
 	if memory := resourceList.Memory(); memory != nil {
@@ -70,7 +76,7 @@ type NodeCapacity struct {
 	Pods             int `json:"pods"`
 }
 
-func GetContainersByNode(pods []kapi.Pod) map[string]int {
+func GetContainersByNode(pods []corev1.Pod) map[string]int {
 	containers := map[string]int{}
 	for _, pod := range pods {
 		containers[pod.Spec.NodeName] += len(pod.Spec.Containers)
@@ -88,7 +94,7 @@ func UpdateNodesContainers(nodes []Node, containers map[string]int) []Node {
 
 func AddContainerListToNodes(
 	nodes []Node,
-	pods []kapi.Pod,
+	pods []corev1.Pod,
 	namespace *string,
 	pod *string,
 	container *string,
@@ -120,8 +126,8 @@ func getWorkerNodesMap(nodes []*Node) map[string]*Node {
 }
 
 func RangePods(
-	pods []kapi.Pod,
-	fn func(kapi.Pod) bool) error {
+	pods []corev1.Pod,
+	fn func(corev1.Pod) bool) error {
 
 	for _, pod := range pods {
 		if !fn(pod) {
@@ -133,7 +139,7 @@ func RangePods(
 }
 
 func GetContainers(
-	pods []kapi.Pod,
+	pods []corev1.Pod,
 	namespace *string,
 	pod *string,
 	container *string,
@@ -142,7 +148,7 @@ func GetContainers(
 
 	err := RangePods(
 		pods,
-		func(kpod kapi.Pod) bool {
+		func(kpod corev1.Pod) bool {
 			if namespace != nil && kpod.Namespace != *namespace {
 				return true
 			}
@@ -160,7 +166,6 @@ func GetContainers(
 				requests := kcontainer.Resources.Requests
 
 				containers = append(containers, &Container{
-					//Cluster:   kube.config.Name,
 					Node:      kpod.Spec.NodeName,
 					Pod:       kpod.Name,
 					Namespace: kpod.Namespace,
@@ -180,7 +185,7 @@ func GetContainers(
 	return containers, nil
 }
 
-func GetNodes(nodes []kapi.Node) []Node {
+func GetNodes(nodes []corev1.Node) []Node {
 	result := []Node{}
 
 	for _, node := range nodes {
@@ -188,34 +193,67 @@ func GetNodes(nodes []kapi.Node) []Node {
 
 		var address string
 		for _, addr := range node.Status.Addresses {
-			if addr.Type == kapi.NodeInternalIP {
+			if addr.Type == corev1.NodeInternalIP {
 				address = addr.Address
 			}
 		}
 
-		instanceType := labels["beta.kubernetes.io/instance-type"]
+		instanceType, cloudProvider := labels["beta.kubernetes.io/instance-type"]
 		instanceSize := ""
 
-		_, gcloud := labels["cloud.google.com/gke-nodepool"]
-		if gcloud {
-			if strings.Contains(instanceType, "-") {
-				parts := strings.SplitN(instanceType, "-", 2)
-				instanceType, instanceSize = parts[0], parts[1]
+		capacity := GetNodeCapacity(node.Status.Capacity)
+
+		if cloudProvider {
+			_, gcloud := labels["cloud.google.com/gke-nodepool"]
+			if gcloud {
+				if strings.Contains(instanceType, "-") {
+					parts := strings.SplitN(instanceType, "-", 2)
+					instanceType, instanceSize = parts[0], parts[1]
+				}
+			} else {
+				if strings.Contains(instanceType, ".") {
+					parts := strings.SplitN(instanceType, ".", 2)
+					instanceType, instanceSize = parts[0], parts[1]
+				}
 			}
 		} else {
-			if strings.Contains(instanceType, ".") {
-				parts := strings.SplitN(instanceType, ".", 2)
-				instanceType, instanceSize = parts[0], parts[1]
+			// for custom on-perm clusters we use node capacity as instance type
+			instanceType = "custom"
+
+			cpuCores := capacity.CPU / 1000
+			memoryGi := float64(capacity.Memory) / 1024 / 1024 / 1024
+
+			instanceSize = fmt.Sprintf(
+				"cpu-%d--memory-%.2f",
+				cpuCores,
+				memoryGi,
+			)
+		}
+
+		provider := strings.Split(node.Spec.ProviderID, ":")[0]
+
+		var nodeRoles []string
+
+		for key := range labels {
+			if strings.HasPrefix(key, NodeRoleLabelPrefix) {
+				nodeRoles = append(
+					nodeRoles,
+					strings.Replace(key, NodeRoleLabelPrefix, "", 1),
+				)
+				break
 			}
 		}
 
 		result = append(result, Node{
 			Name:         node.ObjectMeta.Name,
 			IP:           address,
+			Roles:        strings.Join(nodeRoles, ","),
+			KubeletPort:  node.Status.DaemonEndpoints.KubeletEndpoint.Port,
 			Region:       labels["failure-domain.beta.kubernetes.io/region"],
 			InstanceType: instanceType,
 			InstanceSize: instanceSize,
-			Capacity:     GetNodeCapacity(node.Status.Capacity),
+			Provider:     provider,
+			Capacity:     capacity,
 			Allocatable:  GetNodeCapacity(node.Status.Allocatable),
 		})
 	}
@@ -223,7 +261,7 @@ func GetNodes(nodes []kapi.Node) []Node {
 	return result
 }
 
-func GetNodeCapacity(resources kapi.ResourceList) NodeCapacity {
+func GetNodeCapacity(resources corev1.ResourceList) NodeCapacity {
 	capacity := NodeCapacity{
 		CPU:              int(resources.Cpu().MilliValue()),
 		Memory:           int(resources.Memory().Value()),

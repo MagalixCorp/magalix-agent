@@ -13,11 +13,15 @@ const (
 
 	PacketKindLogs PacketKind = "logs"
 
-	PacketKindMetricsStoreRequest PacketKind = "metrics/store"
+	PacketKindMetricsStoreRequest     PacketKind = "metrics/store"
+	PacketKindMetricsStoreV2Request     PacketKind = "metrics/store_v2"
 
 	PacketKindApplicationsStoreRequest PacketKind = "applications/store"
 
 	PacketKindNodesStoreRequest PacketKind = "nodes/store"
+
+	PacketKindEntitiesDeltasRequest PacketKind = "entities/deltas"
+	PacketKindEntitiesResyncRequest PacketKind = "entities/resync"
 
 	PacketKindEventLastValueRequest PacketKind = "events/query/last_value"
 	PacketKindEventsStoreRequest    PacketKind = "events/store"
@@ -26,7 +30,11 @@ const (
 
 	PacketKindBye PacketKind = "bye"
 
-	PacketKindDecision PacketKind = "decision"
+	PacketKindDecision         PacketKind = "decision"
+	PacketKindDecisionFeedback PacketKind = "decision/feedback"
+	PacketKindDecisionPull     PacketKind = "decision/pull"
+
+	PacketKindRestart PacketKind = "restart"
 
 	PacketKindRawStoreRequest PacketKind = "raw/store"
 )

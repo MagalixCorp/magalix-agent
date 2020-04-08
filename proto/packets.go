@@ -6,15 +6,20 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
-	"k8s.io/api/apps/v1beta2"
-	"k8s.io/api/batch/v1beta1"
+	"fmt"
+	"github.com/reconquest/karma-go"
+	"runtime/debug"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
+	"github.com/golang/snappy"
 	"github.com/kovetskiy/lorg"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	satori "github.com/satori/go.uuid"
-	kv1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -27,25 +32,18 @@ var (
 		new(watcher.Status),
 		new(watcher.ContainerStatusSource),
 
-		new(kv1.NodeList),
-		new(kv1.LimitRangeList),
-		new([]kv1.Pod),
-
-		new(v1beta1.CronJobList),
-
-		new(v1beta2.DaemonSetList),
-		new(v1beta2.StatefulSetList),
-		new(v1beta2.ReplicaSetList),
-		new(v1beta2.DeploymentList),
-
-		new(map[string]interface {}),
-		new([]interface {}),
+		make(map[string]interface{}),
+		make([]interface{}, 0),
 	}
 )
 
 type PacketHello struct {
-	Major uint `json:"major"`
-	Minor uint `json:"minor"`
+	Major     uint      `json:"major"`
+	Minor     uint      `json:"minor"`
+	Build     string    `json:"build"`
+	StartID   string    `json:"start_id"`
+	AccountID uuid.UUID `json:"account_id"`
+	ClusterID uuid.UUID `json:"cluster_id"`
 }
 
 type PacketAuthorizationRequest struct {
@@ -96,7 +94,7 @@ type PacketRegisterEntityItem struct {
 type PacketRegisterApplicationItem struct {
 	PacketRegisterEntityItem
 
-	LimitRanges []kv1.LimitRange            `json:"limit_ranges"`
+	LimitRanges []corev1.LimitRange         `json:"limit_ranges"`
 	Services    []PacketRegisterServiceItem `json:"services"`
 }
 
@@ -108,6 +106,7 @@ type PacketRegisterServiceItem struct {
 
 type ReplicasStatus struct {
 	Desired   *int32 `json:"desired,omitempty"`
+	Current   *int32 `json:"current,omitempty"`
 	Ready     *int32 `json:"ready,omitempty"`
 	Available *int32 `json:"available,omitempty"`
 }
@@ -117,17 +116,20 @@ type PacketRegisterContainerItem struct {
 
 	Image     string          `json:"image"`
 	Resources json.RawMessage `json:"resources"`
+
+	LivenessProbe  json.RawMessage `json:"liveness_probe"`
+	ReadinessProbe json.RawMessage `json:"readiness_probe"`
 }
 
 type ContainerResourceRequirements struct {
-	kv1.ResourceRequirements
-	SpecResourceRequirements kv1.ResourceRequirements `json:"spec_resources_requirements,omitempty"`
+	corev1.ResourceRequirements
+	SpecResourceRequirements corev1.ResourceRequirements `json:"spec_resources_requirements,omitempty"`
 
 	LimitsKinds   ResourcesRequirementsKind `json:"limits_kinds,omitempty"`
 	RequestsKinds ResourcesRequirementsKind `json:"requests_kinds,omitempty"`
 }
 
-type ResourcesRequirementsKind = map[kv1.ResourceName]string
+type ResourcesRequirementsKind = map[corev1.ResourceName]string
 
 const (
 	ResourceRequirementKindSet                = "set"
@@ -140,6 +142,7 @@ type PacketApplicationsStoreRequest []PacketRegisterApplicationItem
 type PacketApplicationsStoreResponse struct{}
 
 type PacketMetricsStoreRequest []MetricStoreRequest
+type PacketMetricsStoreV2Request []MetricStoreV2Request
 
 type MetricStoreRequest struct {
 	Name        string    `json:"name"`
@@ -155,7 +158,50 @@ type MetricStoreRequest struct {
 	AdditionalTags map[string]interface{} `json:"additional_tags"`
 }
 
+type MetricStoreV2Request struct {
+	Name           string    `json:"name"`
+	Type           string    `json:"type"`
+	NodeName       string    `json:"node_name"`
+	NodeIP         string    `json:"node_ip"`
+	NamespaceName  string    `json:"namespace_name"`
+	ControllerName string    `json:"controller_name"`
+	ControllerKind string    `json:"controller_kind"`
+	ContainerName  string    `json:"container_name"`
+	Timestamp      time.Time `json:"timestamp"`
+	Value          int64     `json:"value"`
+	PodName        string    `json:"pod_name"`
+
+	AdditionalTags map[string]interface{} `json:"additional_tags"`
+}
+
 type PacketMetricsStoreResponse struct {
+}
+
+type PacketMetricValueItem struct {
+	Node        *uuid.UUID
+	Application *uuid.UUID
+	Service     *uuid.UUID
+	Container   *uuid.UUID
+
+	Tags  map[string]string
+	Value float64
+}
+
+type PacketMetricFamilyItem struct {
+	Name string
+	Help string
+	Type string
+	Tags []string
+
+	Values []*PacketMetricValueItem
+}
+type PacketMetricsPromStoreRequest struct {
+	Timestamp time.Time
+
+	Metrics []*PacketMetricFamilyItem
+}
+
+type PacketMetricsPromStoreResponse struct {
 }
 
 type PacketRegisterNodeCapacityItem struct {
@@ -169,6 +215,7 @@ type PacketRegisterNodeItem struct {
 	ID            uuid.UUID                              `json:"id,omitempty"`
 	Name          string                                 `json:"name"`
 	IP            string                                 `json:"ip"`
+	Roles         string                                 `json:"roles"`
 	Region        string                                 `json:"region,omitempty"`
 	Provider      string                                 `json:"provider,omitempty"`
 	InstanceType  string                                 `json:"instance_type,omitempty"`
@@ -224,10 +271,11 @@ type PacketEventLastValueResponse struct {
 }
 
 type PacketStatusStoreRequest struct {
-	Entity   string                         `json:"entity"`
-	EntityID uuid.UUID                      `json:"entity_id"`
-	Status   watcher.Status                 `json:"status"`
-	Source   *watcher.ContainerStatusSource `json:"source"`
+	Entity    string                         `json:"entity"`
+	EntityID  uuid.UUID                      `json:"entity_id"`
+	Status    watcher.Status                 `json:"status"`
+	Source    *watcher.ContainerStatusSource `json:"source"`
+	Timestamp time.Time                      `json:"timestamp"`
 }
 
 type PacketStatusStoreResponse struct{}
@@ -238,26 +286,49 @@ type RequestLimit struct {
 }
 
 type ContainerResources struct {
-	ID       uuid.UUID    `json:"id"`
 	Requests RequestLimit `json:"requests,omitempty"`
 	Limits   RequestLimit `json:"limits,omitempty"`
 }
 
-type TotalResources struct {
-	Replicas   *int                 `json:"replicas,omitempty"`
-	Containers []ContainerResources `json:"containers"`
+type PacketDecision struct {
+	ID          uuid.UUID `json:"id"`
+	ServiceId   uuid.UUID `json:"service_id"`
+	ContainerId uuid.UUID `json:"container_id"`
+
+	ContainerResources ContainerResources `json:"container_resources"`
 }
 
-type Decision struct {
-	TotalResources TotalResources `json:"total_resources"`
-	ID             uuid.UUID      `json:"id"`
+type DecisionExecutionStatus string
+
+const (
+	DecisionExecutionStatusSucceed DecisionExecutionStatus = "executed"
+	DecisionExecutionStatusFailed  DecisionExecutionStatus = "failed"
+	DecisionExecutionStatusSkipped DecisionExecutionStatus = "skipped"
+)
+
+type PacketDecisionFeedbackRequest struct {
+	ID          uuid.UUID `json:"id"`
+	ServiceId   uuid.UUID `json:"service_id"`
+	ContainerId uuid.UUID `json:"container_id"`
+
+	Status  DecisionExecutionStatus `json:"status"`
+	Message string                  `json:"message"`
 }
 
-type PacketDecisions []Decision
+type PacketDecisionFeedbackResponse struct{}
 
-type PacketDecisionsResponse struct {
-	Executed int `json:"executed"`
-	Failed   int `json:"failed"`
+type PacketDecisionResponse struct {
+	Error *string `json:"error"`
+}
+
+type PacketDecisionPullRequest struct{}
+
+type PacketDecisionPullResponse struct {
+	Decisions []*PacketDecision `json:"decisions"`
+}
+
+type PacketRestart struct {
+	Status int `json:"status"`
 }
 
 type PacketRaw map[string]interface{}
@@ -268,12 +339,87 @@ type PacketRawRequest struct {
 }
 type PacketRawResponse struct{}
 
+type EntityDeltaKind string
+
+const (
+	EntityEventTypeUpsert EntityDeltaKind = "UPSERT"
+	EntityEventTypeDelete EntityDeltaKind = "DELETE"
+)
+
+type ParentController struct {
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	APIVersion string `json:"api_version"`
+	IsWatched  bool   `json:"is_watched"`
+
+	Parent *ParentController `json:"parent"`
+}
+
+type GroupVersionResourceKind struct {
+	schema.GroupVersionResource
+	Kind string `json:"kind"`
+}
+
+type PacketEntityDelta struct {
+	Gvrk      GroupVersionResourceKind  `json:"gvrk"`
+	DeltaKind EntityDeltaKind           `json:"delta_kind"`
+	Data      unstructured.Unstructured `json:"data"`
+	Parent    *ParentController         `json:"parents"`
+	Timestamp time.Time                 `json:"timestamp"`
+}
+
+type PacketEntitiesDeltasRequest struct {
+	Items     []PacketEntityDelta `json:"items"`
+	Timestamp time.Time           `json:"timestamp"`
+}
+type PacketEntitiesDeltasResponse struct{}
+
+type PacketEntitiesResyncItem struct {
+	Gvrk GroupVersionResourceKind     `json:"gvrk"`
+	Data []*unstructured.Unstructured `json:"data"`
+}
+
+type PacketEntitiesResyncRequest struct {
+	Timestamp time.Time `json:"timestamp"`
+
+	// map of entities kind and entities definitions
+	// it holds other entities not already specified in attributes above
+	Snapshot map[string]PacketEntitiesResyncItem `json:"snapshot"`
+}
+type PacketEntitiesResyncResponse struct{}
+
+// Deprecated: Fall back to EncodeGOB. Kept only for backward compatibility. Should be removed.
+func Encode(in interface{}) (out []byte, err error) {
+	return EncodeGOB(in)
+}
+
+// Deprecated: Falls back to DecodeGOB. Kept only for backward compatibility. Should be removed.
 func Decode(in []byte, out interface{}) error {
 	return DecodeGOB(in, out)
 }
 
-func Encode(in interface{}) ([]byte, error) {
-	return EncodeGOB(in)
+func EncodeSnappy(in interface{}) (out []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			stack := string(debug.Stack())
+			err = karma.Format(stack, fmt.Sprintf("panic: %v", r))
+		}
+	}()
+
+	jsonIn, err := json.Marshal(in)
+	if err != nil {
+		return nil, karma.Format(err, "unable to encode to snappy")
+	}
+	out = snappy.Encode(nil, jsonIn)
+	return out, err
+}
+
+func DecodeSnappy(in []byte, out interface{}) error {
+	jsonIn, err := snappy.Decode(nil, in)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(jsonIn, out)
 }
 
 func DecodeGOB(in []byte, out interface{}) error {

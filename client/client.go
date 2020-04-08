@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	ProtocolMajorVersion = 1
-	ProtocolMinorVersion = 3
+	ProtocolMajorVersion = 2
+	ProtocolMinorVersion = 0
 
 	logsQueueSize = 1024
 )
@@ -38,14 +38,18 @@ type Client struct {
 	parentLogger *log.Logger
 
 	address   string
+	version   string
+	startID   string
 	AccountID uuid.UUID
 	ClusterID uuid.UUID
 	secret    []byte
 
 	channel *channel.Client
 
+	connected  bool
 	authorized bool
 
+	shouldSendLogs  bool
 	logsQueue       chan proto.PacketLogItem
 	logsQueueWorker *sync.WaitGroup
 
@@ -56,16 +60,24 @@ type Client struct {
 	blockedM sync.Mutex
 
 	timeouts timeouts
+
+	lastSent time.Time
+
+	pipe       *Pipe
+	pipeStatus *Pipe
 }
 
 // newClient creates a new client
 func newClient(
 	address string,
+	version string,
+	startID string,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
 	secret []byte,
 	timeouts timeouts,
 	parentLogger *log.Logger,
+	shouldSendLogs bool,
 ) *Client {
 	url, err := url.Parse(address)
 	if err != nil {
@@ -74,10 +86,13 @@ func newClient(
 	client := &Client{
 		parentLogger: parentLogger,
 
-		address:   address,
-		AccountID: accountID,
-		ClusterID: clusterID,
-		secret:    secret,
+		address:        address,
+		version:        version,
+		startID:        startID,
+		AccountID:      accountID,
+		ClusterID:      clusterID,
+		secret:         secret,
+		shouldSendLogs: shouldSendLogs,
 
 		channel: channel.NewClient(*url, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
@@ -93,8 +108,10 @@ func newClient(
 		timeouts: timeouts,
 	}
 
+	client.pipe = NewPipe(client, client.parentLogger)
+	client.pipeStatus = NewPipe(client, client.parentLogger)
+
 	client.initLogger()
-	client.initLogsQueue()
 
 	return client
 }
@@ -106,6 +123,9 @@ func newClient(
 // Example:
 //   WaitForConnection(time.Second * 10)
 func (client *Client) WaitForConnection(timeout time.Duration) bool {
+	if client.authorized {
+		return true
+	}
 	c := make(chan struct{})
 	defer func() {
 		client.blocked.Delete(c)
@@ -125,12 +145,13 @@ func (client *Client) WaitForConnection(timeout time.Duration) bool {
 }
 
 func (client *Client) WithBackoff(fn func() error) {
-	client.withBackoffLimit(fn, int(^uint(0)>>1))
+	_ = client.WithBackoffLimit(fn, int(^uint(0)>>1))
 }
 
-func (client *Client) withBackoffLimit(fn func() error, limit int) {
+func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
+	var err error
 	for try := 0; try < limit; try++ {
-		err := fn()
+		err = fn()
 		if err == nil {
 			break
 		}
@@ -144,35 +165,84 @@ func (client *Client) withBackoffLimit(fn func() error, limit int) {
 			timeout,
 		)
 
-		time.Sleep(timeout)
+		if try+1 < limit {
+			time.Sleep(timeout)
+		}
 	}
+	if err != nil {
+		client.Errorf(
+			karma.Describe("limit", limit).Reason(err),
+			"unhandled error occurred, retires limit %v is exceeded",
+			limit,
+		)
+	}
+	return err
 }
 
-// Send sends a packet to the agent-gateway
-// It tries to send it, if it failed due to the agent-gateway not connected it waits
-// for connection before trying again
+// send sends a packet to the agent-gateway
 // it uses the default proto encoding to encode and decode in/out parameters
-func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
-	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
-	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
-	req, err := proto.Encode(in)
-	if err != nil {
-		return err
-	}
-	res, err := client.channel.Send(kind.String(), req)
-	if err != nil {
-		// TODO: define errors in the channel package
-		if err.Error() == "client not found" {
-			client.WaitForConnection(time.Minute)
-			res, err = client.channel.Send(kind.String(), req)
-			if err != nil {
-				return err
-			}
-		} else {
+func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{}) error {
+	var (
+		req []byte
+		err error
+	)
+	if kind == proto.PacketKindHello {
+		req, err = proto.EncodeGOB(in)
+		if err != nil {
+			return err
+		}
+	} else {
+		req, err = proto.EncodeSnappy(in)
+		if err != nil {
 			return err
 		}
 	}
-	return proto.Decode(res, out)
+	res, err := client.channel.Send(kind.String(), req)
+	if err != nil {
+		return err
+	}
+	client.lastSent = time.Now()
+
+	if out == nil {
+		return nil
+	}
+
+	if kind == proto.PacketKindHello {
+		return proto.DecodeGOB(res, out)
+	} else {
+		return proto.DecodeSnappy(res, out)
+	}
+}
+
+// Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send
+func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
+	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
+	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
+	client.WaitForConnection(time.Minute)
+	return client.send(kind, in, out)
+}
+
+// PipeStatus send status packages to the agent-gateway with defined priorities and expiration rules
+// TODO remove
+func (client *Client) PipeStatus(pack Package) {
+	if client.pipeStatus == nil {
+		panic("client pipeStatus not defined")
+	}
+	i := client.pipeStatus.Send(pack)
+	if i > 0 {
+		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+	}
+}
+
+// Pipe send packages to the agent-gateway with defined priorities and expiration rules
+func (client *Client) Pipe(pack Package) {
+	if client.pipe == nil {
+		panic("client pipe not defined")
+	}
+	i := client.pipe.Send(pack)
+	if i > 0 {
+		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+	}
 }
 
 // AddListener adds a listener for a specific packet kind
@@ -182,14 +252,18 @@ func (client *Client) AddListener(kind proto.PacketKind, listener func(in []byte
 	}
 }
 
+// InitClient inits client
 func InitClient(
 	args map[string]interface{},
+	version string,
+	startID string,
 	accountID, clusterID uuid.UUID,
 	secret []byte,
 	parentLogger *log.Logger,
+	connected chan bool,
 ) (*Client, error) {
 	client := newClient(
-		args["--gateway"].(string), accountID, clusterID, secret,
+		args["--gateway"].(string), version, startID, accountID, clusterID, secret,
 		timeouts{
 			protoHandshake: utils.MustParseDuration(args, "--timeout-proto-handshake"),
 			protoWrite:     utils.MustParseDuration(args, "--timeout-proto-write"),
@@ -198,6 +272,7 @@ func InitClient(
 			protoBackoff:   utils.MustParseDuration(args, "--timeout-proto-backoff"),
 		},
 		parentLogger,
+		!args["--no-send-logs"].(bool),
 	)
 	go sign.Notify(func(os.Signal) bool {
 		if !client.IsReady() {
@@ -218,7 +293,7 @@ func InitClient(
 		return true
 	}, syscall.SIGHUP)
 
-	err := client.Connect()
+	err := client.Connect(connected)
 
 	return client, err
 }

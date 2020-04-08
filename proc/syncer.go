@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 )
@@ -174,8 +175,9 @@ func (syncer *Syncer) addProcessed(resource string, version string) {
 	}
 
 	tracef(nil, "syncer: processed %s %s", resource, version)
-
-	syncer.processed[resource] = append(syncer.processed[resource], version)
+	// cover the last 10 mins as watcher loop every 100 miliseconds  ->  see Observer.watch
+	l := int(math.Max(float64(len(syncer.processed[resource])-6000), 0))
+	syncer.processed[resource] = append(syncer.processed[resource][l:], version)
 }
 
 func (syncer *Syncer) isProcessed(resource string) bool {

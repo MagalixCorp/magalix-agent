@@ -5,12 +5,11 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/utils"
 	"github.com/kovetskiy/lorg"
 	structured "github.com/reconquest/cog"
 	"github.com/reconquest/karma-go"
 )
-
-const sendlogs = false
 
 var _ structured.Sender = ((*Client)(nil)).sendLogs
 
@@ -34,8 +33,11 @@ func (client *Client) initLogger() {
 	// Note that parentLogger is the global stderr
 	client.Logger.SetDisplayer(client.parentLogger.Display)
 
-	// but as sender we will use client's packet logs
-	client.Logger.SetSender(client.sendLogs)
+	if client.shouldSendLogs {
+		// as sender we will use client's packet logs
+		client.Logger.SetSender(client.sendLogs)
+		client.initLogsQueue()
+	}
 
 	client.Logger.Log.SetExiter(func(int) {
 		return
@@ -57,6 +59,8 @@ func (client *Client) watchLogsQueue() {
 
 	var fatal bool
 
+	// retry for 5 times then drop the packet
+
 	for {
 		logs := proto.PacketLogs{}
 		t := time.Now()
@@ -77,24 +81,19 @@ func (client *Client) watchLogsQueue() {
 
 	flush:
 
-		if sendlogs {
-			client.WithBackoff(func() error {
-				client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
-
-				var response []byte
-				err := client.Send(proto.PacketKindLogs, logs, &response)
-				if err != nil {
-					return karma.Format(
-						err,
-						"unable to send logs packet",
-					)
-				}
-
-				return nil
+		if client.shouldSendLogs {
+			client.parentLogger.Tracef(nil, "sending %v log entries", len(logs))
+			client.Pipe(Package{
+				Kind:        proto.PacketKindLogs,
+				ExpiryTime:  utils.After(10 * time.Minute),
+				ExpiryCount: 2,
+				Priority:    9,
+				Retries:     4,
+				Data:        logs,
 			})
 
 			if fatal {
-				client.Done(1)
+				client.Done(1, false)
 				goto done
 			}
 		}

@@ -4,21 +4,12 @@ import (
 	"time"
 
 	"github.com/MagalixTechnologies/uuid-go"
-	kapi "k8s.io/api/core/v1"
 )
 
 const (
 	// DefaultEventsOrigin default origin when not specified
 	DefaultEventsOrigin = "watcher"
 )
-
-// ContainerState a struct to hold the container state
-// it keeps the last termination state to detect OOMs in case
-// of CrashLoops
-type ContainerState struct {
-	Current              kapi.ContainerState
-	LastTerminationState kapi.ContainerState
-}
 
 // Event structure
 type Event struct {
