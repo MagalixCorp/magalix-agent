@@ -173,7 +173,7 @@ func (executor *Executor) handleExecutionSkipping(
 	return &proto.PacketDecisionFeedbackRequest{
 		ID:        decision.ID,
 		ServiceId: decision.ServiceId,
-		Status:    proto.DecisionExecutionStatusSkipped,
+		Status:    proto.DecisionExecutionStatusFailed,
 		Message:   msg,
 	}
 }
@@ -251,10 +251,15 @@ func (executor *Executor) execute(
 
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
-		return nil, karma.Format(
-			err,
-			"unable to get service details",
-		)
+		return &proto.PacketDecisionFeedbackRequest{
+				ID:        decision.ID,
+				ServiceId: decision.ServiceId,
+				Status:    proto.DecisionExecutionStatusFailed,
+				Message:   "unable to get service details",
+			}, karma.Format(
+				err,
+				"unable to get service details",
+			)
 	}
 
 	ctx = ctx.Describe("namespace", namespace).
@@ -263,10 +268,15 @@ func (executor *Executor) execute(
 
 	containerName, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
-		return nil, karma.Format(
-			err,
-			"unable to get container details",
-		)
+		return &proto.PacketDecisionFeedbackRequest{
+				ID:        decision.ID,
+				ServiceId: decision.ServiceId,
+				Status:    proto.DecisionExecutionStatusFailed,
+				Message:   "unable to get container details",
+			}, karma.Format(
+				err,
+				"unable to get container details",
+			)
 	}
 
 	totalResources := kuber.TotalResources{
