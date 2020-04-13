@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

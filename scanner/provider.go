@@ -2,10 +2,10 @@ package scanner
 
 import (
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/entities"
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/entities"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/reconquest/karma-go"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/labels"

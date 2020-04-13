@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -44,6 +44,8 @@ type Client struct {
 	ClusterID uuid.UUID
 	secret    []byte
 
+	packetV2Enabled bool
+
 	channel *channel.Client
 
 	connected  bool
@@ -78,6 +80,7 @@ func newClient(
 	timeouts timeouts,
 	parentLogger *log.Logger,
 	shouldSendLogs bool,
+	packetV2Enabled bool,
 ) *Client {
 	url, err := url.Parse(address)
 	if err != nil {
@@ -86,13 +89,14 @@ func newClient(
 	client := &Client{
 		parentLogger: parentLogger,
 
-		address:        address,
-		version:        version,
-		startID:        startID,
-		AccountID:      accountID,
-		ClusterID:      clusterID,
-		secret:         secret,
-		shouldSendLogs: shouldSendLogs,
+		address:         address,
+		version:         version,
+		startID:         startID,
+		AccountID:       accountID,
+		ClusterID:       clusterID,
+		secret:          secret,
+		shouldSendLogs:  shouldSendLogs,
+		packetV2Enabled: packetV2Enabled,
 
 		channel: channel.NewClient(*url, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
@@ -273,6 +277,7 @@ func InitClient(
 		},
 		parentLogger,
 		!args["--no-send-logs"].(bool),
+		args["--packets-v2"].(bool),
 	)
 	go sign.Notify(func(os.Signal) bool {
 		if !client.IsReady() {

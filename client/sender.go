@@ -3,8 +3,8 @@ package client
 import (
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/reconquest/karma-go"
 )
@@ -13,12 +13,13 @@ import (
 func (client *Client) hello() error {
 	var hello proto.PacketHello
 	err := client.send(proto.PacketKindHello, proto.PacketHello{
-		Major:     ProtocolMajorVersion,
-		Minor:     ProtocolMinorVersion,
-		Build:     client.version,
-		StartID:   client.startID,
-		AccountID: client.AccountID,
-		ClusterID: client.ClusterID,
+		Major:           ProtocolMajorVersion,
+		Minor:           ProtocolMinorVersion,
+		Build:           client.version,
+		StartID:         client.startID,
+		AccountID:       client.AccountID,
+		ClusterID:       client.ClusterID,
+		PacketV2Enabled: client.packetV2Enabled,
 	}, &hello)
 	if err != nil {
 		return err

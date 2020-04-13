@@ -1,8 +1,8 @@
 package scalar
 
 import (
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixTechnologies/log-go"
 	"time"
 )
