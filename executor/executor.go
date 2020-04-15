@@ -3,6 +3,7 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/client"
@@ -249,6 +250,7 @@ func (executor *Executor) execute(
 		Describe("service-id", decision.ServiceId).
 		Describe("container-id", decision.ContainerId)
 
+
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
@@ -265,6 +267,15 @@ func (executor *Executor) execute(
 	ctx = ctx.Describe("namespace", namespace).
 		Describe("service-name", name).
 		Describe("kind", kind)
+
+	pods, err := executor.kube.GetPods()
+
+	for i, pod := range pods.Items {
+		if strings.Contains(pod.Name, namespace){
+			executor.logger.Info(i, pod.Status.Phase)
+		}
+
+	}
 
 	containerName, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
@@ -320,6 +331,7 @@ func (executor *Executor) execute(
 			}
 			return response, nil
 		}
+
 		msg := "decision executed successfully"
 
 		executor.logger.Infof(ctx, msg)
