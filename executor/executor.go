@@ -268,15 +268,6 @@ func (executor *Executor) execute(
 		Describe("service-name", name).
 		Describe("kind", kind)
 
-	pods, err := executor.kube.GetPods()
-
-	for i, pod := range pods.Items {
-		if strings.Contains(pod.Name, namespace){
-			executor.logger.Info(i, pod.Status.Phase)
-		}
-
-	}
-
 	containerName, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
@@ -332,7 +323,23 @@ func (executor *Executor) execute(
 			return response, nil
 		}
 
-		msg := "decision executed successfully"
+
+		pods, err := executor.kube.GetNameSpacePods(namespace)
+
+		executor.logger.Info("Current Unix Time:", time.Now().Unix())
+		time.Sleep(30 * time.Second)
+		executor.logger.Info("Current Unix Time:", time.Now().Unix())
+
+		msg := "pod failed to restart"
+		for i, pod := range pods.Items {
+			if strings.Contains(pod.Name, name){
+				executor.logger.Info(i, pod.Status.Phase)
+				if pod.Status.Phase == "Running" {
+					msg = "pod restarted successfully"
+					break
+				}
+			}
+		}
 
 		executor.logger.Infof(ctx, msg)
 
