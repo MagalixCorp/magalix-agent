@@ -323,21 +323,31 @@ func (executor *Executor) execute(
 			return response, nil
 		}
 
+		msg := "pod restarting"
+		start := time.Now()
 
-		pods, err := executor.kube.GetNameSpacePods(namespace)
+		for time.Now().Second() - start.Second() < 60 {
 
-		executor.logger.Info("Current Unix Time:", time.Now().Unix())
-		time.Sleep(30 * time.Second)
-		executor.logger.Info("Current Unix Time:", time.Now().Unix())
+			status := "Pending"
 
-		msg := "pod failed to restart"
-		for i, pod := range pods.Items {
-			if strings.Contains(pod.Name, name){
-				executor.logger.Info(i, pod.Status.Phase)
-				if pod.Status.Phase == "Running" {
-					msg = "pod restarted successfully"
+			executor.logger.Info("Current Unix Time:", time.Now().Second())
+			time.Sleep(5 * time.Second)
+			executor.logger.Info("start Unix Time:", start.Second())
+			pods, _ := executor.kube.GetNameSpacePods(namespace)
+
+			for i, pod := range pods.Items {
+				if strings.Contains(pod.Name, name){
+					executor.logger.Info(i, pod.Status.Phase)
+					status = string(pod.Status.Phase)
 					break
 				}
+			}
+
+			if status == "Running" {
+				msg = "pod restarted successfully"
+				break
+			}else{
+				msg = "pod failed to restart"
 			}
 		}
 
