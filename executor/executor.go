@@ -323,32 +323,48 @@ func (executor *Executor) execute(
 			return response, nil
 		}
 
+		// short pooling to trigger pod status with max 15 minutes
+		backoff := 15
 		msg := "pod restarting"
-		start := time.Now()
 
-		for time.Now().Second() - start.Second() < 60 {
+		for backoff > 0 {
 
-			status := "Pending"
+			start := time.Now()
+			flag := false
 
-			executor.logger.Info("Current Unix Time:", time.Now().Second())
-			time.Sleep(5 * time.Second)
-			executor.logger.Info("start Unix Time:", start.Second())
-			pods, _ := executor.kube.GetNameSpacePods(namespace)
+			for time.Now().Second() - start.Second() < 60 {
 
-			for i, pod := range pods.Items {
-				if strings.Contains(pod.Name, name){
-					executor.logger.Info(i, pod.Status.Phase)
-					status = string(pod.Status.Phase)
+				status := "Pending"
+
+				executor.logger.Info("Current Unix Time:", time.Now().Second())
+				time.Sleep(20 * time.Second)
+				executor.logger.Info("start Unix Time:", start.Second())
+				pods, _ := executor.kube.GetNameSpacePods(namespace)
+				executor.kube.ClientBatch.RESTClient().Post()
+				for i, pod := range pods.Items {
+					if strings.Contains(pod.Name, name){
+						executor.logger.Info(i, pod.Status.Phase)
+						status = string(pod.Status.Phase)
+						break
+					}
+				}
+
+				if status == "Running" {
+					msg = "pod restarted successfully"
+					flag = true
+					break
+				}else if status != "Pending" {
+					msg = "pod failed to restart"
+					flag = true
 					break
 				}
 			}
 
-			if status == "Running" {
-				msg = "pod restarted successfully"
+			if flag {
 				break
-			}else{
-				msg = "pod failed to restart"
 			}
+
+			backoff--
 		}
 
 		executor.logger.Infof(ctx, msg)
