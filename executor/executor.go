@@ -324,6 +324,13 @@ func (executor *Executor) execute(
 		}
 
 		// short pooling to trigger pod status with max 15 minutes
+
+		statusMap := make(map[string]string)
+		statusMap["Running"] = "pod restarted successfully"
+		statusMap["Failed"] = "pod failed to restart"
+		statusMap["Unknown"] = "pod status is unknown"
+		statusMap["PodInitializing"] = "pod restarting"
+
 		backoff := 15
 		msg := "pod restarting"
 
@@ -340,7 +347,6 @@ func (executor *Executor) execute(
 				time.Sleep(20 * time.Second)
 				executor.logger.Info("start Unix Time:", start.Second())
 				pods, _ := executor.kube.GetNameSpacePods(namespace)
-				executor.kube.ClientBatch.RESTClient().Post()
 				for i, pod := range pods.Items {
 					if strings.Contains(pod.Name, name){
 						executor.logger.Info(i, pod.Status.Phase)
@@ -349,12 +355,8 @@ func (executor *Executor) execute(
 					}
 				}
 
-				if status == "Running" {
-					msg = "pod restarted successfully"
-					flag = true
-					break
-				}else if status != "Pending" {
-					msg = "pod failed to restart"
+				if status != "Pending" {
+					msg = statusMap[status]
 					flag = true
 					break
 				}
