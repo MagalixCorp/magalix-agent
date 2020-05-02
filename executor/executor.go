@@ -295,8 +295,10 @@ func (executor *Executor) execute(
 		},
 	}
 
+
+
 	trace, _ := json.Marshal(totalResources)
-	executor.logger.Debugf(
+	executor.logger.Infof(
 		ctx.
 			Describe("dry run", executor.dryRun).
 			Describe("cpu unit", "milliCore").
