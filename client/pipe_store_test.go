@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
 )
 
 func after(d time.Duration) *time.Time {

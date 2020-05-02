@@ -1,9 +1,9 @@
 package events
 
 import (
-	"github.com/MagalixCorp/magalix-agent/proc"
-	"github.com/MagalixCorp/magalix-agent/scanner"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/proc"
+	"github.com/MagalixCorp/magalix-agent/v2/scanner"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 )

@@ -1,14 +1,14 @@
 package metrics
 
 import (
-	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixTechnologies/log-go"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/client"
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 )

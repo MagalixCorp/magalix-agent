@@ -1,7 +1,7 @@
 package proc
 
 import (
-	"github.com/MagalixCorp/magalix-agent/watcher"
+	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 	kapi "k8s.io/api/core/v1"

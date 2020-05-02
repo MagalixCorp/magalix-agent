@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -137,7 +137,7 @@ func (observer *Observer) GetNodes() ([]corev1.Node, error) {
 		return nil, karma.Format(err, "unable to list nodes")
 	}
 	nodes := make([]corev1.Node, len(_nodes))
-	for i, n := range (_nodes) {
+	for i, n := range _nodes {
 		u := n.(*unstructured.Unstructured)
 		err = utils.Transcode(u, &nodes[i])
 		if err != nil {
@@ -157,7 +157,7 @@ func (observer *Observer) GetPods() ([]corev1.Pod, error) {
 		return nil, karma.Format(err, "unable to list pods")
 	}
 	pods := make([]corev1.Pod, len(_pods))
-	for i, n := range (_pods) {
+	for i, n := range _pods {
 		u := n.(*unstructured.Unstructured)
 		err = utils.Transcode(u, &pods[i])
 		if err != nil {
@@ -419,7 +419,7 @@ type ResourceEventHandler interface {
 // as few of the notification functions as you want while still implementing
 // ResourceEventHandler.
 type ResourceEventHandlerFuncs struct {
-	Observer *Observer
+	Observer   *Observer
 	AddFunc    func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
 	UpdateFunc func(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
 	DeleteFunc func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)

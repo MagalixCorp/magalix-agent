@@ -1,7 +1,7 @@
 package scalar
 
 import (
-	"github.com/MagalixCorp/magalix-agent/scanner"
+	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	kv1 "k8s.io/api/core/v1"

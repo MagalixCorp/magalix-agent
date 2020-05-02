@@ -9,17 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/client"
-	"github.com/MagalixCorp/magalix-agent/entities"
-	"github.com/MagalixCorp/magalix-agent/events"
-	"github.com/MagalixCorp/magalix-agent/executor"
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/metrics"
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/scalar"
-	"github.com/MagalixCorp/magalix-agent/scalar2"
-	"github.com/MagalixCorp/magalix-agent/scanner"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v2/entities"
+	"github.com/MagalixCorp/magalix-agent/v2/events"
+	"github.com/MagalixCorp/magalix-agent/v2/executor"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/metrics"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/scalar"
+	"github.com/MagalixCorp/magalix-agent/v2/scalar2"
+	"github.com/MagalixCorp/magalix-agent/v2/scanner"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
@@ -192,7 +192,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		eventsEnabled   = !args["--disable-events"].(bool)
 		scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
-		deltasEnabled   = args["--packets-v2"].(bool)
+		packetV2Enabled = args["--packets-v2"].(bool)
 		dryRun          = args["--dry-run"].(bool)
 
 		skipNamespaces []string
@@ -217,7 +217,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	err = observer_.WaitForCacheSync(&t)
 	if err != nil {
 		logger.Errorf(err, "unable to start entities watcher")
-		deltasEnabled = false // fallback to old scanner implementation
+		packetV2Enabled = false // fallback to old scanner implementation
 	}
 
 	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
@@ -234,7 +234,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 
 	var entityScanner *scanner.Scanner
 
-	if deltasEnabled {
+	if packetV2Enabled {
 		ew := entities.NewEntitiesWatcher(logger, observer_, gwClient)
 		err := ew.Start()
 		if err != nil {
@@ -305,7 +305,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		var nodesProvider metrics.NodesProvider
 		var entitiesProvider metrics.EntitiesProvider
 
-		if deltasEnabled {
+		if packetV2Enabled {
 			nodesProvider = observer_
 			entitiesProvider = observer_
 		} else {
@@ -318,7 +318,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			nodesProvider,
 			entitiesProvider,
 			kube,
-			deltasEnabled,
+			packetV2Enabled,
 			optInAnalysisData,
 			args,
 		)

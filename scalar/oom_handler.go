@@ -3,7 +3,7 @@ package scalar
 import (
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	"golang.org/x/net/context"

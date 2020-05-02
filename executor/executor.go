@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/client"
-	"github.com/MagalixCorp/magalix-agent/kuber"
-	"github.com/MagalixCorp/magalix-agent/proto"
-	"github.com/MagalixCorp/magalix-agent/scanner"
-	"github.com/MagalixCorp/magalix-agent/utils"
+	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/scanner"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
@@ -172,7 +172,7 @@ func (executor *Executor) handleExecutionSkipping(
 	return &proto.PacketDecisionFeedbackRequest{
 		ID:        decision.ID,
 		ServiceId: decision.ServiceId,
-		Status:    proto.DecisionExecutionStatusSkipped,
+		Status:    proto.DecisionExecutionStatusFailed,
 		Message:   msg,
 	}
 }
@@ -186,6 +186,8 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	_, exist := executor.inProgressJobs[decision.ID.String()]
 	if !exist {
 		executor.inProgressJobs[decision.ID.String()] = true
+		convertDecisionMemoryFromKiloByteToMegabyte(&decision)
+
 		err = executor.submitDecision(&decision, decisionsBufferTimeout)
 		if err != nil {
 			errMessage := err.Error()
@@ -196,6 +198,11 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	}
 
 	return proto.EncodeSnappy(proto.PacketDecisionResponse{})
+}
+
+func convertDecisionMemoryFromKiloByteToMegabyte(decision *proto.PacketDecision) {
+	*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
+	*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
 }
 
 func (executor *Executor) submitDecision(
@@ -250,10 +257,15 @@ func (executor *Executor) execute(
 
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
-		return nil, karma.Format(
-			err,
-			"unable to get service details",
-		)
+		return &proto.PacketDecisionFeedbackRequest{
+				ID:        decision.ID,
+				ServiceId: decision.ServiceId,
+				Status:    proto.DecisionExecutionStatusFailed,
+				Message:   "unable to get service details",
+			}, karma.Format(
+				err,
+				"unable to get service details",
+			)
 	}
 
 	ctx = ctx.Describe("namespace", namespace).
@@ -262,10 +274,15 @@ func (executor *Executor) execute(
 
 	containerName, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
-		return nil, karma.Format(
-			err,
-			"unable to get container details",
-		)
+		return &proto.PacketDecisionFeedbackRequest{
+				ID:        decision.ID,
+				ServiceId: decision.ServiceId,
+				Status:    proto.DecisionExecutionStatusFailed,
+				Message:   "unable to get container details",
+			}, karma.Format(
+				err,
+				"unable to get container details",
+			)
 	}
 
 	totalResources := kuber.TotalResources{
