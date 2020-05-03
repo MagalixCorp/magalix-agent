@@ -332,7 +332,7 @@ func (executor *Executor) execute(
 		statusMap["PodInitializing"] = "pod restarting"
 
 		backoff := 15
-		msg := "pod restarting"
+		msg := "pod restarting exceeded timout (15 min)"
 
 		for backoff > 0 {
 
@@ -343,10 +343,9 @@ func (executor *Executor) execute(
 
 				status := "Pending"
 
-				executor.logger.Info("Current Unix Time:", time.Now().Second())
-				time.Sleep(20 * time.Second)
-				executor.logger.Info("start Unix Time:", start.Second())
+				time.Sleep(15 * time.Second)
 				pods, _ := executor.kube.GetNameSpacePods(namespace)
+
 				for i, pod := range pods.Items {
 					if strings.Contains(pod.Name, name){
 						executor.logger.Info(i, pod.Status.Phase)
@@ -354,7 +353,6 @@ func (executor *Executor) execute(
 						break
 					}
 				}
-
 				if status != "Pending" {
 					msg = statusMap[status]
 					flag = true
