@@ -353,10 +353,9 @@ func (executor *Executor) execute(
 
 				time.Sleep(15 * time.Second)
 				pods, _ := executor.kube.GetNameSpacePods(namespace)
-
-				for i, pod := range pods.Items {
+				for _, pod := range pods.Items {
 					if strings.Contains(pod.Name, name){
-						executor.logger.Info(i, pod.Status.Phase)
+						executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
 						status = string(pod.Status.Phase)
 						break
 					}
