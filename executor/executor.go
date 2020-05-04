@@ -31,16 +31,15 @@ const (
 
 // Executor decision executor
 type Executor struct {
-	client    *client.Client
-	logger    *log.Logger
-	kube      *kuber.Kube
-	scanner   *scanner.Scanner
-	dryRun    bool
-	oomKilled chan uuid.UUID
-
-	workersCount int
-
+	client        *client.Client
+	logger        *log.Logger
+	kube          *kuber.Kube
+	scanner       *scanner.Scanner
+	dryRun        bool
+	oomKilled     chan uuid.UUID
+	workersCount  int
 	decisionsChan chan *proto.PacketDecision
+	inProgressJobs   map[string]bool
 }
 
 // InitExecutor creates a new excecutor then starts it
@@ -72,8 +71,8 @@ func NewExecutor(
 		scanner: scanner,
 		dryRun:  dryRun,
 
-		workersCount: workersCount,
-
+		workersCount:  workersCount,
+		inProgressJobs:   map[string]bool{},
 		decisionsChan: make(chan *proto.PacketDecision, decisionsBufferLength),
 	}
 
@@ -179,19 +178,23 @@ func (executor *Executor) handleExecutionSkipping(
 }
 
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
+
 	var decision proto.PacketDecision
 	if err = proto.DecodeSnappy(in, &decision); err != nil {
 		return
 	}
+	_, exist := executor.inProgressJobs[decision.ID.String()]
+	if !exist {
+		executor.inProgressJobs[decision.ID.String()] = true
+		convertDecisionMemoryFromKiloByteToMegabyte(&decision)
 
-	convertDecisionMemoryFromKiloByteToMegabyte(&decision)
-
-	err = executor.submitDecision(&decision, decisionsBufferTimeout)
-	if err != nil {
-		errMessage := err.Error()
-		return proto.EncodeSnappy(proto.PacketDecisionResponse{
-			Error: &errMessage,
-		})
+		err = executor.submitDecision(&decision, decisionsBufferTimeout)
+		if err != nil {
+			errMessage := err.Error()
+			return proto.EncodeSnappy(proto.PacketDecisionResponse{
+				Error: &errMessage,
+			})
+		}
 	}
 
 	return proto.EncodeSnappy(proto.PacketDecisionResponse{})
@@ -227,6 +230,9 @@ func (executor *Executor) executorWorker() {
 				"unable to execute decision",
 			)
 		}
+
+		delete(executor.inProgressJobs, decision.ID.String())
+
 		executor.client.Pipe(
 			client.Package{
 				Kind:        proto.PacketKindDecisionFeedback,
