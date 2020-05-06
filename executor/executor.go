@@ -339,39 +339,33 @@ func (executor *Executor) execute(
 		statusMap["Unknown"] = "pod status is unknown"
 		statusMap["PodInitializing"] = "pod restarting"
 
-		backoff := 15
+		backoff := 15 * time.Minute
 		msg := "pod restarting exceeded timout (15 min)"
+		start := time.Now()
+		timeout := int(backoff.Seconds())
+		diff := time.Now().Second() - start.Second()
 
-		for backoff > 0 {
+		for diff < timeout {
 
-			start := time.Now()
-			flag := false
+			status := "Pending"
 
-			for time.Now().Second() - start.Second() < 60 {
+			time.Sleep(15 * time.Second)
+			pods, _ := executor.kube.GetNameSpacePods(namespace)
 
-				status := "Pending"
-
-				time.Sleep(15 * time.Second)
-				pods, _ := executor.kube.GetNameSpacePods(namespace)
-				for _, pod := range pods.Items {
-					if strings.Contains(pod.Name, name){
-						executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
-						status = string(pod.Status.Phase)
-						break
-					}
-				}
-				if status != "Pending" {
-					msg = statusMap[status]
-					flag = true
+			for _, pod := range pods.Items {
+				if strings.Contains(pod.Name, name){
+					executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
+					status = string(pod.Status.Phase)
 					break
 				}
 			}
 
-			if flag {
+			if status != "Pending" {
+				msg = statusMap[status]
 				break
 			}
 
-			backoff--
+			diff = time.Now().Second() - start.Second()
 		}
 
 		executor.logger.Infof(ctx, msg)
