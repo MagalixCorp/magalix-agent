@@ -148,7 +148,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 		return nil
 	}
 
-	parents, err := kuber.GetParents(
+	parents, _ := kuber.GetParents(
 		&Pod{Pod: pod},
 		p.observer.ParentsStore,
 		func(kind string) (kuber.Watcher, bool) {
@@ -176,7 +176,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 		return nil
 	}
 
-	skipped, err := p.kube.SetResources(
+	/*skipped, err := p.kube.SetResources(
 		controllerKind,
 		controllerName,
 		namespace,
@@ -197,7 +197,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 			ctx.Reason(err),
 			"unable to execute OOMKill handler",
 		)
-	}
+	}*/
 
 	p.logger.Infof(ctx, "OOMKill handler executed")
 
