@@ -27,11 +27,6 @@ type KubeletSummaryContainer struct {
 		Time     time.Time
 		RSSBytes int64
 	}
-
-	RootFS struct {
-		Time      time.Time
-		UsedBytes int64
-	}
 }
 
 // KubeletSummary a struct to hold kubelet summary
@@ -46,20 +41,6 @@ type KubeletSummary struct {
 			Time     time.Time
 			RSSBytes int64
 		}
-
-		FS struct {
-			Time          time.Time
-			UsedBytes     int64
-			CapacityBytes int64
-		}
-
-		Network struct {
-			Time     time.Time
-			RxBytes  int64
-			RxErrors int64
-			TxBytes  int64
-			TxErrors int64
-		}
 	}
 	Pods []struct {
 		PodRef struct {
@@ -68,13 +49,6 @@ type KubeletSummary struct {
 		}
 
 		Containers []KubeletSummaryContainer
-		Network    struct {
-			Time     time.Time
-			RxBytes  int64
-			RxErrors int64
-			TxBytes  int64
-			TxErrors int64
-		}
 	}
 }
 
@@ -539,13 +513,6 @@ func (kubelet *Kubelet) GetMetrics(
 			}{
 				{"cpu/usage", tickTime, summary.Node.CPU.UsageCoreNanoSeconds},
 				{"memory/rss", tickTime, summary.Node.Memory.RSSBytes},
-				{"filesystem/usage", tickTime, summary.Node.FS.UsedBytes},
-				{"filesystem/node_capacity", tickTime, summary.Node.FS.CapacityBytes},
-				{"filesystem/node_allocatable", tickTime, summary.Node.FS.CapacityBytes},
-				{"network/tx", tickTime, summary.Node.Network.TxBytes},
-				{"network/rx", tickTime, summary.Node.Network.RxBytes},
-				{"network/tx_errors", tickTime, summary.Node.Network.TxErrors},
-				{"network/rx_errors", tickTime, summary.Node.Network.RxErrors},
 			} {
 				addMetricValue(
 					TypeNode,
@@ -569,10 +536,6 @@ func (kubelet *Kubelet) GetMetrics(
 				Multiplier int64
 			}{
 				{"cpu/usage_rate", tickTime, summary.Node.CPU.UsageCoreNanoSeconds, 1000},
-				{"network/tx_rate", tickTime, summary.Node.Network.TxBytes, 1e9},
-				{"network/rx_rate", tickTime, summary.Node.Network.RxBytes, 1e9},
-				{"network/tx_errors_rate", tickTime, summary.Node.Network.TxErrors, 1e9},
-				{"network/rx_errors_rate", tickTime, summary.Node.Network.RxErrors, 1e9},
 			} {
 
 				addMetricValueRate(
@@ -611,59 +574,6 @@ func (kubelet *Kubelet) GetMetrics(
 					continue
 				}
 
-				for _, measurement := range []struct {
-					Name  string
-					Time  time.Time
-					Value int64
-				}{
-					{"network/tx", tickTime, pod.Network.TxBytes},
-					{"network/rx", tickTime, pod.Network.TxBytes},
-					{"network/tx_errors", tickTime, pod.Network.TxErrors},
-					{"network/rx_errors", tickTime, pod.Network.RxErrors},
-				} {
-					addMetricValue(
-						TypePod,
-						measurement.Name,
-						node.Name,
-						nodeIP,
-						namespaceName,
-						controllerName,
-						controllerKind,
-						"",
-						pod.PodRef.Name,
-						measurement.Time,
-						measurement.Value,
-					)
-				}
-
-				for _, measurement := range []struct {
-					Name  string
-					Time  time.Time
-					Value int64
-				}{
-					{"network/tx_rate", tickTime, pod.Network.TxBytes},
-					{"network/rx_rate", tickTime, pod.Network.TxBytes},
-					{"network/tx_errors_rate", tickTime, pod.Network.TxErrors},
-					{"network/rx_errors_rate", tickTime, pod.Network.RxErrors},
-				} {
-					addMetricValueRate(
-						TypePod,
-						"Pod",
-						pod.PodRef.Name,
-						measurement.Name,
-						node.Name,
-						nodeIP,
-						namespaceName,
-						controllerName,
-						controllerKind,
-						"",
-						pod.PodRef.Name,
-						measurement.Time,
-						measurement.Value,
-						1e9,
-					)
-				}
-
 				// NOTE: possible bug in cAdvisor
 				// Sometimes, when a container is restarted cAdvisor don't
 				// understand this. It don't delete old stats of the old deleted
@@ -694,7 +604,6 @@ func (kubelet *Kubelet) GetMetrics(
 					}{
 						{"cpu/usage", tickTime, container.CPU.UsageCoreNanoSeconds},
 						{"memory/rss", tickTime, container.Memory.RSSBytes},
-						{"filesystem/usage", tickTime, container.RootFS.UsedBytes},
 					} {
 						addMetricValue(
 							TypePodContainer,
