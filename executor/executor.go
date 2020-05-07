@@ -343,9 +343,8 @@ func (executor *Executor) execute(
 		msg := "pod restarting exceeded timout (15 min)"
 		start := time.Now()
 		timeout := int(backoff.Seconds())
-		diff := time.Now().Second() - start.Second()
 
-		for diff < timeout {
+		for time.Now().Second() - start.Second() < timeout {
 
 			status := "Pending"
 
@@ -365,10 +364,9 @@ func (executor *Executor) execute(
 				break
 			}
 
-			diff = time.Now().Second() - start.Second()
 		}
 
-		executor.logger.Infof(ctx, msg)
+		executor.logger.Infof(ctx, msg, time.Now().Second(), ": ", start.Second())
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,
