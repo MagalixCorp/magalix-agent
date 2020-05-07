@@ -3,6 +3,7 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/client"
@@ -255,6 +256,7 @@ func (executor *Executor) execute(
 		Describe("service-id", decision.ServiceId).
 		Describe("container-id", decision.ContainerId)
 
+
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
@@ -328,9 +330,43 @@ func (executor *Executor) execute(
 			}
 			return response, nil
 		}
-		msg := "decision executed successfully"
 
-		executor.logger.Infof(ctx, msg)
+		// short pooling to trigger pod status with max 15 minutes
+
+		statusMap := make(map[string]string)
+		statusMap["Running"] = "pod restarted successfully"
+		statusMap["Failed"] = "pod failed to restart"
+		statusMap["Unknown"] = "pod status is unknown"
+		statusMap["PodInitializing"] = "pod restarting"
+
+		backoff := 15 * time.Minute
+		msg := "pod restarting exceeded timout (15 min)"
+		start := time.Now()
+		timeout := int(backoff.Seconds())
+
+		for time.Now().Second() - start.Second() < timeout {
+
+			status := "Pending"
+
+			time.Sleep(15 * time.Second)
+			pods, _ := executor.kube.GetNameSpacePods(namespace)
+
+			for _, pod := range pods.Items {
+				if strings.Contains(pod.Name, name){
+					executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
+					status = string(pod.Status.Phase)
+					break
+				}
+			}
+
+			if status != "Pending" {
+				msg = statusMap[status]
+				break
+			}
+
+		}
+
+		executor.logger.Infof(ctx, msg, time.Now().Second(), ": ", start.Second())
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,
