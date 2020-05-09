@@ -14,6 +14,7 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
+	kv1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -28,6 +29,8 @@ const (
 	decisionsFeedbackExpiryCount    = 0
 	decisionsFeedbackExpiryPriority = 10
 	decisionsFeedbackExpiryRetries  = 5
+	decisionsExecutionTimeout		= 15 * time.Minute
+	podStatusSleep					= 15 * time.Second
 )
 
 // Executor decision executor
@@ -332,23 +335,20 @@ func (executor *Executor) execute(
 		}
 
 		// short pooling to trigger pod status with max 15 minutes
-
 		statusMap := make(map[string]string)
-		statusMap["Running"] = "pod restarted successfully"
-		statusMap["Failed"] = "pod failed to restart"
-		statusMap["Unknown"] = "pod status is unknown"
-		statusMap["PodInitializing"] = "pod restarting"
+		statusMap[string(kv1.PodRunning)] = "pod restarted successfully"
+		statusMap[string(kv1.PodFailed)] = "pod failed to restart"
+		statusMap[string(kv1.PodUnknown)] = "pod status is unknown"
+		statusMap[string(kv1.PodInitialized)] = "pod restarting"
 
-		backoff := 15 * time.Minute
 		msg := "pod restarting exceeded timout (15 min)"
 		start := time.Now()
-		timeout := int(backoff.Seconds())
 
-		for time.Now().Second() - start.Second() < timeout {
+		for time.Now().Sub(start) < decisionsExecutionTimeout {
 
-			status := "Pending"
+			status := string(kv1.PodPending)
 
-			time.Sleep(15 * time.Second)
+			time.Sleep(podStatusSleep)
 			pods, _ := executor.kube.GetNameSpacePods(namespace)
 
 			for _, pod := range pods.Items {
@@ -359,7 +359,7 @@ func (executor *Executor) execute(
 				}
 			}
 
-			if status != "Pending" {
+			if status != string(kv1.PodPending) {
 				msg = statusMap[status]
 				break
 			}
