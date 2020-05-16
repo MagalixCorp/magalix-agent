@@ -18,7 +18,7 @@ import (
 
 const (
 	ProtocolMajorVersion = 2
-	ProtocolMinorVersion = 0
+	ProtocolMinorVersion = 3
 
 	logsQueueSize = 1024
 )
