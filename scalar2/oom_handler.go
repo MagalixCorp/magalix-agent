@@ -132,11 +132,10 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 				toChangeContainers,
 				kuber.ContainerResourcesRequirements{
 					Name: container.Name,
-					Limits: kuber.RequestLimit{
-						Memory: &newMemLimits,
-					},
+					Limits: new(kuber.RequestLimit),
 				},
 			)
+			toChangeContainers[0].Limits.Memory = &newMemLimits
 			containersDebugData = append(
 				containersDebugData,
 				fmt.Sprintf("%s:%d->%d", status.Name, currentMemLimits, newMemLimits),

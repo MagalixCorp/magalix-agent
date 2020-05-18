@@ -55,8 +55,8 @@ type RequestLimit struct {
 // ContainerResources container resources
 type ContainerResourcesRequirements struct {
 	Name     string
-	Requests RequestLimit
-	Limits   RequestLimit
+	Requests *RequestLimit
+	Limits   *RequestLimit
 }
 
 // TotalResources service resources and replicas

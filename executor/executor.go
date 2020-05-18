@@ -293,8 +293,8 @@ func (executor *Executor) execute(
 		Containers: []kuber.ContainerResourcesRequirements{
 			{
 				Name: containerName,
-				Limits: kuber.RequestLimit{},
-				Requests: kuber.RequestLimit{},
+				Limits: new(kuber.RequestLimit),
+				Requests: new(kuber.RequestLimit),
 			},
 		},
 	}
