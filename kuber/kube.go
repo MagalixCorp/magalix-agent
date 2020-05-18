@@ -61,7 +61,6 @@ type ContainerResourcesRequirements struct {
 
 // TotalResources service resources and replicas
 type TotalResources struct {
-	Replicas   *int
 	Containers []ContainerResourcesRequirements
 }
 
@@ -685,7 +684,7 @@ func (kube *Kube) SetResources(
 	namespace string,
 	totalResources TotalResources,
 ) (skipped bool, err error) {
-	if len(totalResources.Containers) == 0 && totalResources.Replicas == nil {
+	if len(totalResources.Containers) == 0 {
 		return false, fmt.Errorf("invalid resources passed, nothing to change")
 	}
 
@@ -787,12 +786,6 @@ func (kube *Kube) SetResources(
 				"containers": containerSpecs,
 			},
 		}
-	}
-
-	// setting replicas=nil makes k8s set the replicas to 1
-	if totalResources.Replicas != nil && *totalResources.Replicas > 0 {
-		spec := body["spec"].(map[string]interface{})
-		spec["replicas"] = totalResources.Replicas
 	}
 
 	b, err := json.Marshal(body)

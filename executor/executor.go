@@ -201,8 +201,12 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 }
 
 func convertDecisionMemoryFromKiloByteToMegabyte(decision *proto.PacketDecision) {
-	*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
-	*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
+	if decision.ContainerResources.Requests != nil && decision.ContainerResources.Requests.Memory != nil{
+		*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
+	}
+	if decision.ContainerResources.Limits != nil && decision.ContainerResources.Limits.Memory != nil{
+		*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
+	}
 }
 
 func (executor *Executor) submitDecision(
@@ -289,19 +293,27 @@ func (executor *Executor) execute(
 		Containers: []kuber.ContainerResourcesRequirements{
 			{
 				Name: containerName,
-				Limits: kuber.RequestLimit{
-					Memory: decision.ContainerResources.Limits.Memory,
-					CPU:    decision.ContainerResources.Limits.CPU,
-				},
-				Requests: kuber.RequestLimit{
-					Memory: decision.ContainerResources.Requests.Memory,
-					CPU:    decision.ContainerResources.Requests.CPU,
-				},
+				Limits: kuber.RequestLimit{},
+				Requests: kuber.RequestLimit{},
 			},
 		},
 	}
-
-
+	if decision.ContainerResources.Requests != nil {
+		if decision.ContainerResources.Requests.CPU != nil {
+			totalResources.Containers[0].Requests.CPU = decision.ContainerResources.Requests.CPU
+		}
+		if decision.ContainerResources.Requests.Memory != nil {
+			totalResources.Containers[0].Requests.Memory = decision.ContainerResources.Requests.Memory
+		}
+	}
+	if decision.ContainerResources.Limits != nil {
+		if decision.ContainerResources.Limits.CPU != nil {
+			totalResources.Containers[0].Limits.CPU = decision.ContainerResources.Limits.CPU
+		}
+		if decision.ContainerResources.Limits.Memory != nil {
+			totalResources.Containers[0].Limits.Memory = decision.ContainerResources.Limits.Memory
+		}
+	}
 
 	trace, _ := json.Marshal(totalResources)
 	executor.logger.Infof(
