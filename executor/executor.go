@@ -3,6 +3,7 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/client"
@@ -13,6 +14,7 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
+	kv1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -27,6 +29,8 @@ const (
 	decisionsFeedbackExpiryCount    = 0
 	decisionsFeedbackExpiryPriority = 10
 	decisionsFeedbackExpiryRetries  = 5
+	decisionsExecutionTimeout		= 15 * time.Minute
+	podStatusSleep					= 15 * time.Second
 )
 
 // Executor decision executor
@@ -259,6 +263,7 @@ func (executor *Executor) execute(
 		Describe("service-id", decision.ServiceId).
 		Describe("container-id", decision.ContainerId)
 
+
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
@@ -340,9 +345,94 @@ func (executor *Executor) execute(
 			}
 			return response, nil
 		}
-		msg := "decision executed successfully"
 
-		executor.logger.Infof(ctx, msg)
+
+		// short pooling to trigger pod status with max 15 minutes
+		statusMap := make(map[kv1.PodPhase]string)
+		statusMap[kv1.PodRunning] = "pods restarted successfully"
+		statusMap[kv1.PodFailed] = "pods failed to restart"
+		statusMap[kv1.PodUnknown] = "pods status is unknown"
+
+		msg := "pods restarting exceeded timout (15 min)"
+		start := time.Now()
+
+		entitiName := ""
+		var targetPodCount int32 = 0
+		var runningPods int32 = 0
+		flag := false
+
+		if strings.ToLower(kind) == "deployment"{
+
+			replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
+
+			if err != nil {
+				flag = true
+
+			}else{
+				// get the new replicaset
+				for _, replica := range replicasets.Items {
+					if strings.Contains(replica.Name, name) && replica.Status.ReadyReplicas > 0{
+						entitiName = replica.Name
+						targetPodCount = *replica.Spec.Replicas
+						break
+					}
+				}
+			}
+
+		}else if strings.ToLower(kind) == "statefulset"{
+
+			statefulset, err := executor.kube.GetStatefulSet(namespace, name)
+
+			if err != nil {
+				flag = true
+
+			}else{
+				// get the new StatefulSet
+					if statefulset.Status.ReadyReplicas > 0 {
+						entitiName = statefulset.Name
+						targetPodCount = *statefulset.Spec.Replicas
+					}
+			}
+		}
+
+		if flag {
+			msg = "failed to trigger pod status"
+
+		}else {
+
+			// get pods of the new controller
+			for time.Now().Sub(start) < decisionsExecutionTimeout {
+
+				status := kv1.PodPending
+
+				time.Sleep(podStatusSleep)
+				pods, err := executor.kube.GetNameSpacePods(namespace)
+
+				if err != nil {
+					msg = "failed to trigger pod status"
+					break
+				}
+
+				for _, pod := range pods.Items {
+					if strings.Contains(pod.Name, entitiName){
+						executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
+						status = pod.Status.Phase
+						if status == kv1.PodRunning {
+							runningPods++
+						}else if status != kv1.PodPending {
+							break
+						}
+					}
+				}
+
+				if runningPods == targetPodCount {
+					msg = statusMap[status]
+					break
+				}
+			}
+		}
+
+		executor.logger.Infof(ctx, msg, "time: ", time.Now(), " .... ", start)
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,

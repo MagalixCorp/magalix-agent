@@ -500,6 +500,20 @@ func (kube *Kube) GetPods() (*kv1.PodList, error) {
 	return podList, nil
 }
 
+// GetPods get kubernetes pods for namespace
+func (kube *Kube) GetNameSpacePods(namespace string) (*kv1.PodList, error) {
+	kube.logger.Debugf(nil, "{kubernetes} retrieving list of pods")
+	podList, err := kube.core.Pods(namespace).List(kmeta.ListOptions{})
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to retrieve pods from all namespaces",
+		)
+	}
+
+	return podList, nil
+}
+
 // GetReplicationControllers get replication controllers
 func (kube *Kube) GetReplicationControllers() (
 	*kv1.ReplicationControllerList, error,
@@ -598,6 +612,30 @@ func (kube *Kube) GetReplicaSets() (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
 	replicaSets, err := kube.apps.
 		ReplicaSets("").
+		List(kmeta.ListOptions{})
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to retrieve replica sets from all namespaces",
+		)
+	}
+
+	if replicaSets != nil {
+		for _, item := range replicaSets.Items {
+			maskPodSpec(&item.Spec.Template.Spec)
+		}
+	}
+
+	return replicaSets, nil
+}
+
+// GetReplicaSets get replicasets
+func (kube *Kube) GetNamespaceReplicaSets(namespace string) (
+	*kbeta2.ReplicaSetList, error,
+) {
+	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
+	replicaSets, err := kube.apps.
+		ReplicaSets(namespace).
 		List(kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
