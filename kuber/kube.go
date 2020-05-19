@@ -581,31 +581,6 @@ func (kube *Kube) GetStatefulSets() (
 	return statefulSets, nil
 }
 
-
-// GetStatefulSets get statuful sets
-func (kube *Kube) GetNamespaceStatefulSets(namespace string) (
-	*kbeta2.StatefulSetList, error,
-) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of stateful sets")
-	statefulSets, err := kube.apps.
-		StatefulSets(namespace).
-		List(kmeta.ListOptions{})
-	if err != nil {
-		return nil, karma.Format(
-			err,
-			"unable to retrieve stateful sets from all namespaces",
-		)
-	}
-
-	if statefulSets != nil {
-		for _, item := range statefulSets.Items {
-			maskPodSpec(&item.Spec.Template.Spec)
-		}
-	}
-
-	return statefulSets, nil
-}
-
 // GetDaemonSets get daemon sets
 func (kube *Kube) GetDaemonSets() (
 	*kbeta2.DaemonSetList, error,
