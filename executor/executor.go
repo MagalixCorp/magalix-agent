@@ -205,8 +205,12 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 }
 
 func convertDecisionMemoryFromKiloByteToMegabyte(decision *proto.PacketDecision) {
-	*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
-	*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
+	if decision.ContainerResources.Requests != nil && decision.ContainerResources.Requests.Memory != nil{
+		*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
+	}
+	if decision.ContainerResources.Limits != nil && decision.ContainerResources.Limits.Memory != nil{
+		*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
+	}
 }
 
 func (executor *Executor) submitDecision(
@@ -294,19 +298,27 @@ func (executor *Executor) execute(
 		Containers: []kuber.ContainerResourcesRequirements{
 			{
 				Name: containerName,
-				Limits: kuber.RequestLimit{
-					Memory: decision.ContainerResources.Limits.Memory,
-					CPU:    decision.ContainerResources.Limits.CPU,
-				},
-				Requests: kuber.RequestLimit{
-					Memory: decision.ContainerResources.Requests.Memory,
-					CPU:    decision.ContainerResources.Requests.CPU,
-				},
+				Limits: new(kuber.RequestLimit),
+				Requests: new(kuber.RequestLimit),
 			},
 		},
 	}
-
-
+	if decision.ContainerResources.Requests != nil {
+		if decision.ContainerResources.Requests.CPU != nil {
+			totalResources.Containers[0].Requests.CPU = decision.ContainerResources.Requests.CPU
+		}
+		if decision.ContainerResources.Requests.Memory != nil {
+			totalResources.Containers[0].Requests.Memory = decision.ContainerResources.Requests.Memory
+		}
+	}
+	if decision.ContainerResources.Limits != nil {
+		if decision.ContainerResources.Limits.CPU != nil {
+			totalResources.Containers[0].Limits.CPU = decision.ContainerResources.Limits.CPU
+		}
+		if decision.ContainerResources.Limits.Memory != nil {
+			totalResources.Containers[0].Limits.Memory = decision.ContainerResources.Limits.Memory
+		}
+	}
 
 	trace, _ := json.Marshal(totalResources)
 	executor.logger.Infof(
@@ -349,7 +361,7 @@ func (executor *Executor) execute(
 		var runningPods int32 = 0
 		flag := false
 
-		if kind == "Deployment"{
+		if strings.ToLower(kind) == "deployment"{
 
 			replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
 
@@ -367,24 +379,20 @@ func (executor *Executor) execute(
 				}
 			}
 
-		}else if kind == "StatefulSet"{
+		}else if strings.ToLower(kind) == "statefulset"{
 
-			statefulsets, err := executor.kube.GetNamespaceStatefulSets(namespace)
+			statefulset, err := executor.kube.GetStatefulSet(namespace, name)
 
 			if err != nil {
 				flag = true
 
 			}else{
 				// get the new StatefulSet
-				for _, replica := range statefulsets.Items {
-					if strings.Contains(replica.Name, name) && replica.Status.ReadyReplicas > 0{
-						entitiName = replica.Name
-						targetPodCount = *replica.Spec.Replicas
-						break
+					if statefulset.Status.ReadyReplicas > 0 {
+						entitiName = statefulset.Name
+						targetPodCount = *statefulset.Spec.Replicas
 					}
-				}
 			}
-
 		}
 
 		if flag {
@@ -424,7 +432,7 @@ func (executor *Executor) execute(
 			}
 		}
 
-		executor.logger.Infof(ctx, msg)
+		executor.logger.Infof(ctx, msg, "time: ", time.Now(), " .... ", start)
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,

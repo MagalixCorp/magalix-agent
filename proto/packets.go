@@ -287,8 +287,8 @@ type RequestLimit struct {
 }
 
 type ContainerResources struct {
-	Requests RequestLimit `json:"requests,omitempty"`
-	Limits   RequestLimit `json:"limits,omitempty"`
+	Requests *RequestLimit `json:"requests,omitempty"`
+	Limits   *RequestLimit `json:"limits,omitempty"`
 }
 
 type PacketDecision struct {
