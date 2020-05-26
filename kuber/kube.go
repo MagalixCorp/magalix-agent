@@ -2,6 +2,7 @@ package kuber
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -13,7 +14,7 @@ import (
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/api/apps/v1"
+	v1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
@@ -138,7 +139,7 @@ func InitKubernetes(
 // GetNodes get kubernetes nodes
 func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of nodes")
-	nodes, err := kube.core.Nodes().List(kmeta.ListOptions{})
+	nodes, err := kube.core.Nodes().List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -489,7 +490,7 @@ func newInt32Pointer(val int32) *int32 {
 // GetPods get kubernetes pods
 func (kube *Kube) GetPods() (*kv1.PodList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of pods")
-	podList, err := kube.core.Pods("").List(kmeta.ListOptions{})
+	podList, err := kube.core.Pods("").List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -503,7 +504,7 @@ func (kube *Kube) GetPods() (*kv1.PodList, error) {
 // GetPods get kubernetes pods for namespace
 func (kube *Kube) GetNameSpacePods(namespace string) (*kv1.PodList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of pods")
-	podList, err := kube.core.Pods(namespace).List(kmeta.ListOptions{})
+	podList, err := kube.core.Pods(namespace).List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -520,7 +521,7 @@ func (kube *Kube) GetReplicationControllers() (
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replication controllers")
 	controllers, err := kube.core.ReplicationControllers("").
-		List(kmeta.ListOptions{})
+		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -540,7 +541,7 @@ func (kube *Kube) GetReplicationControllers() (
 // GetDeployments get deployments
 func (kube *Kube) GetDeployments() (*kbeta2.DeploymentList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of deployments")
-	deployments, err := kube.apps.Deployments("").List(kmeta.ListOptions{})
+	deployments, err := kube.apps.Deployments("").List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -564,7 +565,7 @@ func (kube *Kube) GetStatefulSets() (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of stateful sets")
 	statefulSets, err := kube.apps.
 		StatefulSets("").
-		List(kmeta.ListOptions{})
+		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -588,7 +589,7 @@ func (kube *Kube) GetDaemonSets() (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of daemon sets")
 	daemonSets, err := kube.apps.
 		DaemonSets("").
-		List(kmeta.ListOptions{})
+		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -612,7 +613,7 @@ func (kube *Kube) GetReplicaSets() (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
 	replicaSets, err := kube.apps.
 		ReplicaSets("").
-		List(kmeta.ListOptions{})
+		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -636,7 +637,7 @@ func (kube *Kube) GetNamespaceReplicaSets(namespace string) (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
 	replicaSets, err := kube.apps.
 		ReplicaSets(namespace).
-		List(kmeta.ListOptions{})
+		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -660,7 +661,7 @@ func (kube *Kube) GetCronJobs() (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
 	cronJobs, err := kube.batch.
 		CronJobs("").
-		List(kmeta.ListOptions{})
+		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -683,7 +684,7 @@ func (kube *Kube) GetLimitRanges() (
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of limitRanges from all namespaces")
 	limitRanges, err := kube.core.LimitRanges("").
-		List(kmeta.ListOptions{})
+		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -699,7 +700,7 @@ func (kube *Kube) GetStatefulSet(namespace, name string) (
 ) {
 	statefulSet, err := kube.Clientset.AppsV1().
 		StatefulSets(namespace).
-		Get(name, kmeta.GetOptions{})
+		Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -836,7 +837,7 @@ func (kube *Kube) SetResources(
 		Name(name).
 		Body(bytes.NewBuffer(b))
 
-	res := req.Do()
+	res := req.Do(context.Background())
 
 	_, err = res.Get()
 	return false, err
