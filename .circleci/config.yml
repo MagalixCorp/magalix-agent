@@ -2,7 +2,7 @@ version: 2
 jobs:
   "build & push":
     docker:
-      - image: magalixcorp/circleci-golang-lite
+      - image: magalixcorp/circleci-golang-lite:1.14
 
     steps:
       - run:
@@ -10,6 +10,7 @@ jobs:
           command: |
             echo 'export SOURCE_PATH=/home/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME' >> $BASH_ENV
             echo 'export GO111MODULE=on' >> $BASH_ENV
+            echo 'export GOPRIVATE=github.com/MagalixTechnologies' >> $BASH_ENV
             echo 'export PATH=/usr/local/bin/upx:$PATH' >> $BASH_ENV
             echo 'export PATH=/usr/bin/gcloud:$PATH' >> $BASH_ENV
             echo 'export PATH=/root/google-cloud-sdk/bin:$PATH' >> $BASH_ENV
