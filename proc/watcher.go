@@ -135,7 +135,11 @@ func (observer *Observer) Start() {
 		go observer.watchReplicationControllers(watchers, stopCh)
 
 		watchers.Add(1)
-		go observer.watchStatefulSets(watchers, stopCh)
+		if version >= 16 {
+			go observer.watchStatefulSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchStatefulSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
+		}
 
 		watchers.Add(1)
 		go observer.watchDaemonSets(watchers, stopCh)
@@ -273,6 +277,7 @@ func (observer *Observer) watchDeployments(
 
 func (observer *Observer) watchStatefulSets(
 	watchers *sync.WaitGroup,
+	client rest.Interface,
 	stopCh chan struct{},
 ) {
 
@@ -281,7 +286,7 @@ func (observer *Observer) watchStatefulSets(
 	observer.watch(
 		watchers,
 		stopCh,
-		observer.clientV1Beta2.RESTClient(),
+		client,
 		"statefulset",
 		&kbeta2.StatefulSet{},
 
