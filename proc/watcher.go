@@ -374,6 +374,8 @@ func (observer *Observer) watchDaemonSets(
 
 	infof(nil, "{kubernetes} starting observer of daemonSets")
 
+	fmt.Println("====================", client.APIVersion().Version)
+	fmt.Println("====================", client.APIVersion().Group)
 	observer.watch(
 		watchers,
 		stopCh,
