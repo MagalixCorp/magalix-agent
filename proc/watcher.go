@@ -252,37 +252,69 @@ func (observer *Observer) watchDeployments(
 	stopCh chan struct{},
 ) {
 	infof(nil, "{kubernetes} starting observer of deployments")
+	if client.APIVersion().Version == "v1" {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"deployment",
+			&kv1.Deployment{},
 
-	observer.watch(
-		watchers,
-		stopCh,
-		client,
-		"deployment",
-		&kext.Deployment{},
-
-		func(obj interface{}) {
-			err := observer.handleDeployment(
-				obj.(*kext.Deployment),
-			)
-			if err != nil {
-				errorf(err, "{kubernetes} unable to handle deployment")
-
-				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling deployments",
-					),
-					"watch", "deployments",
+			func(obj interface{}) {
+				err := observer.handleDeploymentV1(
+					obj.(*kv1.Deployment),
 				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle deployment")
 
-				stats.Increase("watch/deployments/error")
-			} else {
-				stats.Increase("watch/deployments/success")
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling deployments",
+						),
+						"watch", "deployments",
+					)
 
-				observer.health.Resolve("watch", "deployments")
-			}
-		},
-	)
+					stats.Increase("watch/deployments/error")
+				} else {
+					stats.Increase("watch/deployments/success")
+
+					observer.health.Resolve("watch", "deployments")
+				}
+			},
+		)
+	} else {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"deployment",
+			&kext.Deployment{},
+
+			func(obj interface{}) {
+				err := observer.handleDeployment(
+					obj.(*kext.Deployment),
+				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle deployment")
+
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling deployments",
+						),
+						"watch", "deployments",
+					)
+
+					stats.Increase("watch/deployments/error")
+				} else {
+					stats.Increase("watch/deployments/success")
+
+					observer.health.Resolve("watch", "deployments")
+				}
+			},
+		)
+	}
 }
 
 func (observer *Observer) watchStatefulSets(
@@ -704,6 +736,53 @@ func (observer *Observer) handleReplicationController(
 
 func (observer *Observer) handleDeployment(
 	deployment *kext.Deployment,
+) error {
+	// specify until they fix it
+	// https://github.com/kubernetes/client-go/issues/413
+	deployment.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind: "Deployment",
+	})
+
+	if observer.identificator.IsIgnored(deployment) {
+		return nil
+	}
+
+	tracef(
+		karma.Describe("deployment", logger.TraceJSON(deployment)),
+		"{kubernetes} handling deployment",
+	)
+
+	context := karma.
+		Describe("namespace", deployment.Namespace).
+		Describe("deployment", deployment.Name)
+
+	id, accountID, applicationID, serviceID, err := observer.identify(deployment)
+	if err != nil {
+		return context.Format(
+			err,
+			"unable to identify deployment",
+		)
+	}
+
+	replicas := 1
+	if deployment.Spec.Replicas != nil {
+		replicas = int(*deployment.Spec.Replicas)
+	}
+
+	observer.replicas <- ReplicaSpec{
+		Name:          deployment.Name,
+		ID:            id,
+		AccountID:     accountID,
+		ApplicationID: applicationID,
+		ServiceID:     serviceID,
+		Replicas:      replicas,
+	}
+
+	return nil
+}
+
+func (observer *Observer) handleDeploymentV1(
+	deployment *kv1.Deployment,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
