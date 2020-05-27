@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -10,6 +11,11 @@ import (
 	"github.com/reconquest/health-go"
 	"github.com/reconquest/karma-go"
 	"github.com/reconquest/stats-go"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kapi "k8s.io/api/core/v1"
@@ -17,12 +23,9 @@ import (
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kfields "k8s.io/apimachinery/pkg/fields"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	kutilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes"
 	beta2client "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
 	beta1batchclient "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
-	"k8s.io/client-go/rest"
 	kcache "k8s.io/client-go/tools/cache"
 )
 
@@ -76,6 +79,23 @@ func (observer *Observer) SetSyncCallback(fn func()) {
 	observer.syncer.SetOnSync(fn)
 }
 
+func (observer *Observer) minorVersion() (int, error) {
+	discoveryClient := discovery.NewDiscoveryClient(observer.clientset.CoreV1().RESTClient())
+	version, err := discoveryClient.ServerVersion()
+	if err != nil {
+		return 0, err
+	}
+	minor := version.Minor
+
+	// remove + if found contains
+	last1 := minor[len(minor)-1:]
+	if last1 == "+" {
+		minor = minor[0 : len(minor)-1]
+	}
+
+	return strconv.Atoi(minor)
+}
+
 // Start start the observer
 func (observer *Observer) Start() {
 	var mutex sync.Mutex
@@ -104,6 +124,7 @@ func (observer *Observer) Start() {
 	)
 
 	watchers := &sync.WaitGroup{}
+	version, _ := observer.minorVersion()
 
 	for {
 
@@ -123,7 +144,11 @@ func (observer *Observer) Start() {
 		go observer.watchDeployments(watchers, stopCh)
 
 		watchers.Add(1)
-		go observer.watchReplicaSets(watchers, stopCh)
+		if version >= 16 {
+			go observer.watchReplicaSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
+		}
 
 		// watchers.Add(1)
 		// go observer.watchCronJobs(watchers, stopCh)
@@ -726,6 +751,7 @@ func (observer *Observer) handleCronJob(
 
 func (observer *Observer) watchReplicaSets(
 	watchers *sync.WaitGroup,
+	client rest.Interface,
 	stopCh chan struct{},
 ) {
 
@@ -734,7 +760,7 @@ func (observer *Observer) watchReplicaSets(
 	observer.watch(
 		watchers,
 		stopCh,
-		observer.clientV1Beta2.RESTClient(),
+		client,
 		"replicaset",
 		&kbeta2.ReplicaSet{},
 
