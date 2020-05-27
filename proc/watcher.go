@@ -158,10 +158,8 @@ func (observer *Observer) Start() {
 
 		watchers.Add(1)
 		if version >= 16 {
-			fmt.Println("replicaset v1")
 			go observer.watchReplicaSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
 		} else {
-			fmt.Println("replicaset v1beta1")
 			go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
 		}
 
@@ -928,41 +926,125 @@ func (observer *Observer) watchReplicaSets(
 ) {
 
 	infof(nil, "{kubernetes} starting observer of replicaSets")
+	if client.APIVersion().Version == "v1" {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"replicaset",
+			&kv1.ReplicaSet{},
 
-	observer.watch(
-		watchers,
-		stopCh,
-		client,
-		"replicaset",
-		&kbeta2.ReplicaSet{},
-
-		func(obj interface{}) {
-			// skip watching replica sets that are controlled of other controllers
-			if rs := obj.(*kbeta2.ReplicaSet); len(rs.OwnerReferences) > 0 {
-				return
-			}
-			err := observer.handleReplicaSet(
-				obj.(*kbeta2.ReplicaSet),
-			)
-			if err != nil {
-				errorf(err, "{kubernetes} unable to handle replicaSet")
-
-				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling replicaSets",
-					),
-					"watch", "replicasets",
+			func(obj interface{}) {
+				// skip watching replica sets that are controlled of other controllers
+				if rs := obj.(*kv1.ReplicaSet); len(rs.OwnerReferences) > 0 {
+					return
+				}
+				err := observer.handleReplicaSetV1(
+					obj.(*kv1.ReplicaSet),
 				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle replicaSet")
 
-				stats.Increase("watch/replicasets/error")
-			} else {
-				stats.Increase("watch/replicasets/success")
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling replicaSets",
+						),
+						"watch", "replicasets",
+					)
 
-				observer.health.Resolve("watch", "replicasets")
-			}
-		},
+					stats.Increase("watch/replicasets/error")
+				} else {
+					stats.Increase("watch/replicasets/success")
+
+					observer.health.Resolve("watch", "replicasets")
+				}
+			},
+		)
+	} else {
+
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"replicaset",
+			&kbeta2.ReplicaSet{},
+
+			func(obj interface{}) {
+				// skip watching replica sets that are controlled of other controllers
+				if rs := obj.(*kbeta2.ReplicaSet); len(rs.OwnerReferences) > 0 {
+					return
+				}
+				err := observer.handleReplicaSet(
+					obj.(*kbeta2.ReplicaSet),
+				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle replicaSet")
+
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling replicaSets",
+						),
+						"watch", "replicasets",
+					)
+
+					stats.Increase("watch/replicasets/error")
+				} else {
+					stats.Increase("watch/replicasets/success")
+
+					observer.health.Resolve("watch", "replicasets")
+				}
+			},
+		)
+	}
+}
+
+func (observer *Observer) handleReplicaSetV1(
+	replicaset *kv1.ReplicaSet,
+) error {
+	// specify until they fix it
+	// https://github.com/kubernetes/client-go/issues/413
+	replicaset.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind: "ReplicaSet",
+	})
+
+	if observer.identificator.IsIgnored(replicaset) {
+		return nil
+	}
+
+	tracef(
+		karma.Describe("replicaset", logger.TraceJSON(replicaset)),
+		"{kubernetes} handling replicaset",
 	)
+
+	context := karma.
+		Describe("namespace", replicaset.Namespace).
+		Describe("replicaset", replicaset.Name)
+
+	id, accountID, applicationID, serviceID, err := observer.identify(replicaset)
+	if err != nil {
+		return context.Format(
+			err,
+			"unable to identify replicaset",
+		)
+	}
+
+	replicas := 1
+	if replicaset.Spec.Replicas != nil {
+		replicas = int(*replicaset.Spec.Replicas)
+	}
+
+	observer.replicas <- ReplicaSpec{
+		Name:          replicaset.Name,
+		ID:            id,
+		AccountID:     accountID,
+		ApplicationID: applicationID,
+		ServiceID:     serviceID,
+		Replicas:      replicas,
+	}
+
+	return nil
 }
 
 func (observer *Observer) handleReplicaSet(
