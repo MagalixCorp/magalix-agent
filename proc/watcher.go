@@ -158,8 +158,10 @@ func (observer *Observer) Start() {
 
 		watchers.Add(1)
 		if version >= 16 {
+			fmt.Println("replicaset v1")
 			go observer.watchReplicaSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
 		} else {
+			fmt.Println("replicaset v1beta1")
 			go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
 		}
 
@@ -1065,7 +1067,6 @@ func (observer *Observer) newInformer(
 ) kcache.Controller {
 	// this code just copied from kubernetes core because they don't allow to
 	// change RetryOnError field fro False to True.
-
 	lister := kcache.NewListWatchFromClient(
 		client,
 		resource+"s", // should be plural
