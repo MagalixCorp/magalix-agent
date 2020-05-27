@@ -158,6 +158,7 @@ func (observer *Observer) Start() {
 
 		watchers.Add(1)
 		if version >= 16 {
+			fmt.Println("=============replicaset", version)
 			go observer.watchReplicaSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
 		} else {
 			go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
