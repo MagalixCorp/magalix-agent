@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -10,6 +11,12 @@ import (
 	"github.com/reconquest/health-go"
 	"github.com/reconquest/karma-go"
 	"github.com/reconquest/stats-go"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+
+	kv1 "k8s.io/api/apps/v1"
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kapi "k8s.io/api/core/v1"
@@ -17,12 +24,9 @@ import (
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kfields "k8s.io/apimachinery/pkg/fields"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	kutilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes"
 	beta2client "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
 	beta1batchclient "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
-	"k8s.io/client-go/rest"
 	kcache "k8s.io/client-go/tools/cache"
 )
 
@@ -76,6 +80,23 @@ func (observer *Observer) SetSyncCallback(fn func()) {
 	observer.syncer.SetOnSync(fn)
 }
 
+func (observer *Observer) minorVersion() (int, error) {
+	discoveryClient := discovery.NewDiscoveryClient(observer.clientset.CoreV1().RESTClient())
+	version, err := discoveryClient.ServerVersion()
+	if err != nil {
+		return 0, err
+	}
+	minor := version.Minor
+
+	// remove + if found contains
+	last1 := minor[len(minor)-1:]
+	if last1 == "+" {
+		minor = minor[0 : len(minor)-1]
+	}
+
+	return strconv.Atoi(minor)
+}
+
 // Start start the observer
 func (observer *Observer) Start() {
 	var mutex sync.Mutex
@@ -104,6 +125,7 @@ func (observer *Observer) Start() {
 	)
 
 	watchers := &sync.WaitGroup{}
+	version, _ := observer.minorVersion()
 
 	for {
 
@@ -114,16 +136,32 @@ func (observer *Observer) Start() {
 		go observer.watchReplicationControllers(watchers, stopCh)
 
 		watchers.Add(1)
-		go observer.watchStatefulSets(watchers, stopCh)
+		if version >= 16 {
+			go observer.watchStatefulSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchStatefulSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
+		}
 
 		watchers.Add(1)
-		go observer.watchDaemonSets(watchers, stopCh)
+		if version >= 16 {
+			go observer.watchDaemonSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchDaemonSets(watchers, observer.clientset.ExtensionsV1beta1().RESTClient(), stopCh)
+		}
 
 		watchers.Add(1)
-		go observer.watchDeployments(watchers, stopCh)
+		if version >= 16 {
+			go observer.watchDeployments(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchDeployments(watchers, observer.clientset.ExtensionsV1beta1().RESTClient(), stopCh)
+		}
 
 		watchers.Add(1)
-		go observer.watchReplicaSets(watchers, stopCh)
+		if version >= 16 {
+			go observer.watchReplicaSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
+		}
 
 		// watchers.Add(1)
 		// go observer.watchCronJobs(watchers, stopCh)
@@ -210,44 +248,78 @@ func (observer *Observer) watchReplicationControllers(
 
 func (observer *Observer) watchDeployments(
 	watchers *sync.WaitGroup,
+	client rest.Interface,
 	stopCh chan struct{},
 ) {
 	infof(nil, "{kubernetes} starting observer of deployments")
+	if client.APIVersion().Version == "v1" {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"deployment",
+			&kv1.Deployment{},
 
-	observer.watch(
-		watchers,
-		stopCh,
-		observer.clientset.ExtensionsV1beta1().RESTClient(),
-		"deployment",
-		&kext.Deployment{},
-
-		func(obj interface{}) {
-			err := observer.handleDeployment(
-				obj.(*kext.Deployment),
-			)
-			if err != nil {
-				errorf(err, "{kubernetes} unable to handle deployment")
-
-				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling deployments",
-					),
-					"watch", "deployments",
+			func(obj interface{}) {
+				err := observer.handleDeploymentV1(
+					obj.(*kv1.Deployment),
 				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle deployment")
 
-				stats.Increase("watch/deployments/error")
-			} else {
-				stats.Increase("watch/deployments/success")
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling deployments",
+						),
+						"watch", "deployments",
+					)
 
-				observer.health.Resolve("watch", "deployments")
-			}
-		},
-	)
+					stats.Increase("watch/deployments/error")
+				} else {
+					stats.Increase("watch/deployments/success")
+
+					observer.health.Resolve("watch", "deployments")
+				}
+			},
+		)
+	} else {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"deployment",
+			&kext.Deployment{},
+
+			func(obj interface{}) {
+				err := observer.handleDeployment(
+					obj.(*kext.Deployment),
+				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle deployment")
+
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling deployments",
+						),
+						"watch", "deployments",
+					)
+
+					stats.Increase("watch/deployments/error")
+				} else {
+					stats.Increase("watch/deployments/success")
+
+					observer.health.Resolve("watch", "deployments")
+				}
+			},
+		)
+	}
 }
 
 func (observer *Observer) watchStatefulSets(
 	watchers *sync.WaitGroup,
+	client rest.Interface,
 	stopCh chan struct{},
 ) {
 
@@ -256,7 +328,7 @@ func (observer *Observer) watchStatefulSets(
 	observer.watch(
 		watchers,
 		stopCh,
-		observer.clientV1Beta2.RESTClient(),
+		client,
 		"statefulset",
 		&kbeta2.StatefulSet{},
 
@@ -334,45 +406,121 @@ func (observer *Observer) handleStatefulSet(
 
 func (observer *Observer) watchDaemonSets(
 	watchers *sync.WaitGroup,
+	client rest.Interface,
 	stopCh chan struct{},
 ) {
 
 	infof(nil, "{kubernetes} starting observer of daemonSets")
 
-	observer.watch(
-		watchers,
-		stopCh,
-		observer.clientset.ExtensionsV1beta1().RESTClient(),
-		"daemonset",
-		&kext.DaemonSet{},
+	if client.APIVersion().Version == "v1" {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"daemonset",
+			&kv1.DaemonSet{},
 
-		func(obj interface{}) {
-			err := observer.handleDaemonSet(
-				obj.(*kext.DaemonSet),
-			)
-			if err != nil {
-				errorf(err, "{kubernetes} unable to handle daemonSet")
-
-				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling daemonSets",
-					),
-					"watch", "daemonsets",
+			func(obj interface{}) {
+				err := observer.handleDaemonSetV1(
+					obj.(*kv1.DaemonSet),
 				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle daemonSet")
 
-				stats.Increase("watch/daemonsets/error")
-			} else {
-				stats.Increase("watch/daemonsets/success")
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling daemonSets",
+						),
+						"watch", "daemonsets",
+					)
 
-				observer.health.Resolve("watch", "daemonsets")
-			}
-		},
-	)
+					stats.Increase("watch/daemonsets/error")
+				} else {
+					stats.Increase("watch/daemonsets/success")
+
+					observer.health.Resolve("watch", "daemonsets")
+				}
+			},
+		)
+	} else {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"daemonset",
+			&kext.DaemonSet{},
+
+			func(obj interface{}) {
+				err := observer.handleDaemonSet(
+					obj.(*kext.DaemonSet),
+				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle daemonSet")
+
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling daemonSets",
+						),
+						"watch", "daemonsets",
+					)
+
+					stats.Increase("watch/daemonsets/error")
+				} else {
+					stats.Increase("watch/daemonsets/success")
+
+					observer.health.Resolve("watch", "daemonsets")
+				}
+			},
+		)
+	}
 }
 
 func (observer *Observer) handleDaemonSet(
 	daemonset *kext.DaemonSet,
+) error {
+	// specify until they fix it
+	// https://github.com/kubernetes/client-go/issues/413
+	daemonset.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind: "DaemonSet",
+	})
+
+	if observer.identificator.IsIgnored(daemonset) {
+		return nil
+	}
+
+	tracef(
+		karma.Describe("daemonset", logger.TraceJSON(daemonset)),
+		"{kubernetes} handling daemonset",
+	)
+
+	context := karma.
+		Describe("namespace", daemonset.Namespace).
+		Describe("daemonset", daemonset.Name)
+
+	id, accountID, applicationID, serviceID, err := observer.identify(daemonset)
+	if err != nil {
+		return context.Format(
+			err,
+			"unable to identify daemonset",
+		)
+	}
+
+	observer.replicas <- ReplicaSpec{
+		Name:          daemonset.Name,
+		ID:            id,
+		AccountID:     accountID,
+		ApplicationID: applicationID,
+		ServiceID:     serviceID,
+		Replicas:      int(daemonset.Status.DesiredNumberScheduled),
+	}
+
+	return nil
+}
+
+func (observer *Observer) handleDaemonSetV1(
+	daemonset *kv1.DaemonSet,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
@@ -633,6 +781,53 @@ func (observer *Observer) handleDeployment(
 	return nil
 }
 
+func (observer *Observer) handleDeploymentV1(
+	deployment *kv1.Deployment,
+) error {
+	// specify until they fix it
+	// https://github.com/kubernetes/client-go/issues/413
+	deployment.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind: "Deployment",
+	})
+
+	if observer.identificator.IsIgnored(deployment) {
+		return nil
+	}
+
+	tracef(
+		karma.Describe("deployment", logger.TraceJSON(deployment)),
+		"{kubernetes} handling deployment",
+	)
+
+	context := karma.
+		Describe("namespace", deployment.Namespace).
+		Describe("deployment", deployment.Name)
+
+	id, accountID, applicationID, serviceID, err := observer.identify(deployment)
+	if err != nil {
+		return context.Format(
+			err,
+			"unable to identify deployment",
+		)
+	}
+
+	replicas := 1
+	if deployment.Spec.Replicas != nil {
+		replicas = int(*deployment.Spec.Replicas)
+	}
+
+	observer.replicas <- ReplicaSpec{
+		Name:          deployment.Name,
+		ID:            id,
+		AccountID:     accountID,
+		ApplicationID: applicationID,
+		ServiceID:     serviceID,
+		Replicas:      replicas,
+	}
+
+	return nil
+}
+
 func (observer *Observer) watchCronJobs(
 	watchers *sync.WaitGroup,
 	stopCh chan struct{},
@@ -726,6 +921,7 @@ func (observer *Observer) handleCronJob(
 
 func (observer *Observer) watchReplicaSets(
 	watchers *sync.WaitGroup,
+	client rest.Interface,
 	stopCh chan struct{},
 ) {
 
@@ -734,7 +930,7 @@ func (observer *Observer) watchReplicaSets(
 	observer.watch(
 		watchers,
 		stopCh,
-		observer.clientV1Beta2.RESTClient(),
+		client,
 		"replicaset",
 		&kbeta2.ReplicaSet{},
 
