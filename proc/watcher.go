@@ -150,7 +150,11 @@ func (observer *Observer) Start() {
 		}
 
 		watchers.Add(1)
-		go observer.watchDeployments(watchers, stopCh)
+		if version >= 16 {
+			go observer.watchDeployments(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchDeployments(watchers, observer.clientset.ExtensionsV1beta1().RESTClient(), stopCh)
+		}
 
 		watchers.Add(1)
 		if version >= 16 {
@@ -244,6 +248,7 @@ func (observer *Observer) watchReplicationControllers(
 
 func (observer *Observer) watchDeployments(
 	watchers *sync.WaitGroup,
+	client rest.Interface,
 	stopCh chan struct{},
 ) {
 	infof(nil, "{kubernetes} starting observer of deployments")
@@ -251,7 +256,7 @@ func (observer *Observer) watchDeployments(
 	observer.watch(
 		watchers,
 		stopCh,
-		observer.clientset.ExtensionsV1beta1().RESTClient(),
+		client,
 		"deployment",
 		&kext.Deployment{},
 
