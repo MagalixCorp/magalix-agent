@@ -4,4 +4,4 @@ RUN apk --update add --no-cache ca-certificates bash
 
 COPY /build/agent /
 
-ENTRYPOINT ["/agent"]
+ENTRYPOINT ["/agent", "--debug"]

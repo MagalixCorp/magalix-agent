@@ -156,12 +156,12 @@ func (observer *Observer) Start() {
 			go observer.watchDeployments(watchers, observer.clientset.ExtensionsV1beta1().RESTClient(), stopCh)
 		}
 
-		// watchers.Add(1)
-		// if version >= 16 {
-		// 	go observer.watchReplicaSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
-		// } else {
-		// 	go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
-		// }
+		watchers.Add(1)
+		if version >= 16 {
+			go observer.watchReplicaSets(watchers, observer.clientset.CoreV1().RESTClient(), stopCh)
+		} else {
+			go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
+		}
 
 		// watchers.Add(1)
 		// go observer.watchCronJobs(watchers, stopCh)
