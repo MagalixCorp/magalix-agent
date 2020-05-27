@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	kv1 "k8s.io/api/apps/v1"
 	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kapi "k8s.io/api/core/v1"
@@ -374,42 +375,115 @@ func (observer *Observer) watchDaemonSets(
 
 	infof(nil, "{kubernetes} starting observer of daemonSets")
 
-	fmt.Println("====================", client.APIVersion().Version)
-	fmt.Println("====================", client.APIVersion().Group)
-	observer.watch(
-		watchers,
-		stopCh,
-		client,
-		"daemonset",
-		&kext.DaemonSet{},
+	if client.APIVersion().Version == "v1" {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"daemonset",
+			&kv1.DaemonSet{},
 
-		func(obj interface{}) {
-			err := observer.handleDaemonSet(
-				obj.(*kext.DaemonSet),
-			)
-			if err != nil {
-				errorf(err, "{kubernetes} unable to handle daemonSet")
-
-				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling daemonSets",
-					),
-					"watch", "daemonsets",
+			func(obj interface{}) {
+				err := observer.handleDaemonSetV1(
+					obj.(*kv1.DaemonSet),
 				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle daemonSet")
 
-				stats.Increase("watch/daemonsets/error")
-			} else {
-				stats.Increase("watch/daemonsets/success")
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling daemonSets",
+						),
+						"watch", "daemonsets",
+					)
 
-				observer.health.Resolve("watch", "daemonsets")
-			}
-		},
-	)
+					stats.Increase("watch/daemonsets/error")
+				} else {
+					stats.Increase("watch/daemonsets/success")
+
+					observer.health.Resolve("watch", "daemonsets")
+				}
+			},
+		)
+	} else {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"daemonset",
+			&kext.DaemonSet{},
+
+			func(obj interface{}) {
+				err := observer.handleDaemonSet(
+					obj.(*kext.DaemonSet),
+				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle daemonSet")
+
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling daemonSets",
+						),
+						"watch", "daemonsets",
+					)
+
+					stats.Increase("watch/daemonsets/error")
+				} else {
+					stats.Increase("watch/daemonsets/success")
+
+					observer.health.Resolve("watch", "daemonsets")
+				}
+			},
+		)
+	}
 }
 
 func (observer *Observer) handleDaemonSet(
 	daemonset *kext.DaemonSet,
+) error {
+	// specify until they fix it
+	// https://github.com/kubernetes/client-go/issues/413
+	daemonset.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind: "DaemonSet",
+	})
+
+	if observer.identificator.IsIgnored(daemonset) {
+		return nil
+	}
+
+	tracef(
+		karma.Describe("daemonset", logger.TraceJSON(daemonset)),
+		"{kubernetes} handling daemonset",
+	)
+
+	context := karma.
+		Describe("namespace", daemonset.Namespace).
+		Describe("daemonset", daemonset.Name)
+
+	id, accountID, applicationID, serviceID, err := observer.identify(daemonset)
+	if err != nil {
+		return context.Format(
+			err,
+			"unable to identify daemonset",
+		)
+	}
+
+	observer.replicas <- ReplicaSpec{
+		Name:          daemonset.Name,
+		ID:            id,
+		AccountID:     accountID,
+		ApplicationID: applicationID,
+		ServiceID:     serviceID,
+		Replicas:      int(daemonset.Status.DesiredNumberScheduled),
+	}
+
+	return nil
+}
+
+func (observer *Observer) handleDaemonSetV1(
+	daemonset *kv1.DaemonSet,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
