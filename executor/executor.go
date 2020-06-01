@@ -432,6 +432,14 @@ func (executor *Executor) execute(
 			}
 		}
 
+		if runningPods < targetPodCount {
+			msg = statusMap[kv1.PodFailed]
+			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
+
+			if err != nil {
+				executor.logger.Infof(ctx, "can't rollback decision")
+			}
+		}
 		executor.logger.Infof(ctx, msg, "time: ", time.Now(), " .... ", start)
 
 		return &proto.PacketDecisionFeedbackRequest{
