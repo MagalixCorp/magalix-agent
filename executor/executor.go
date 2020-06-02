@@ -264,8 +264,8 @@ func (executor *Executor) execute(
 		Describe("container-id", decision.ContainerId)
 
 
-	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
-	if err != nil {
+	namespace, name, kind, _ := executor.getServiceDetails(decision.ServiceId)
+	/*if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
 				ID:        decision.ID,
 				ServiceId: decision.ServiceId,
@@ -275,13 +275,13 @@ func (executor *Executor) execute(
 				err,
 				"unable to get service details",
 			)
-	}
+	}*/
 
 	ctx = ctx.Describe("namespace", namespace).
 		Describe("service-name", name).
 		Describe("kind", kind)
 
-	containerName, err := executor.getContainerDetails(decision.ContainerId)
+	container, _, _, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
 				ID:        decision.ID,
@@ -297,7 +297,7 @@ func (executor *Executor) execute(
 	totalResources := kuber.TotalResources{
 		Containers: []kuber.ContainerResourcesRequirements{
 			{
-				Name: containerName,
+				Name: container.Name,
 				Limits: new(kuber.RequestLimit),
 				Requests: new(kuber.RequestLimit),
 			},
@@ -462,8 +462,8 @@ func (executor *Executor) getServiceDetails(serviceID uuid.UUID) (namespace, nam
 	return
 }
 
-func (executor *Executor) getContainerDetails(containerID uuid.UUID) (name string, err error) {
-	name, ok := executor.scanner.FindContainerNameByID(executor.scanner.GetApplications(), containerID)
+func (executor *Executor) getContainerDetails(containerID uuid.UUID) (container *scanner.Container, service *scanner.Service, app *scanner.Application, err error) {
+	container, service, app, ok := executor.scanner.FindContainerByID(executor.scanner.GetApplications(), containerID)
 	if !ok {
 		err = karma.Describe("id", containerID).
 			Reason("container not found")
