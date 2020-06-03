@@ -264,8 +264,8 @@ func (executor *Executor) execute(
 		Describe("container-id", decision.ContainerId)
 
 
-	namespace, name, kind, _ := executor.getServiceDetails(decision.ServiceId)
-	/*if err != nil {
+	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
+	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
 				ID:        decision.ID,
 				ServiceId: decision.ServiceId,
@@ -275,7 +275,7 @@ func (executor *Executor) execute(
 				err,
 				"unable to get service details",
 			)
-	}*/
+	}
 
 	ctx = ctx.Describe("namespace", namespace).
 		Describe("service-name", name).
@@ -358,7 +358,7 @@ func (executor *Executor) execute(
 
 		entitiName := ""
 		var targetPodCount int32 = 0
-		var runningPods int32 = 0
+		var runningPods int32 = -1
 		flag := false
 
 		if strings.ToLower(kind) == "deployment"{
@@ -432,12 +432,28 @@ func (executor *Executor) execute(
 			}
 		}
 
+		//rollback in case of faild to restart all pods
 		if runningPods < targetPodCount {
 			msg = statusMap[kv1.PodFailed]
-			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
+			memoryLimit, flag := container.Resources.Limits.Memory().AsInt64()
+			memoryRequest, flag := container.Resources.Requests.Memory().AsInt64()
+			cpuLimit, flag := container.Resources.Limits.Cpu().AsInt64()
+			cpuRequest, flag := container.Resources.Requests.Cpu().AsInt64()
 
-			if err != nil {
+			if !flag {
 				executor.logger.Infof(ctx, "can't rollback decision")
+			}else{
+
+				*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024
+				*totalResources.Containers[0].Requests.Memory = memoryRequest /1024
+				*totalResources.Containers[0].Limits.CPU = cpuLimit
+				*totalResources.Containers[0].Requests.CPU = cpuRequest
+
+				_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
+
+				if err != nil {
+					executor.logger.Infof(ctx, "can't rollback decision")
+				}
 			}
 		}
 		executor.logger.Infof(ctx, msg, "time: ", time.Now(), " .... ", start)
