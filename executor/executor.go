@@ -436,6 +436,7 @@ func (executor *Executor) execute(
 		//rollback in case of faild to restart all pods
 		if true {
 			msg = statusMap[kv1.PodFailed]
+			status = proto.DecisionExecutionStatusFailed
 			memoryLimit := container.Resources.Limits.Memory().Value()
 			memoryRequest := container.Resources.Requests.Memory().Value()
 			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
