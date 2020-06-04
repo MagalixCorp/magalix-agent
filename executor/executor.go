@@ -346,7 +346,6 @@ func (executor *Executor) execute(
 			return response, nil
 		}
 
-
 		// short pooling to trigger pod status with max 15 minutes
 		statusMap := make(map[kv1.PodPhase]string)
 		statusMap[kv1.PodRunning] = "pods restarted successfully"
@@ -357,7 +356,7 @@ func (executor *Executor) execute(
 		start := time.Now()
 
 		entitiName := ""
-		status := proto.DecisionExecutionStatusSucceed
+		result := proto.DecisionExecutionStatusFailed
 		var targetPodCount int32 = 0
 		var runningPods int32 = 0
 		flag := false
@@ -398,6 +397,7 @@ func (executor *Executor) execute(
 
 		if flag {
 			msg = "failed to trigger pod status"
+			result = proto.DecisionExecutionStatusFailed
 
 		}else {
 
@@ -411,6 +411,7 @@ func (executor *Executor) execute(
 
 				if err != nil {
 					msg = "failed to trigger pod status"
+					result = proto.DecisionExecutionStatusFailed
 					break
 				}
 
@@ -428,16 +429,17 @@ func (executor *Executor) execute(
 
 				if runningPods == targetPodCount {
 					msg = statusMap[status]
+					result = proto.DecisionExecutionStatusSucceed
 					break
 				}
 			}
 		}
 
-		//rollback in case of faild to restart all pods
+		//rollback in case of failed to restart all pods
 		if runningPods < targetPodCount {
 
 			msg = statusMap[kv1.PodFailed]
-			status = proto.DecisionExecutionStatusFailed
+			result = proto.DecisionExecutionStatusFailed
 
 			memoryLimit := container.Resources.Limits.Memory().Value()
 			memoryRequest := container.Resources.Requests.Memory().Value()
@@ -449,19 +451,21 @@ func (executor *Executor) execute(
 			*totalResources.Containers[0].Limits.CPU = cpuLimit
 			*totalResources.Containers[0].Requests.CPU = cpuRequest
 
+			// execute the decision with old values to rollback
 			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
 
 			if err != nil {
 				executor.logger.Infof(ctx, "can't rollback decision")
 			}
 		}
-		executor.logger.Infof(ctx, msg, "time: ", time.Now(), " .... ", start)
+
+		executor.logger.Infof(ctx, msg)
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,
 			ServiceId:   decision.ServiceId,
 			ContainerId: decision.ContainerId,
-			Status:      status,
+			Status:      result,
 			Message:     msg,
 		}, nil
 	}
