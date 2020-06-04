@@ -357,6 +357,7 @@ func (executor *Executor) execute(
 		start := time.Now()
 
 		entitiName := ""
+		status := proto.DecisionExecutionStatusSucceed
 		var targetPodCount int32 = 0
 		var runningPods int32 = 0
 		flag := false
@@ -440,8 +441,8 @@ func (executor *Executor) execute(
 			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
 			cpuRequest := container.Resources.Requests.Cpu().MilliValue()
 
-			*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024
-			*totalResources.Containers[0].Requests.Memory = memoryRequest /1024
+			*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
+			*totalResources.Containers[0].Requests.Memory = memoryRequest /1024 / 1024
 			*totalResources.Containers[0].Limits.CPU = cpuLimit
 			*totalResources.Containers[0].Requests.CPU = cpuRequest
 
@@ -457,7 +458,7 @@ func (executor *Executor) execute(
 			ID:          decision.ID,
 			ServiceId:   decision.ServiceId,
 			ContainerId: decision.ContainerId,
-			Status:      proto.DecisionExecutionStatusSucceed,
+			Status:      status,
 			Message:     msg,
 		}, nil
 	}
