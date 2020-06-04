@@ -406,7 +406,7 @@ func (executor *Executor) execute(
 
 				status := kv1.PodPending
 
-				//time.Sleep(podStatusSleep)
+				time.Sleep(podStatusSleep)
 				pods, err := executor.kube.GetNameSpacePods(namespace)
 
 				if err != nil {
@@ -434,9 +434,11 @@ func (executor *Executor) execute(
 		}
 
 		//rollback in case of faild to restart all pods
-		if true {
+		if runningPods < targetPodCount {
+
 			msg = statusMap[kv1.PodFailed]
 			status = proto.DecisionExecutionStatusFailed
+
 			memoryLimit := container.Resources.Limits.Memory().Value()
 			memoryRequest := container.Resources.Requests.Memory().Value()
 			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
