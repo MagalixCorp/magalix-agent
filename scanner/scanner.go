@@ -746,15 +746,13 @@ func (scanner *Scanner) FindServiceByID(
 func (scanner *Scanner) FindContainerByID(
 	apps []*Application,
 	containerID uuid.UUID,
-) (c *Container, s *Service, a *Application, found bool) {
+) (c *Container, found bool) {
 	// TODO: optimize
 	for _, app := range apps {
 		for _, service := range app.Services {
 			for _, container := range service.Containers {
 				if container.ID == containerID {
 					found = true
-					a = app
-					s = service
 					c = container
 					return
 				}

@@ -281,7 +281,7 @@ func (executor *Executor) execute(
 		Describe("service-name", name).
 		Describe("kind", kind)
 
-	container, _, _, err := executor.getContainerDetails(decision.ContainerId)
+	container, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
 				ID:        decision.ID,
@@ -455,7 +455,7 @@ func (executor *Executor) execute(
 			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
 
 			if err != nil {
-				executor.logger.Infof(ctx, "can't rollback decision")
+				executor.logger.Warning(ctx, "can't rollback decision")
 			}
 		}
 
@@ -481,8 +481,8 @@ func (executor *Executor) getServiceDetails(serviceID uuid.UUID) (namespace, nam
 	return
 }
 
-func (executor *Executor) getContainerDetails(containerID uuid.UUID) (container *scanner.Container, service *scanner.Service, app *scanner.Application, err error) {
-	container, service, app, ok := executor.scanner.FindContainerByID(executor.scanner.GetApplications(), containerID)
+func (executor *Executor) getContainerDetails(containerID uuid.UUID) (container *scanner.Container, err error) {
+	container, ok := executor.scanner.FindContainerByID(executor.scanner.GetApplications(), containerID)
 	if !ok {
 		err = karma.Describe("id", containerID).
 			Reason("container not found")
