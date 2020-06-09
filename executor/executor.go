@@ -373,21 +373,22 @@ func (executor *Executor) execute(
 
 				type Replica struct {
 					name string
-					time int }
+					replicas int32
+					time time.Time }
 				currentReplicas := []Replica{}
 				// get the new replicaset
 				for _, replica := range replicasets.Items {
 					if strings.Contains(replica.Name, name) && replica.Status.Replicas > 0{
-						entitiName = replica.Name
-						currentReplicas = append(currentReplicas, Replica{replica.Name, replica.CreationTimestamp.Second()})
-						targetPodCount = *replica.Spec.Replicas
-						break
+						currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.CreationTimestamp.Local()})
 					}
 				}
+
 				sort.Slice(currentReplicas, func(i, j int) bool {
-					return currentReplicas[i].time < currentReplicas[j].time
+					return currentReplicas[i].time.After(currentReplicas[j].time)
 				})
 
+				entitiName = currentReplicas[0].name
+				targetPodCount = currentReplicas[0].replicas
 				executor.logger.Info(", rep: ", currentReplicas)
 			}
 
