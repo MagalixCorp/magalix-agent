@@ -47,6 +47,12 @@ type Executor struct {
 	inProgressJobs   map[string]bool
 }
 
+type Replica struct {
+	name string
+	replicas int32
+	time time.Time
+}
+
 // InitExecutor creates a new excecutor then starts it
 func InitExecutor(
 	client *client.Client,
@@ -371,10 +377,6 @@ func (executor *Executor) execute(
 
 			}else{
 
-				type Replica struct {
-					name string
-					replicas int32
-					time time.Time }
 				currentReplicas := []Replica{}
 				// get the new replicaset
 				for _, replica := range replicasets.Items {
@@ -389,7 +391,6 @@ func (executor *Executor) execute(
 
 				entitiName = currentReplicas[0].name
 				targetPodCount = currentReplicas[0].replicas
-				executor.logger.Info(", rep: ", currentReplicas)
 			}
 
 		}else if strings.ToLower(kind) == "statefulset"{
