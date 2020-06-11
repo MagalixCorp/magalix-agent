@@ -3,6 +3,7 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -44,6 +45,12 @@ type Executor struct {
 	workersCount  int
 	decisionsChan chan *proto.PacketDecision
 	inProgressJobs   map[string]bool
+}
+
+type Replica struct {
+	name string
+	replicas int32
+	time time.Time
 }
 
 // InitExecutor creates a new excecutor then starts it
@@ -369,14 +376,21 @@ func (executor *Executor) execute(
 				flag = true
 
 			}else{
+
+				currentReplicas := []Replica{}
 				// get the new replicaset
 				for _, replica := range replicasets.Items {
-					if strings.Contains(replica.Name, name) && replica.Status.ReadyReplicas > 0{
-						entitiName = replica.Name
-						targetPodCount = *replica.Spec.Replicas
-						break
+					if strings.Contains(replica.Name, name) && replica.Status.Replicas > 0{
+						currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.CreationTimestamp.Local()})
 					}
 				}
+
+				sort.Slice(currentReplicas, func(i, j int) bool {
+					return currentReplicas[i].time.After(currentReplicas[j].time)
+				})
+
+				entitiName = currentReplicas[0].name
+				targetPodCount = currentReplicas[0].replicas
 			}
 
 		}else if strings.ToLower(kind) == "statefulset"{
