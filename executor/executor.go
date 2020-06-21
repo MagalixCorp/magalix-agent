@@ -3,6 +3,7 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -44,6 +45,12 @@ type Executor struct {
 	workersCount  int
 	decisionsChan chan *proto.PacketDecision
 	inProgressJobs   map[string]bool
+}
+
+type Replica struct {
+	name string
+	replicas int32
+	time time.Time
 }
 
 // InitExecutor creates a new excecutor then starts it
@@ -281,7 +288,7 @@ func (executor *Executor) execute(
 		Describe("service-name", name).
 		Describe("kind", kind)
 
-	containerName, err := executor.getContainerDetails(decision.ContainerId)
+	container, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
 				ID:        decision.ID,
@@ -297,7 +304,7 @@ func (executor *Executor) execute(
 	totalResources := kuber.TotalResources{
 		Containers: []kuber.ContainerResourcesRequirements{
 			{
-				Name: containerName,
+				Name: container.Name,
 				Limits: new(kuber.RequestLimit),
 				Requests: new(kuber.RequestLimit),
 			},
@@ -346,7 +353,6 @@ func (executor *Executor) execute(
 			return response, nil
 		}
 
-
 		// short pooling to trigger pod status with max 15 minutes
 		statusMap := make(map[kv1.PodPhase]string)
 		statusMap[kv1.PodRunning] = "pods restarted successfully"
@@ -357,6 +363,7 @@ func (executor *Executor) execute(
 		start := time.Now()
 
 		entitiName := ""
+		result := proto.DecisionExecutionStatusFailed
 		var targetPodCount int32 = 0
 		var runningPods int32 = 0
 		flag := false
@@ -369,14 +376,21 @@ func (executor *Executor) execute(
 				flag = true
 
 			}else{
+
+				currentReplicas := []Replica{}
 				// get the new replicaset
 				for _, replica := range replicasets.Items {
-					if strings.Contains(replica.Name, name) && replica.Status.ReadyReplicas > 0{
-						entitiName = replica.Name
-						targetPodCount = *replica.Spec.Replicas
-						break
+					if strings.Contains(replica.Name, name) && replica.Status.Replicas > 0{
+						currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.CreationTimestamp.Local()})
 					}
 				}
+
+				sort.Slice(currentReplicas, func(i, j int) bool {
+					return currentReplicas[i].time.After(currentReplicas[j].time)
+				})
+
+				entitiName = currentReplicas[0].name
+				targetPodCount = currentReplicas[0].replicas
 			}
 
 		}else if strings.ToLower(kind) == "statefulset"{
@@ -397,6 +411,7 @@ func (executor *Executor) execute(
 
 		if flag {
 			msg = "failed to trigger pod status"
+			result = proto.DecisionExecutionStatusFailed
 
 		}else {
 
@@ -410,6 +425,7 @@ func (executor *Executor) execute(
 
 				if err != nil {
 					msg = "failed to trigger pod status"
+					result = proto.DecisionExecutionStatusFailed
 					break
 				}
 
@@ -427,18 +443,43 @@ func (executor *Executor) execute(
 
 				if runningPods == targetPodCount {
 					msg = statusMap[status]
+					result = proto.DecisionExecutionStatusSucceed
 					break
 				}
 			}
 		}
 
-		executor.logger.Infof(ctx, msg, "time: ", time.Now(), " .... ", start)
+		//rollback in case of failed to restart all pods
+		if runningPods < targetPodCount {
+
+			msg = statusMap[kv1.PodFailed]
+			result = proto.DecisionExecutionStatusFailed
+
+			memoryLimit := container.Resources.Limits.Memory().Value()
+			memoryRequest := container.Resources.Requests.Memory().Value()
+			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
+			cpuRequest := container.Resources.Requests.Cpu().MilliValue()
+
+			*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
+			*totalResources.Containers[0].Requests.Memory = memoryRequest /1024 / 1024
+			*totalResources.Containers[0].Limits.CPU = cpuLimit
+			*totalResources.Containers[0].Requests.CPU = cpuRequest
+
+			// execute the decision with old values to rollback
+			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
+
+			if err != nil {
+				executor.logger.Warning(ctx, "can't rollback decision")
+			}
+		}
+
+		executor.logger.Infof(ctx, msg)
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,
 			ServiceId:   decision.ServiceId,
 			ContainerId: decision.ContainerId,
-			Status:      proto.DecisionExecutionStatusSucceed,
+			Status:      result,
 			Message:     msg,
 		}, nil
 	}
@@ -454,8 +495,8 @@ func (executor *Executor) getServiceDetails(serviceID uuid.UUID) (namespace, nam
 	return
 }
 
-func (executor *Executor) getContainerDetails(containerID uuid.UUID) (name string, err error) {
-	name, ok := executor.scanner.FindContainerNameByID(executor.scanner.GetApplications(), containerID)
+func (executor *Executor) getContainerDetails(containerID uuid.UUID) (container *scanner.Container, err error) {
+	container, ok := executor.scanner.FindContainerByID(executor.scanner.GetApplications(), containerID)
 	if !ok {
 		err = karma.Describe("id", containerID).
 			Reason("container not found")
