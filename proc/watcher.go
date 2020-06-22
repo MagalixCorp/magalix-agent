@@ -30,7 +30,7 @@ import (
 	kcache "k8s.io/client-go/tools/cache"
 )
 
-// Observer kubernets objects observer
+// Observer kubernetes objects observer
 type Observer struct {
 	clientset     *kubernetes.Clientset
 	clientV1Beta2 *beta2client.AppsV1beta2Client
