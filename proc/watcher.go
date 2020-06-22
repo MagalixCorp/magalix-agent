@@ -324,41 +324,121 @@ func (observer *Observer) watchStatefulSets(
 ) {
 
 	infof(nil, "{kubernetes} starting observer of statefulSets")
+	if client.APIVersion().Version == "v1" {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"statefulset",
+			&kv1.StatefulSet{},
 
-	observer.watch(
-		watchers,
-		stopCh,
-		client,
-		"statefulset",
-		&kbeta2.StatefulSet{},
-
-		func(obj interface{}) {
-			err := observer.handleStatefulSet(
-				obj.(*kbeta2.StatefulSet),
-			)
-			if err != nil {
-				errorf(err, "{kubernetes} unable to handle statefulSet")
-
-				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling statefulSets",
-					),
-					"watch", "statefulsets",
+			func(obj interface{}) {
+				err := observer.handleStatefulSetV1(
+					obj.(*kv1.StatefulSet),
 				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle statefulSet")
 
-				stats.Increase("watch/statefulsets/error")
-			} else {
-				stats.Increase("watch/statefulsets/success")
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling statefulSets",
+						),
+						"watch", "statefulsets",
+					)
 
-				observer.health.Resolve("watch", "statefulsets")
-			}
-		},
-	)
+					stats.Increase("watch/statefulsets/error")
+				} else {
+					stats.Increase("watch/statefulsets/success")
+
+					observer.health.Resolve("watch", "statefulsets")
+				}
+			},
+		)
+	}else {
+		observer.watch(
+			watchers,
+			stopCh,
+			client,
+			"statefulset",
+			&kbeta2.StatefulSet{},
+
+			func(obj interface{}) {
+				err := observer.handleStatefulSet(
+					obj.(*kbeta2.StatefulSet),
+				)
+				if err != nil {
+					errorf(err, "{kubernetes} unable to handle statefulSet")
+
+					observer.health.Alert(
+						karma.Format(
+							err,
+							"kubernetes: problems with handling statefulSets",
+						),
+						"watch", "statefulsets",
+					)
+
+					stats.Increase("watch/statefulsets/error")
+				} else {
+					stats.Increase("watch/statefulsets/success")
+
+					observer.health.Resolve("watch", "statefulsets")
+				}
+			},
+		)
+	}
+
 }
 
 func (observer *Observer) handleStatefulSet(
 	statefulset *kbeta2.StatefulSet,
+) error {
+	// specify until they fix it
+	// https://github.com/kubernetes/client-go/issues/413
+	statefulset.SetGroupVersionKind(schema.GroupVersionKind{
+		Kind: "StatefulSet",
+	})
+
+	if observer.identificator.IsIgnored(statefulset) {
+		return nil
+	}
+
+	tracef(
+		karma.Describe("statefulset", logger.TraceJSON(statefulset)),
+		"{kubernetes} handling statefulset",
+	)
+
+	context := karma.
+		Describe("namespace", statefulset.Namespace).
+		Describe("statefulset", statefulset.Name)
+
+	id, accountID, applicationID, serviceID, err := observer.identify(statefulset)
+	if err != nil {
+		return context.Format(
+			err,
+			"unable to identify statefulset",
+		)
+	}
+
+	replicas := 1
+	if statefulset.Spec.Replicas != nil {
+		replicas = int(*statefulset.Spec.Replicas)
+	}
+
+	observer.replicas <- ReplicaSpec{
+		Name:          statefulset.Name,
+		ID:            id,
+		AccountID:     accountID,
+		ApplicationID: applicationID,
+		ServiceID:     serviceID,
+		Replicas:      replicas,
+	}
+
+	return nil
+}
+
+func (observer *Observer) handleStatefulSetV1(
+	statefulset *kv1.StatefulSet,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
