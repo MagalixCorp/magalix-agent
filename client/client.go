@@ -82,17 +82,10 @@ func newClient(
 	shouldSendLogs bool,
 	packetV2Enabled bool,
 ) *Client {
-	gwUrl, err := url.Parse(address)
+	url, err := url.Parse(address)
 	if err != nil {
 		panic(err)
 	}
-
-	if gwUrl.Scheme == "ws" {
-		gwUrl.Scheme = "wss"
-	}
-
-	address = gwUrl.String()
-
 	client := &Client{
 		parentLogger: parentLogger,
 
@@ -105,7 +98,7 @@ func newClient(
 		shouldSendLogs:  shouldSendLogs,
 		packetV2Enabled: packetV2Enabled,
 
-		channel: channel.NewClient(*gwUrl, channel.ChannelOptions{
+		channel: channel.NewClient(*url, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
 			ProtoWrite:     timeouts.protoWrite,
 			ProtoRead:      timeouts.protoRead,

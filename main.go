@@ -37,7 +37,7 @@ Usage:
 
 Options:
   --gateway <address>                        Connect to specified Magalix Kubernetes Agent gateway.
-                                              [default: wss://gateway.agent.magalix.cloud]
+                                              [default: ws://gateway.agent.magalix.cloud]
   --account-id <identifier>                  Your account ID in Magalix.
                                               [default: $ACCOUNT_ID]
   --cluster-id <identifier>                  Your cluster ID in Magalix.
