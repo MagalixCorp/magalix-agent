@@ -421,6 +421,19 @@ func (executor *Executor) execute(
 					targetPodCount = daemonSet.Status.DesiredNumberScheduled
 				}
 			}
+		}else if strings.ToLower(kind) == "job" || strings.ToLower(kind) == "cronjob"{
+
+			job, err := executor.kube.GetCronJob(namespace, name)
+
+			if err != nil {
+				flag = true
+
+			}else{
+				// get the new job
+				entitiName = job.Name
+				targetPodCount = 1
+
+			}
 		}
 
 		if flag {
