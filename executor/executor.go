@@ -407,6 +407,20 @@ func (executor *Executor) execute(
 						targetPodCount = *statefulset.Spec.Replicas
 					}
 			}
+		}else if strings.ToLower(kind) == "daemonset"{
+
+			daemonSet, err := executor.kube.GetDaemonSet(namespace, name)
+
+			if err != nil {
+				flag = true
+
+			}else{
+				// get the new daemonSet
+				if daemonSet.Status.NumberReady > 0 {
+					entitiName = daemonSet.Name
+					targetPodCount = daemonSet.Status.DesiredNumberScheduled
+				}
+			}
 		}
 
 		if flag {
