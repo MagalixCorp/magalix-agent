@@ -23,7 +23,7 @@ import (
 	kfields "k8s.io/apimachinery/pkg/fields"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
 	kutilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	beta2client "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
+	v1client "k8s.io/client-go/kubernetes/typed/apps/v1"
 	beta1batchclient "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	kcache "k8s.io/client-go/tools/cache"
 )
@@ -31,7 +31,7 @@ import (
 // Observer kubernets objects observer
 type Observer struct {
 	clientset     *kubernetes.Clientset
-	clientV1Beta2 *beta2client.AppsV1beta2Client
+	clientV1 *v1client.AppsV1Client
 	batchV1Beta1  *beta1batchclient.BatchV1beta1Client
 	pods          chan Pod
 	replicas      chan ReplicaSpec
@@ -44,14 +44,14 @@ type Observer struct {
 // NewObserver creates a new observer
 func NewObserver(
 	clientset *kubernetes.Clientset,
-	clientV1Beta2 *beta2client.AppsV1beta2Client,
+	clientV1 *v1client.AppsV1Client,
 	batchV1Beta1 *beta1batchclient.BatchV1beta1Client,
 	identificator Identificator,
 	health *health.Health,
 ) *Observer {
 	observer := &Observer{
 		clientset:     clientset,
-		clientV1Beta2: clientV1Beta2,
+		clientV1: 	   clientV1,
 		batchV1Beta1:  batchV1Beta1,
 		pods:          make(chan Pod),
 		replicas:      make(chan ReplicaSpec),
