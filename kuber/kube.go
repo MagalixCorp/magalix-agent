@@ -678,6 +678,30 @@ func (kube *Kube) GetCronJobs() (
 	return cronJobs, nil
 }
 
+// GetCronJobs get cron jobs
+func (kube *Kube) GetCronJob(namespace, name string) (
+	*kbeta1.CronJob, error,
+) {
+	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
+	cronJob, err := kube.batch.
+		CronJobs(namespace).
+		Get(context.Background(),name, kmeta.GetOptions{})
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to retrieve cron jobs from all namespaces",
+		)
+	}
+
+	if cronJob != nil {
+
+			maskPodSpec(&cronJob.Spec.JobTemplate.Spec.Template.Spec)
+
+	}
+
+	return cronJob, nil
+}
+
 // GetLimitRanges get limits and ranges for namespaces
 func (kube *Kube) GetLimitRanges() (
 	*kv1.LimitRangeList, error,
@@ -714,6 +738,27 @@ func (kube *Kube) GetStatefulSet(namespace, name string) (
 	}
 
 	return statefulSet, nil
+}
+
+func (kube *Kube) GetDaemonSet(namespace, name string) (
+	*v1.DaemonSet, error,
+) {
+	daemonSet, err := kube.Clientset.AppsV1().
+		DaemonSets(namespace).
+		Get(context.Background(), name, kmeta.GetOptions{})
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to retrieve daemonSet %s/%s",
+			namespace, name,
+		)
+	}
+
+	if daemonSet != nil {
+		maskPodSpec(&daemonSet.Spec.Template.Spec)
+	}
+
+	return daemonSet, nil
 }
 
 // SetResources set resources for a service
