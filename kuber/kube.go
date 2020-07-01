@@ -22,7 +22,6 @@ import (
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1Client "k8s.io/client-go/kubernetes/typed/apps/v1"
 	kapps "k8s.io/client-go/kubernetes/typed/apps/v1"
 	batch "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	kcore "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -37,7 +36,7 @@ const (
 // Kube kube struct
 type Kube struct {
 	Clientset     *kubernetes.Clientset
-	ClientV1 *v1Client.AppsV1Client
+	ClientV1 	  *kapps.AppsV1Client
 	ClientBatch   *batch.BatchV1beta1Client
 
 	core   kcore.CoreV1Interface
@@ -107,7 +106,7 @@ func InitKubernetes(
 		)
 	}
 
-	clientV1, err := v1Client.NewForConfig(config)
+	clientV1, err := kapps.NewForConfig(config)
 	if err != nil {
 		return nil, karma.Format(
 			err,
