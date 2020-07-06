@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"sync"
 
-	appsv1beta2 "k8s.io/api/apps/v1beta2"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -421,52 +421,52 @@ func (kube *kubeObserver) GetReplicationControllers() (
 	}, nil
 }
 
-func (kube *kubeObserver) GetDeployments() (*appsv1beta2.DeploymentList, error) {
-	var items []appsv1beta2.Deployment
+func (kube *kubeObserver) GetDeployments() (*appsv1.DeploymentList, error) {
+	var items []appsv1.Deployment
 	err := kube.get(kuber.Deployments, &items)
 	if err != nil {
 		return nil, err
 	}
-	return &appsv1beta2.DeploymentList{
+	return &appsv1.DeploymentList{
 		Items: items,
 	}, nil
 }
 
 func (kube *kubeObserver) GetStatefulSets() (
-	*appsv1beta2.StatefulSetList, error,
+	*appsv1.StatefulSetList, error,
 ) {
-	var items []appsv1beta2.StatefulSet
+	var items []appsv1.StatefulSet
 	err := kube.get(kuber.StatefulSets, &items)
 	if err != nil {
 		return nil, err
 	}
-	return &appsv1beta2.StatefulSetList{
+	return &appsv1.StatefulSetList{
 		Items: items,
 	}, nil
 }
 
 func (kube *kubeObserver) GetDaemonSets() (
-	*appsv1beta2.DaemonSetList, error,
+	*appsv1.DaemonSetList, error,
 ) {
-	var items []appsv1beta2.DaemonSet
+	var items []appsv1.DaemonSet
 	err := kube.get(kuber.DaemonSets, &items)
 	if err != nil {
 		return nil, err
 	}
-	return &appsv1beta2.DaemonSetList{
+	return &appsv1.DaemonSetList{
 		Items: items,
 	}, nil
 }
 
 func (kube *kubeObserver) GetReplicaSets() (
-	*appsv1beta2.ReplicaSetList, error,
+	*appsv1.ReplicaSetList, error,
 ) {
-	var items []appsv1beta2.ReplicaSet
+	var items []appsv1.ReplicaSet
 	err := kube.get(kuber.ReplicaSets, &items)
 	if err != nil {
 		return nil, err
 	}
-	return &appsv1beta2.ReplicaSetList{
+	return &appsv1.ReplicaSetList{
 		Items: items,
 	}, nil
 }

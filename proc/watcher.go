@@ -17,15 +17,13 @@ import (
 	"k8s.io/client-go/rest"
 
 	kv1 "k8s.io/api/apps/v1"
-	kbeta2 "k8s.io/api/apps/v1beta2"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kapi "k8s.io/api/core/v1"
-	kext "k8s.io/api/extensions/v1beta1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kfields "k8s.io/apimachinery/pkg/fields"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
 	kutilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	beta2client "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
+	v1client "k8s.io/client-go/kubernetes/typed/apps/v1"
 	beta1batchclient "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	kcache "k8s.io/client-go/tools/cache"
 )
@@ -33,7 +31,7 @@ import (
 // Observer kubernets objects observer
 type Observer struct {
 	clientset     *kubernetes.Clientset
-	clientV1Beta2 *beta2client.AppsV1beta2Client
+	clientV1 *v1client.AppsV1Client
 	batchV1Beta1  *beta1batchclient.BatchV1beta1Client
 	pods          chan Pod
 	replicas      chan ReplicaSpec
@@ -46,14 +44,14 @@ type Observer struct {
 // NewObserver creates a new observer
 func NewObserver(
 	clientset *kubernetes.Clientset,
-	clientV1Beta2 *beta2client.AppsV1beta2Client,
+	clientV1 *v1client.AppsV1Client,
 	batchV1Beta1 *beta1batchclient.BatchV1beta1Client,
 	identificator Identificator,
 	health *health.Health,
 ) *Observer {
 	observer := &Observer{
 		clientset:     clientset,
-		clientV1Beta2: clientV1Beta2,
+		clientV1: 	   clientV1,
 		batchV1Beta1:  batchV1Beta1,
 		pods:          make(chan Pod),
 		replicas:      make(chan ReplicaSpec),
@@ -125,7 +123,6 @@ func (observer *Observer) Start() {
 	)
 
 	watchers := &sync.WaitGroup{}
-	version, _ := observer.minorVersion()
 
 	for {
 
@@ -136,32 +133,18 @@ func (observer *Observer) Start() {
 		go observer.watchReplicationControllers(watchers, stopCh)
 
 		watchers.Add(1)
-		if version >= 16 {
-			go observer.watchStatefulSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
-		} else {
-			go observer.watchStatefulSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
-		}
+		go observer.watchStatefulSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
+
 
 		watchers.Add(1)
-		if version >= 16 {
-			go observer.watchDaemonSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
-		} else {
-			go observer.watchDaemonSets(watchers, observer.clientset.ExtensionsV1beta1().RESTClient(), stopCh)
-		}
+		go observer.watchDaemonSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
+
 
 		watchers.Add(1)
-		if version >= 16 {
-			go observer.watchDeployments(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
-		} else {
-			go observer.watchDeployments(watchers, observer.clientset.ExtensionsV1beta1().RESTClient(), stopCh)
-		}
+		go observer.watchDeployments(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
 
 		watchers.Add(1)
-		if version >= 16 {
-			go observer.watchReplicaSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
-		} else {
-			go observer.watchReplicaSets(watchers, observer.clientV1Beta2.RESTClient(), stopCh)
-		}
+		go observer.watchReplicaSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
 
 		// watchers.Add(1)
 		// go observer.watchCronJobs(watchers, stopCh)
@@ -289,11 +272,11 @@ func (observer *Observer) watchDeployments(
 			stopCh,
 			client,
 			"deployment",
-			&kext.Deployment{},
+			&kv1.Deployment{},
 
 			func(obj interface{}) {
 				err := observer.handleDeployment(
-					obj.(*kext.Deployment),
+					obj.(*kv1.Deployment),
 				)
 				if err != nil {
 					errorf(err, "{kubernetes} unable to handle deployment")
@@ -361,11 +344,11 @@ func (observer *Observer) watchStatefulSets(
 			stopCh,
 			client,
 			"statefulset",
-			&kbeta2.StatefulSet{},
+			&kv1.StatefulSet{},
 
 			func(obj interface{}) {
 				err := observer.handleStatefulSet(
-					obj.(*kbeta2.StatefulSet),
+					obj.(*kv1.StatefulSet),
 				)
 				if err != nil {
 					errorf(err, "{kubernetes} unable to handle statefulSet")
@@ -391,7 +374,7 @@ func (observer *Observer) watchStatefulSets(
 }
 
 func (observer *Observer) handleStatefulSet(
-	statefulset *kbeta2.StatefulSet,
+	statefulset *kv1.StatefulSet,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
@@ -529,11 +512,11 @@ func (observer *Observer) watchDaemonSets(
 			stopCh,
 			client,
 			"daemonset",
-			&kext.DaemonSet{},
+			&kv1.DaemonSet{},
 
 			func(obj interface{}) {
 				err := observer.handleDaemonSet(
-					obj.(*kext.DaemonSet),
+					obj.(*kv1.DaemonSet),
 				)
 				if err != nil {
 					errorf(err, "{kubernetes} unable to handle daemonSet")
@@ -558,7 +541,7 @@ func (observer *Observer) watchDaemonSets(
 }
 
 func (observer *Observer) handleDaemonSet(
-	daemonset *kext.DaemonSet,
+	daemonset *kv1.DaemonSet,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
@@ -815,7 +798,7 @@ func (observer *Observer) handleReplicationController(
 }
 
 func (observer *Observer) handleDeployment(
-	deployment *kext.Deployment,
+	deployment *kv1.Deployment,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
@@ -1047,15 +1030,15 @@ func (observer *Observer) watchReplicaSets(
 			stopCh,
 			client,
 			"replicaset",
-			&kbeta2.ReplicaSet{},
+			&kv1.ReplicaSet{},
 
 			func(obj interface{}) {
 				// skip watching replica sets that are controlled of other controllers
-				if rs := obj.(*kbeta2.ReplicaSet); len(rs.OwnerReferences) > 0 {
+				if rs := obj.(*kv1.ReplicaSet); len(rs.OwnerReferences) > 0 {
 					return
 				}
 				err := observer.handleReplicaSet(
-					obj.(*kbeta2.ReplicaSet),
+					obj.(*kv1.ReplicaSet),
 				)
 				if err != nil {
 					errorf(err, "{kubernetes} unable to handle replicaSet")
@@ -1127,7 +1110,7 @@ func (observer *Observer) handleReplicaSetV1(
 }
 
 func (observer *Observer) handleReplicaSet(
-	replicaset *kbeta2.ReplicaSet,
+	replicaset *kv1.ReplicaSet,
 ) error {
 	// specify until they fix it
 	// https://github.com/kubernetes/client-go/issues/413
