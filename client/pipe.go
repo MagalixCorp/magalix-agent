@@ -76,7 +76,7 @@ func (p *Pipe) start() {
 				p.logger.Errorf(ctx.Reason(err), "error sending packet")
 			} else {
 				ctx = ctx.Describe("remaining", p.storage.Len())
-				p.logger.Infof(ctx, "completed sending packet")
+				p.logger.Tracef(ctx, "completed sending packet")
 			}
 		}
 	}()

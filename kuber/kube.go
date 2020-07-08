@@ -18,12 +18,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
-	kbeta2 "k8s.io/api/apps/v1beta2"
+	appsV1 "k8s.io/api/apps/v1"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	beta2client "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
-	kapps "k8s.io/client-go/kubernetes/typed/apps/v1beta2"
+	kapps "k8s.io/client-go/kubernetes/typed/apps/v1"
 	batch "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	kcore "k8s.io/client-go/kubernetes/typed/core/v1"
 	krest "k8s.io/client-go/rest"
@@ -37,11 +36,11 @@ const (
 // Kube kube struct
 type Kube struct {
 	Clientset     *kubernetes.Clientset
-	ClientV1Beta2 *beta2client.AppsV1beta2Client
+	ClientV1 	  *kapps.AppsV1Client
 	ClientBatch   *batch.BatchV1beta1Client
 
 	core   kcore.CoreV1Interface
-	apps   kapps.AppsV1beta2Interface
+	apps   kapps.AppsV1Interface
 	batch  batch.BatchV1beta1Interface
 	config *krest.Config
 	logger *log.Logger
@@ -81,10 +80,10 @@ type RawResources struct {
 
 	CronJobList *kbeta1.CronJobList
 
-	DeploymentList  *kbeta2.DeploymentList
-	StatefulSetList *kbeta2.StatefulSetList
-	DaemonSetList   *kbeta2.DaemonSetList
-	ReplicaSetList  *kbeta2.ReplicaSetList
+	DeploymentList  *appsV1.DeploymentList
+	StatefulSetList *appsV1.StatefulSetList
+	DaemonSetList   *appsV1.DaemonSetList
+	ReplicaSetList  *appsV1.ReplicaSetList
 }
 
 func InitKubernetes(
@@ -107,11 +106,11 @@ func InitKubernetes(
 		)
 	}
 
-	clientV1Beta2, err := beta2client.NewForConfig(config)
+	clientV1, err := kapps.NewForConfig(config)
 	if err != nil {
 		return nil, karma.Format(
 			err,
-			"unable to create ClientV1Beta2",
+			"unable to create ClientV1",
 		)
 	}
 
@@ -125,9 +124,9 @@ func InitKubernetes(
 
 	kube := &Kube{
 		Clientset:     clientset,
-		ClientV1Beta2: clientV1Beta2,
+		ClientV1: 	   clientV1,
 		core:          clientset.CoreV1(),
-		apps:          clientset.AppsV1beta2(),
+		apps:          clientset.AppsV1(),
 		batch:         clientV1Beta1,
 		config:        config,
 		logger:        client.Logger,
@@ -539,7 +538,7 @@ func (kube *Kube) GetReplicationControllers() (
 }
 
 // GetDeployments get deployments
-func (kube *Kube) GetDeployments() (*kbeta2.DeploymentList, error) {
+func (kube *Kube) GetDeployments() (*appsV1.DeploymentList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of deployments")
 	deployments, err := kube.apps.Deployments("").List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
@@ -560,7 +559,7 @@ func (kube *Kube) GetDeployments() (*kbeta2.DeploymentList, error) {
 
 // GetStatefulSets get stateful sets
 func (kube *Kube) GetStatefulSets() (
-	*kbeta2.StatefulSetList, error,
+	*appsV1.StatefulSetList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of stateful sets")
 	statefulSets, err := kube.apps.
@@ -584,7 +583,7 @@ func (kube *Kube) GetStatefulSets() (
 
 // GetDaemonSets get daemon sets
 func (kube *Kube) GetDaemonSets() (
-	*kbeta2.DaemonSetList, error,
+	*appsV1.DaemonSetList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of daemon sets")
 	daemonSets, err := kube.apps.
@@ -608,7 +607,7 @@ func (kube *Kube) GetDaemonSets() (
 
 // GetReplicaSets get replicasets
 func (kube *Kube) GetReplicaSets() (
-	*kbeta2.ReplicaSetList, error,
+	*appsV1.ReplicaSetList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
 	replicaSets, err := kube.apps.
@@ -632,7 +631,7 @@ func (kube *Kube) GetReplicaSets() (
 
 // GetReplicaSets get replicasets
 func (kube *Kube) GetNamespaceReplicaSets(namespace string) (
-	*kbeta2.ReplicaSetList, error,
+	*appsV1.ReplicaSetList, error,
 ) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
 	replicaSets, err := kube.apps.
@@ -876,7 +875,7 @@ func (kube *Kube) SetResources(
 	if err != nil {
 		return false, err
 	}
-	req := kube.ClientV1Beta2.RESTClient().Patch(types.StrategicMergePatchType).
+	req := kube.ClientV1.RESTClient().Patch(types.StrategicMergePatchType).
 		Resource(kind + "s").
 		Namespace(namespace).
 		Name(name).

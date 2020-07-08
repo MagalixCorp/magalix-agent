@@ -92,7 +92,7 @@ func NewEventer(
 
 	observer := proc.NewObserver(
 		kube.Clientset,
-		kube.ClientV1Beta2,
+		kube.ClientV1,
 		kube.ClientBatch,
 		eventer,
 		health,

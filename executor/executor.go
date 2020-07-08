@@ -3,8 +3,6 @@ package executor
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/client"
@@ -359,122 +357,7 @@ func (executor *Executor) execute(
 		statusMap[kv1.PodFailed] = "pods failed to restart"
 		statusMap[kv1.PodUnknown] = "pods status is unknown"
 
-		msg := "pods restarting exceeded timout (15 min)"
-		start := time.Now()
-
-		entitiName := ""
-		result := proto.DecisionExecutionStatusFailed
-		var targetPodCount int32 = 0
-		var runningPods int32 = 0
-		flag := false
-
-		if strings.ToLower(kind) == "deployment"{
-
-			replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
-
-			if err != nil {
-				flag = true
-
-			}else{
-
-				currentReplicas := []Replica{}
-				// get the new replicaset
-				for _, replica := range replicasets.Items {
-					if strings.Contains(replica.Name, name) && replica.Status.Replicas > 0{
-						currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.CreationTimestamp.Local()})
-					}
-				}
-
-				sort.Slice(currentReplicas, func(i, j int) bool {
-					return currentReplicas[i].time.After(currentReplicas[j].time)
-				})
-
-				entitiName = currentReplicas[0].name
-				targetPodCount = currentReplicas[0].replicas
-			}
-
-		}else if strings.ToLower(kind) == "statefulset"{
-
-			statefulset, err := executor.kube.GetStatefulSet(namespace, name)
-
-			if err != nil {
-				flag = true
-
-			}else{
-				// get the new StatefulSet
-					if statefulset.Status.ReadyReplicas > 0 {
-						entitiName = statefulset.Name
-						targetPodCount = *statefulset.Spec.Replicas
-					}
-			}
-		}else if strings.ToLower(kind) == "daemonset"{
-
-			daemonSet, err := executor.kube.GetDaemonSet(namespace, name)
-
-			if err != nil {
-				flag = true
-
-			}else{
-				// get the new daemonSet
-				if daemonSet.Status.NumberReady > 0 {
-					entitiName = daemonSet.Name
-					targetPodCount = daemonSet.Status.DesiredNumberScheduled
-				}
-			}
-		}else if strings.ToLower(kind) == "job" || strings.ToLower(kind) == "cronjob"{
-
-			job, err := executor.kube.GetCronJob(namespace, name)
-
-			if err != nil {
-				flag = true
-
-			}else{
-				// get the new job
-				entitiName = job.Name
-				targetPodCount = 1
-
-			}
-		}
-
-		if flag {
-			msg = "failed to trigger pod status"
-			result = proto.DecisionExecutionStatusFailed
-
-		}else {
-
-			// get pods of the new controller
-			for time.Now().Sub(start) < decisionsExecutionTimeout {
-
-				status := kv1.PodPending
-
-				time.Sleep(podStatusSleep)
-				pods, err := executor.kube.GetNameSpacePods(namespace)
-
-				if err != nil {
-					msg = "failed to trigger pod status"
-					result = proto.DecisionExecutionStatusFailed
-					break
-				}
-
-				for _, pod := range pods.Items {
-					if strings.Contains(pod.Name, entitiName){
-						executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
-						status = pod.Status.Phase
-						if status == kv1.PodRunning {
-							runningPods++
-						}else if status != kv1.PodPending {
-							break
-						}
-					}
-				}
-
-				if runningPods == targetPodCount {
-					msg = statusMap[status]
-					result = proto.DecisionExecutionStatusSucceed
-					break
-				}
-			}
-		}
+		result, msg, targetPodCount, runningPods := executor.podsStatusHandler(name, namespace, kind, statusMap)
 
 		//rollback in case of failed to restart all pods
 		if runningPods < targetPodCount {
