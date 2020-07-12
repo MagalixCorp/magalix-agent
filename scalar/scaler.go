@@ -19,6 +19,6 @@ func InitScalars(
 
 	sl.AddContainerListener(oomKilledProcessor)
 
-	go oomKilledProcessor.Start()
+	//go oomKilledProcessor.Start()
 	go sl.Start()
 }
