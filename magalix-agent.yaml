@@ -21,7 +21,6 @@ spec:
             - --gateway=wss://agent-gateway.magalix.com/
             - --source=kubelet
             - --trace-log=/agent.log
-            - --packets-v2
           envFrom:
             - secretRef:
                 name: magalix-agent
@@ -35,9 +34,9 @@ metadata:
   namespace: kube-system
 type: Opaque
 data:
-  ACCOUNT_ID: #ADD ACCOUNT ID - go to https://consoel.magalix.com 
-  CLUSTER_ID: # ADD CLUSTER ID - go to https://consoel.magalix.com 
-  SECRET: # ADD CLUSTER SPECIFIC SECRET - go to https://consoel.magalix.com 
+  ACCOUNT_ID: #ADD ACCOUNT ID - go to https://consoel.magalix.com
+  CLUSTER_ID: # ADD CLUSTER ID - go to https://consoel.magalix.com
+  SECRET: # ADD CLUSTER SPECIFIC SECRET - go to https://consoel.magalix.com
 
 ---
 
