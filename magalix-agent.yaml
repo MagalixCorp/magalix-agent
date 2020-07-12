@@ -18,7 +18,7 @@ spec:
           name: agent
           args:
             - --kube-incluster
-            - --gateway=ws://agent-gateway.magalix.com/
+            - --gateway=wss://agent-gateway.magalix.com/
             - --source=kubelet
             - --trace-log=/agent.log
             - --packets-v2
