@@ -25,6 +25,6 @@ func InitScalars(
 
 	sl.AddPodListener(oomKilledProcessor)
 
-	//go oomKilledProcessor.Start()
+	go oomKilledProcessor.Start()
 	go sl.Start()
 }

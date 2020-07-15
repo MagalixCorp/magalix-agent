@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	_ "net/http/pprof"
 )
 
 var usage = `agent - magalix services agent.
@@ -155,7 +156,9 @@ func main() {
 		)
 		os.Exit(1)
 	}
-
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
 	// TODO: remove
 	// a hack to set default timeout for all http requests
 	http.DefaultClient = &http.Client{
