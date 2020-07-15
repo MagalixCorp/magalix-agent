@@ -400,7 +400,7 @@ func EncodeSnappy(in interface{}) (out []byte, err error) {
 func DecodeSnappy(in []byte, out interface{}) error {
 	jsonIn, err := snappy.Decode(nil, in)
 	if err != nil {
-		return err
+		return karma.Format(err, "unable to decode to snappy")
 	}
 	return json.Unmarshal(jsonIn, out)
 }
