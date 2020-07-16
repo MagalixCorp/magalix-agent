@@ -60,8 +60,6 @@ type Scanner struct {
 	analysisDataSender func(args ...interface{})
 
 	dones []chan struct{}
-
-	enableSender bool
 }
 
 // deprecated: please use entities/EntitiesWatcher instead

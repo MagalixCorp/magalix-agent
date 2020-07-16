@@ -111,14 +111,6 @@ func (client *Client) ping() error {
 	return nil
 }
 
-// sendBye sends bye to indicate exit
-func (client *Client) sendBye(reason string) error {
-	var response proto.PacketBye
-	return client.Send(proto.PacketKindBye, proto.PacketBye{
-		Reason: reason,
-	}, &response)
-}
-
 // SendRaw sends arbitrary raw data to be stored in magalix BE
 func (client *Client) SendRaw(rawResources map[string]interface{}) {
 	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}

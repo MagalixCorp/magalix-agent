@@ -3,8 +3,6 @@ package metrics
 import (
 	"time"
 
-	"github.com/MagalixTechnologies/log-go"
-
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
@@ -126,40 +124,6 @@ func watchMetrics(
 	ticker.Start(false, true, true)
 }
 
-func packetMetricsProm(metricsBatch *MetricsBatch) *proto.PacketMetricsPromStoreRequest {
-	packet := &proto.PacketMetricsPromStoreRequest{
-		Timestamp: metricsBatch.Timestamp,
-		Metrics:   make([]*proto.PacketMetricFamilyItem, len(metricsBatch.Metrics)),
-	}
-
-	i := 0
-	for _, metricFamily := range metricsBatch.Metrics {
-		familyItem := &proto.PacketMetricFamilyItem{
-			Name:   metricFamily.Name,
-			Type:   metricFamily.Type,
-			Help:   metricFamily.Help,
-			Tags:   metricFamily.Tags,
-			Values: make([]*proto.PacketMetricValueItem, len(metricFamily.Values)),
-		}
-		for j, metricValue := range metricFamily.Values {
-			familyItem.Values[j] = &proto.PacketMetricValueItem{
-				Node:        metricValue.Node,
-				Application: metricValue.Application,
-				Service:     metricValue.Service,
-				Container:   metricValue.Container,
-
-				Tags:  metricValue.Tags,
-				Value: metricValue.Value,
-			}
-		}
-
-		packet.Metrics[i] = familyItem
-		i++
-	}
-
-	return packet
-}
-
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -188,8 +152,6 @@ func sendMetrics(client *client.Client, pipe chan []*Metric) {
 		queue <- metrics
 	}
 }
-
-var logger = log.New(true, true, "agent.log")
 
 // SendMetrics bulk send metrics
 func sendMetricsBatch(c *client.Client, metrics []*Metric) {

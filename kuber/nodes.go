@@ -117,14 +117,6 @@ func AddContainerListToNodes(
 	return nodes
 }
 
-func getWorkerNodesMap(nodes []*Node) map[string]*Node {
-	table := map[string]*Node{}
-	for _, node := range nodes {
-		table[node.Name] = node
-	}
-	return table
-}
-
 func RangePods(
 	pods []corev1.Pod,
 	fn func(corev1.Pod) bool) error {
