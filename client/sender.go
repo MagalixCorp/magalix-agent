@@ -13,12 +13,13 @@ import (
 func (client *Client) hello() error {
 	var hello proto.PacketHello
 	err := client.send(proto.PacketKindHello, proto.PacketHello{
-		Major:     ProtocolMajorVersion,
-		Minor:     ProtocolMinorVersion,
-		Build:     client.version,
-		StartID:   client.startID,
-		AccountID: client.AccountID,
-		ClusterID: client.ClusterID,
+		Major:           ProtocolMajorVersion,
+		Minor:           ProtocolMinorVersion,
+		Build:           client.version,
+		StartID:         client.startID,
+		AccountID:       client.AccountID,
+		ClusterID:       client.ClusterID,
+		PacketV2Enabled: true,
 	}, &hello)
 	if err != nil {
 		return err

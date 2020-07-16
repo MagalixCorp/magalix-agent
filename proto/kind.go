@@ -13,8 +13,8 @@ const (
 
 	PacketKindLogs PacketKind = "logs"
 
-	PacketKindMetricsStoreRequest     PacketKind = "metrics/store"
-	PacketKindMetricsStoreV2Request     PacketKind = "metrics/store_v2"
+	PacketKindMetricsStoreRequest   PacketKind = "metrics/store"
+	PacketKindMetricsStoreV2Request PacketKind = "metrics/store_v2"
 
 	PacketKindApplicationsStoreRequest PacketKind = "applications/store"
 
