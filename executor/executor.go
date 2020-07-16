@@ -276,6 +276,8 @@ func (executor *Executor) execute(
 	trace, _ := json.Marshal(totalResources)
 	executor.logger.Infof(
 		ctx.
+			Describe("ClusterID", executor.client.ClusterID).
+			Describe("AccountID", executor.client.AccountID).
 			Describe("dry run", executor.dryRun).
 			Describe("cpu unit", "milliCore").
 			Describe("memory unit", "mibiByte").
