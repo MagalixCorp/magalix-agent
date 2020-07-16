@@ -249,7 +249,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		clusterID,
 		optInAnalysisData,
 		analysisDataInterval,
-		false,
 	)
 
 	e := executor.InitExecutor(
