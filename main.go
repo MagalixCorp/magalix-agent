@@ -16,8 +16,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/scalar"
-	"github.com/MagalixCorp/magalix-agent/v2/scalar2"
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -193,7 +191,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	var (
 		metricsEnabled  = !args["--disable-metrics"].(bool)
 		eventsEnabled   = !args["--disable-events"].(bool)
-		scalarEnabled   = !args["--disable-scalar"].(bool)
+		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
 		packetV2Enabled = args["--packets-v2"].(bool)
 		dryRun          = args["--dry-run"].(bool)
@@ -244,9 +242,9 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			logger.Fatalf(err, "unable to start entities watcher")
 		}
 
-		if scalarEnabled {
+		/* if scalarEnabled {
 			scalar2.InitScalars(logger, kube, observer_, dryRun)
-		}
+		} */
 
 		entityScanner = scanner.InitScanner(
 			gwClient,
@@ -271,9 +269,9 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			true,
 		)
 
-		if scalarEnabled {
+		/* if scalarEnabled {
 			scalar.InitScalars(logger, entityScanner, kube, dryRun)
-		}
+		} */
 	}
 
 	e := executor.InitExecutor(
