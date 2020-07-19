@@ -25,6 +25,14 @@ spec:
           envFrom:
             - secretRef:
                 name: magalix-agent
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 80
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 80
 
 ---
 
