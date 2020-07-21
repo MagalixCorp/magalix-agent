@@ -16,8 +16,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/scalar"
-	"github.com/MagalixCorp/magalix-agent/v2/scalar2"
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -27,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	_ "net/http/pprof"
 )
 
 var usage = `agent - magalix services agent.
@@ -155,7 +154,9 @@ func main() {
 		)
 		os.Exit(1)
 	}
-
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
 	// TODO: remove
 	// a hack to set default timeout for all http requests
 	http.DefaultClient = &http.Client{
@@ -190,7 +191,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	var (
 		metricsEnabled  = !args["--disable-metrics"].(bool)
 		eventsEnabled   = !args["--disable-events"].(bool)
-		scalarEnabled   = !args["--disable-scalar"].(bool)
+		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
 		packetV2Enabled = args["--packets-v2"].(bool)
 		dryRun          = args["--dry-run"].(bool)
@@ -241,9 +242,9 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			logger.Fatalf(err, "unable to start entities watcher")
 		}
 
-		if scalarEnabled {
+		/* if scalarEnabled {
 			scalar2.InitScalars(logger, kube, observer_, dryRun)
-		}
+		} */
 
 		entityScanner = scanner.InitScanner(
 			gwClient,
@@ -268,9 +269,9 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			true,
 		)
 
-		if scalarEnabled {
+		/* if scalarEnabled {
 			scalar.InitScalars(logger, entityScanner, kube, dryRun)
-		}
+		} */
 	}
 
 	e := executor.InitExecutor(
