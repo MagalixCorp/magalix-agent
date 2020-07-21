@@ -156,9 +156,6 @@ func main() {
 		)
 		os.Exit(1)
 	}
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
 	// TODO: remove
 	// a hack to set default timeout for all http requests
 	http.DefaultClient = &http.Client{
