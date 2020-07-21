@@ -90,7 +90,7 @@ Options:
   --opt-in-analysis-data                     Send anonymous data for analysis.
   --analysis-data-interval <duration>        Analysis data send interval.
                                               [default: 5m]
-  --packets-v2                               Enable v2 packets (without ids).
+  --packets-v2                               Enable v2 packets (without ids). This is deprecated and kept for backward compatability.
   --disable-metrics                          Disable metrics collecting and sending.
   --disable-events                           Disable events collecting and sending.
   --disable-scalar                           Disable in-agent scalar.
