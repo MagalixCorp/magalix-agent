@@ -61,6 +61,7 @@ func InitExecutor(
 ) *Executor {
 	e := NewExecutor(client, kube, scanner, workersCount, dryRun)
 	e.startWorkers()
+	go e.executePendingDecisions()
 	return e
 }
 
@@ -98,6 +99,57 @@ func (executor *Executor) backoff(
 		},
 		executor.logger,
 	)
+}
+
+// executePendingDecisions pulls decisions pending in execution status to execute again
+// decisions can stuck in pending status if the it crashes while there are few decisions queued for execution
+func (executor *Executor) executePendingDecisions() {
+	decisions, err := executor.pullPendingDecisions()
+	if err != nil {
+		executor.logger.Errorf(
+			err,
+			"unable to pull due decisions",
+		)
+	}
+	for _, decision := range decisions {
+		err := executor.submitDecision(decision, decisionsPullBufferTimeout)
+		if err != nil {
+			executor.logger.Errorf(
+				err,
+				"unable to submit due decision",
+			)
+		}
+	}
+}
+
+func (executor *Executor) pullPendingDecisions() ([]*proto.PacketDecision, error) {
+	var response proto.PacketDecisionPullResponse
+	err := executor.backoff(
+		func() error {
+			var res proto.PacketDecisionPullResponse
+			err := executor.client.Send(
+				proto.PacketKindDecisionPull,
+				proto.PacketDecisionPullRequest{},
+				&res,
+			)
+			if err == nil {
+				response = res
+			}
+
+			return err
+		},
+		decisionsPullBackoffSleep,
+		decisionsPullBackoffMaxRetries,
+	)
+
+	if err != nil {
+		return nil, karma.Format(
+			err,
+			"unable to pull due decisions",
+		)
+	}
+
+	return response.Decisions, nil
 }
 
 func (executor *Executor) startWorkers() {
@@ -276,8 +328,6 @@ func (executor *Executor) execute(
 	trace, _ := json.Marshal(totalResources)
 	executor.logger.Infof(
 		ctx.
-			Describe("ClusterID", executor.client.ClusterID).
-			Describe("AccountID", executor.client.AccountID).
 			Describe("dry run", executor.dryRun).
 			Describe("cpu unit", "milliCore").
 			Describe("memory unit", "mibiByte").
