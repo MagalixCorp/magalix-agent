@@ -93,6 +93,8 @@ Options:
   --disable-metrics                          Disable metrics collecting and sending.
   --disable-events                           Disable events collecting and sending.
   --disable-scalar                           Disable in-agent scalar.
+  --port <port>                              Port to start the server on for liveness and readiness probes
+                                               [default: 80]
   --dry-run                                  Disable decision execution.
   --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
@@ -166,6 +168,16 @@ func main() {
 		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 	)
 
+	port := args["--port"].(string)
+	probes := NewProbesServer(":" + port, logger)
+	go func() {
+		err = probes.Start()
+		if err != nil {
+			logger.Fatalf(err, "unable to start probes server")
+			os.Exit(1)
+		}
+	}()
+
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, logger, connected)
 
@@ -180,8 +192,8 @@ func main() {
 	logger.Infof(nil, "Waiting for connection and authorization")
 	<-connected
 	logger.Infof(nil, "Connected and authorized")
+	probes.Authorized = true
 	initAgent(args, gwClient, logger, accountID, clusterID)
-
 }
 
 func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, accountID uuid.UUID, clusterID uuid.UUID) {
