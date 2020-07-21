@@ -19,7 +19,7 @@ func (client *Client) hello() error {
 		StartID:         client.startID,
 		AccountID:       client.AccountID,
 		ClusterID:       client.ClusterID,
-		PacketV2Enabled: client.packetV2Enabled,
+		PacketV2Enabled: true,
 	}, &hello)
 	if err != nil {
 		return err
@@ -109,14 +109,6 @@ func (client *Client) ping() error {
 	client.Infof(context, "ping-pong has been finished")
 
 	return nil
-}
-
-// sendBye sends bye to indicate exit
-func (client *Client) sendBye(reason string) error {
-	var response proto.PacketBye
-	return client.Send(proto.PacketKindBye, proto.PacketBye{
-		Reason: reason,
-	}, &response)
 }
 
 // SendRaw sends arbitrary raw data to be stored in magalix BE

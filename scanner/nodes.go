@@ -83,11 +83,3 @@ func packetContainerResources(resources *kuber.ContainerResources) *proto.Packet
 		Memory: resources.Memory,
 	}
 }
-
-func getNodesTable(nodes []kuber.Node) map[string]uuid.UUID {
-	table := map[string]uuid.UUID{}
-	for _, node := range nodes {
-		table[node.Name] = node.ID
-	}
-	return table
-}

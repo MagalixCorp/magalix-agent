@@ -10,17 +10,6 @@ import (
 	karma "github.com/reconquest/karma-go"
 )
 
-func (client *Client) halt(reason string) {
-	// debug purposes
-	err := client.sendBye(reason)
-	if err != nil {
-		client.parentLogger.Errorf(
-			err,
-			"can't send bye packet",
-		)
-	}
-}
-
 // WaitExit waits for app exit
 func (client *Client) WaitExit() {
 	exitcode := <-client.exit
@@ -44,7 +33,7 @@ func (client *Client) Recover() {
 // Done sends the exit signal
 func (client *Client) Done(exitcode int, jitter bool) {
 	waitTime := 0 * time.Second
-	if jitter{
+	if jitter {
 		// Set a random wait time of up to 600 seconds (10 minutes)
 		waitTime = time.Duration(rand.Intn(600)) * time.Second
 	}
