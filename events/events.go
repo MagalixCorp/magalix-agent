@@ -37,8 +37,6 @@ type Eventer struct {
 	skipNamespaces []string
 	scanner        *scanner.Scanner
 
-	oomKilled chan uuid.UUID
-
 	m sync.Mutex
 }
 

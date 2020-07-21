@@ -28,27 +28,26 @@ const (
 	decisionsFeedbackExpiryCount    = 0
 	decisionsFeedbackExpiryPriority = 10
 	decisionsFeedbackExpiryRetries  = 5
-	decisionsExecutionTimeout		= 15 * time.Minute
-	podStatusSleep					= 15 * time.Second
+	decisionsExecutionTimeout       = 15 * time.Minute
+	podStatusSleep                  = 15 * time.Second
 )
 
 // Executor decision executor
 type Executor struct {
-	client        *client.Client
-	logger        *log.Logger
-	kube          *kuber.Kube
-	scanner       *scanner.Scanner
-	dryRun        bool
-	oomKilled     chan uuid.UUID
-	workersCount  int
-	decisionsChan chan *proto.PacketDecision
-	inProgressJobs   map[string]bool
+	client         *client.Client
+	logger         *log.Logger
+	kube           *kuber.Kube
+	scanner        *scanner.Scanner
+	dryRun         bool
+	workersCount   int
+	decisionsChan  chan *proto.PacketDecision
+	inProgressJobs map[string]bool
 }
 
 type Replica struct {
-	name string
+	name     string
 	replicas int32
-	time time.Time
+	time     time.Time
 }
 
 // InitExecutor creates a new executor then starts it
@@ -79,9 +78,9 @@ func NewExecutor(
 		scanner: scanner,
 		dryRun:  dryRun,
 
-		workersCount:  workersCount,
-		inProgressJobs:   map[string]bool{},
-		decisionsChan: make(chan *proto.PacketDecision, decisionsBufferLength),
+		workersCount:   workersCount,
+		inProgressJobs: map[string]bool{},
+		decisionsChan:  make(chan *proto.PacketDecision, decisionsBufferLength),
 	}
 
 	return executor
@@ -158,10 +157,10 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 }
 
 func convertDecisionMemoryFromKiloByteToMegabyte(decision *proto.PacketDecision) {
-	if decision.ContainerResources.Requests != nil && decision.ContainerResources.Requests.Memory != nil{
+	if decision.ContainerResources.Requests != nil && decision.ContainerResources.Requests.Memory != nil {
 		*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
 	}
-	if decision.ContainerResources.Limits != nil && decision.ContainerResources.Limits.Memory != nil{
+	if decision.ContainerResources.Limits != nil && decision.ContainerResources.Limits.Memory != nil {
 		*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
 	}
 }
@@ -216,7 +215,6 @@ func (executor *Executor) execute(
 		Describe("service-id", decision.ServiceId).
 		Describe("container-id", decision.ContainerId)
 
-
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
@@ -250,8 +248,8 @@ func (executor *Executor) execute(
 	totalResources := kuber.TotalResources{
 		Containers: []kuber.ContainerResourcesRequirements{
 			{
-				Name: container.Name,
-				Limits: new(kuber.RequestLimit),
+				Name:     container.Name,
+				Limits:   new(kuber.RequestLimit),
 				Requests: new(kuber.RequestLimit),
 			},
 		},
@@ -321,7 +319,7 @@ func (executor *Executor) execute(
 			cpuRequest := container.Resources.Requests.Cpu().MilliValue()
 
 			*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
-			*totalResources.Containers[0].Requests.Memory = memoryRequest /1024 / 1024
+			*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
 			*totalResources.Containers[0].Limits.CPU = cpuLimit
 			*totalResources.Containers[0].Requests.CPU = cpuRequest
 

@@ -21,10 +21,17 @@ spec:
             - --gateway=wss://agent-gateway.magalix.com/
             - --source=kubelet
             - --trace-log=/agent.log
-            - --packets-v2
           envFrom:
             - secretRef:
                 name: magalix-agent
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 80
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 80
 
 ---
 
@@ -37,7 +44,7 @@ type: Opaque
 data:
   ACCOUNT_ID: #ADD ACCOUNT ID - go to https://console.magalix.com 
   CLUSTER_ID: # ADD CLUSTER ID - go to https://console.magalix.com 
-  SECRET: # ADD CLUSTER SPECIFIC SECRET - go to https://console.magalix.com 
+  SECRET: # ADD CLUSTER SPECIFIC SECRET - go to https://console.magalix.com
 
 ---
 

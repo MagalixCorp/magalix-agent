@@ -1,8 +1,6 @@
 package metrics
 
 import (
-	"github.com/MagalixCorp/magalix-agent/v2/scanner"
-	"github.com/MagalixTechnologies/log-go"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/client"
@@ -99,11 +97,10 @@ func watchMetrics(
 	client *client.Client,
 	source MetricsSource,
 	entitiesProvider EntitiesProvider,
-	useMetricsPacketV2 bool,
 	interval time.Duration,
 ) {
 	metricsPipe := make(chan []*Metric)
-	go sendMetrics(client, useMetricsPacketV2, metricsPipe)
+	go sendMetrics(client, metricsPipe)
 	defer close(metricsPipe)
 
 	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
@@ -127,40 +124,6 @@ func watchMetrics(
 	ticker.Start(false, true, true)
 }
 
-func packetMetricsProm(metricsBatch *MetricsBatch) *proto.PacketMetricsPromStoreRequest {
-	packet := &proto.PacketMetricsPromStoreRequest{
-		Timestamp: metricsBatch.Timestamp,
-		Metrics:   make([]*proto.PacketMetricFamilyItem, len(metricsBatch.Metrics)),
-	}
-
-	i := 0
-	for _, metricFamily := range metricsBatch.Metrics {
-		familyItem := &proto.PacketMetricFamilyItem{
-			Name:   metricFamily.Name,
-			Type:   metricFamily.Type,
-			Help:   metricFamily.Help,
-			Tags:   metricFamily.Tags,
-			Values: make([]*proto.PacketMetricValueItem, len(metricFamily.Values)),
-		}
-		for j, metricValue := range metricFamily.Values {
-			familyItem.Values[j] = &proto.PacketMetricValueItem{
-				Node:        metricValue.Node,
-				Application: metricValue.Application,
-				Service:     metricValue.Service,
-				Container:   metricValue.Container,
-
-				Tags:  metricValue.Tags,
-				Value: metricValue.Value,
-			}
-		}
-
-		packet.Metrics[i] = familyItem
-		i++
-	}
-
-	return packet
-}
-
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -168,7 +131,7 @@ func min(a, b int) int {
 	return b
 }
 
-func sendMetrics(client *client.Client, useMetricsPacketV2 bool, pipe chan []*Metric) {
+func sendMetrics(client *client.Client, pipe chan []*Metric) {
 	queueLimit := 100
 	queue := make(chan []*Metric, queueLimit)
 	defer close(queue)
@@ -176,7 +139,7 @@ func sendMetrics(client *client.Client, useMetricsPacketV2 bool, pipe chan []*Me
 		for metrics := range queue {
 			if len(metrics) > 0 {
 				client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "sending metrics")
-				sendMetricsBatch(client, useMetricsPacketV2, metrics)
+				sendMetricsBatch(client, metrics)
 				client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "metrics sent")
 			}
 		}
@@ -190,110 +153,32 @@ func sendMetrics(client *client.Client, useMetricsPacketV2 bool, pipe chan []*Me
 	}
 }
 
-var logger = log.New(true, true, "agent.log")
-
 // SendMetrics bulk send metrics
-func sendMetricsBatch(c *client.Client, useMetricsPacketV2 bool, metrics []*Metric) {
-	ctx := karma.
-		Describe("account_id", c.AccountID).
-		Describe("cluster_id", c.ClusterID)
-
+func sendMetricsBatch(c *client.Client, metrics []*Metric) {
 	var packet interface{}
 	var packetKind proto.PacketKind
-	if useMetricsPacketV2 {
-		var req proto.PacketMetricsStoreV2Request
-		for _, metric := range metrics {
-			req = append(req, proto.MetricStoreV2Request{
-				Name:           metric.Name,
-				Type:           metric.Type,
-				NodeName:       metric.NodeName,
-				NodeIP:         metric.NodeIP,
-				NamespaceName:  metric.NamespaceName,
-				ControllerName: metric.ControllerName,
-				ControllerKind: metric.ControllerKind,
-				ContainerName:  metric.ContainerName,
-				Timestamp:      metric.Timestamp,
-				Value:          metric.Value,
-				PodName:        metric.PodName,
-				AdditionalTags: metric.AdditionalTags,
-			})
 
-		}
-		packet = req
-		packetKind = proto.PacketKindMetricsStoreV2Request
-	} else {
-		var req proto.PacketMetricsStoreRequest
-		for _, metric := range metrics {
-			ctx.Describe("metric_type", metric.Type)
+	var req proto.PacketMetricsStoreV2Request
+	for _, metric := range metrics {
+		req = append(req, proto.MetricStoreV2Request{
+			Name:           metric.Name,
+			Type:           metric.Type,
+			NodeName:       metric.NodeName,
+			NodeIP:         metric.NodeIP,
+			NamespaceName:  metric.NamespaceName,
+			ControllerName: metric.ControllerName,
+			ControllerKind: metric.ControllerKind,
+			ContainerName:  metric.ContainerName,
+			Timestamp:      metric.Timestamp,
+			Value:          metric.Value,
+			PodName:        metric.PodName,
+			AdditionalTags: metric.AdditionalTags,
+		})
 
-			var nodeID, namespaceID, controllerID, containerID uuid.UUID
-			var err error
-
-			if metric.NodeName != "" {
-				nodeID, err = scanner.IdentifyEntity(metric.NodeIP, c.ClusterID)
-				if err != nil {
-					c.Logger.Errorf(
-						ctx.Describe("node_name", metric.NodeName).Reason(err),
-						"unable to generate node id",
-					)
-					continue
-				}
-			}
-
-			if metric.NamespaceName != "" {
-				namespaceID, err = scanner.IdentifyEntity(metric.NamespaceName, c.ClusterID)
-				if err != nil {
-					c.Logger.Errorf(
-						ctx.Describe("namespace_name", metric.NamespaceName).Reason(err),
-						"unable to generate namespace id",
-					)
-					continue
-				}
-			}
-
-			if metric.ControllerName != "" {
-				controllerID, err = scanner.IdentifyEntity(metric.ControllerName, namespaceID)
-				if err != nil {
-					c.Logger.Errorf(
-						ctx.Describe("namespace_name", metric.NamespaceName).
-							Describe("controller_name", metric.ControllerName).
-							Reason(err),
-						"unable to generate controller id",
-					)
-					continue
-				}
-			}
-
-			if metric.ContainerName != "" {
-				containerID, err = scanner.IdentifyEntity(metric.ContainerName, controllerID)
-				if err != nil {
-					c.Logger.Errorf(
-						ctx.Describe("namespace_name", metric.NamespaceName).
-							Describe("controller_name", metric.ControllerName).
-							Describe("container_name", metric.ContainerName).
-							Reason(err),
-						"unable to generate controller id",
-					)
-					continue
-				}
-			}
-			req = append(req, proto.MetricStoreRequest{
-				Name:        metric.Name,
-				Type:        metric.Type,
-				Node:        nodeID,
-				Application: namespaceID,
-				Service:     controllerID,
-				Container:   containerID,
-				Timestamp:   metric.Timestamp,
-				Value:       metric.Value,
-				Pod:         metric.PodName,
-
-				AdditionalTags: metric.AdditionalTags,
-			})
-		}
-		packet = req
-		packetKind = proto.PacketKindMetricsStoreRequest
 	}
+	packet = req
+	packetKind = proto.PacketKindMetricsStoreV2Request
+
 	c.Pipe(client.Package{
 		Kind:        packetKind,
 		ExpiryTime:  utils.After(2 * time.Hour),
@@ -310,7 +195,6 @@ func InitMetrics(
 	nodesProvider NodesProvider,
 	entitiesProvider EntitiesProvider,
 	kube *kuber.Kube,
-	identifyEntities bool,
 	optInAnalysisData bool,
 	args map[string]interface{},
 ) error {
@@ -372,7 +256,6 @@ func InitMetrics(
 			client,
 			source,
 			entitiesProvider,
-			identifyEntities,
 			metricsInterval,
 		)
 	}

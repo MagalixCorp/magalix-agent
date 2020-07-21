@@ -13,12 +13,7 @@ const (
 
 	PacketKindLogs PacketKind = "logs"
 
-	PacketKindMetricsStoreRequest     PacketKind = "metrics/store"
-	PacketKindMetricsStoreV2Request     PacketKind = "metrics/store_v2"
-
-	PacketKindApplicationsStoreRequest PacketKind = "applications/store"
-
-	PacketKindNodesStoreRequest PacketKind = "nodes/store"
+	PacketKindMetricsStoreV2Request PacketKind = "metrics/store_v2"
 
 	PacketKindEntitiesDeltasRequest PacketKind = "entities/deltas"
 	PacketKindEntitiesResyncRequest PacketKind = "entities/resync"

@@ -7,9 +7,10 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"github.com/reconquest/karma-go"
 	"runtime/debug"
 	"time"
+
+	"github.com/reconquest/karma-go"
 
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -142,22 +143,7 @@ type PacketApplicationsStoreRequest []PacketRegisterApplicationItem
 
 type PacketApplicationsStoreResponse struct{}
 
-type PacketMetricsStoreRequest []MetricStoreRequest
 type PacketMetricsStoreV2Request []MetricStoreV2Request
-
-type MetricStoreRequest struct {
-	Name        string    `json:"name"`
-	Type        string    `json:"type"`
-	Node        uuid.UUID `json:"node"`
-	Application uuid.UUID `json:"application"`
-	Service     uuid.UUID `json:"service"`
-	Container   uuid.UUID `json:"container"`
-	Timestamp   time.Time `json:"timestamp"`
-	Value       int64     `json:"value"`
-	Pod         string    `json:"pod"`
-
-	AdditionalTags map[string]interface{} `json:"additional_tags"`
-}
 
 type MetricStoreV2Request struct {
 	Name           string    `json:"name"`
@@ -173,9 +159,6 @@ type MetricStoreV2Request struct {
 	PodName        string    `json:"pod_name"`
 
 	AdditionalTags map[string]interface{} `json:"additional_tags"`
-}
-
-type PacketMetricsStoreResponse struct {
 }
 
 type PacketMetricValueItem struct {
@@ -418,7 +401,7 @@ func EncodeSnappy(in interface{}) (out []byte, err error) {
 func DecodeSnappy(in []byte, out interface{}) error {
 	jsonIn, err := snappy.Decode(nil, in)
 	if err != nil {
-		return err
+		return karma.Format(err, "unable to decode to snappy")
 	}
 	return json.Unmarshal(jsonIn, out)
 }
