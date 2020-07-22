@@ -557,7 +557,7 @@ func (kube *Kube) GetDeployments() (*appsV1.DeploymentList, error) {
 	return deployments, nil
 }
 
-// GetStatefulSets get statuful sets
+// GetStatefulSets get stateful sets
 func (kube *Kube) GetStatefulSets() (
 	*appsV1.StatefulSetList, error,
 ) {

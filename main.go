@@ -17,7 +17,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/scalar2"
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -27,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	_ "net/http/pprof"
 )
 
 var usage = `agent - magalix services agent.
@@ -66,7 +66,7 @@ Options:
   --kubelet-backoff-sleep <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
-  --kubelet-backoff-max-retries <retries>    Max reties of backoff policy, then consider failed.
+  --kubelet-backoff-max-retries <retries>    Max retries of backoff policy, then consider failed.
                                               [default: 5]
   --metrics-interval <duration>              Metrics request and send interval.
                                               [default: 1m]
@@ -82,10 +82,10 @@ Options:
                                               [default: 60s]
   --timeout-proto-read <duration>            Timeout to read a message from websocket channel.
                                               [default: 60s]
-  --timeout-proto-reconnect <duration>       Timeout between reconneting retries.
+  --timeout-proto-reconnect <duration>       Timeout between reconnecting retries.
                                               [default: 1s]
   --timeout-proto-backoff <duration>         Timeout of backoff policy.
-                                              Timeout will be multipled from 1 to 10.
+                                              Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
   --opt-in-analysis-data                     Send anonymous data for analysis.
   --analysis-data-interval <duration>        Analysis data send interval.
@@ -157,7 +157,6 @@ func main() {
 		)
 		os.Exit(1)
 	}
-
 	// TODO: remove
 	// a hack to set default timeout for all http requests
 	http.DefaultClient = &http.Client{
@@ -202,7 +201,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	var (
 		metricsEnabled  = !args["--disable-metrics"].(bool)
 		eventsEnabled   = !args["--disable-events"].(bool)
-		scalarEnabled   = !args["--disable-scalar"].(bool)
+		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
 		dryRun          = args["--dry-run"].(bool)
 
@@ -250,9 +249,9 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		logger.Fatalf(err, "unable to start entities watcher")
 	}
 
-	if scalarEnabled {
+	/*if scalarEnabled {
 		scalar2.InitScalars(logger, kube, observer, dryRun)
-	}
+	}*/
 
 	entityScanner = scanner.InitScanner(
 		gwClient,
