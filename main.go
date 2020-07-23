@@ -12,7 +12,6 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/entities"
-	"github.com/MagalixCorp/magalix-agent/v2/events"
 	"github.com/MagalixCorp/magalix-agent/v2/executor"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
@@ -144,7 +143,7 @@ func main() {
 	logger.Infof(
 		karma.Describe("version", version).
 			Describe("args", fmt.Sprintf("%q", utils.GetSanitizedArgs())),
-		"magalix agent started",
+		"magalix agent started...",
 	)
 
 	secret, err := base64.StdEncoding.DecodeString(
@@ -200,7 +199,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	logger.Infof(nil, "Initializing Agent")
 	var (
 		metricsEnabled  = !args["--disable-metrics"].(bool)
-		eventsEnabled   = !args["--disable-events"].(bool)
+		//eventsEnabled   = !args["--disable-events"].(bool)
 		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
 		dryRun          = args["--dry-run"].(bool)
@@ -281,7 +280,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		return nil, nil
 	})
 
-	if eventsEnabled {
+	/*if eventsEnabled {
 		events.InitEvents(
 			gwClient,
 			kube,
@@ -289,7 +288,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			entityScanner,
 			args,
 		)
-	}
+	}*/
 
 	if metricsEnabled {
 		var nodesProvider metrics.NodesProvider
