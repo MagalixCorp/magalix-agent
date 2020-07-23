@@ -311,6 +311,10 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			os.Exit(1)
 		}
 	}
+
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
 }
 
 func getKRestConfig(
