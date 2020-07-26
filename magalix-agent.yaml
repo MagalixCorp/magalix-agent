@@ -62,7 +62,7 @@ metadata:
   name: magalix-agent
 rules:
 - apiGroups: ["", "extensions", "apps", "batch", "metrics.k8s.io"]
-  resources: ["nodes", "nodes/stats", "nodes/metrics", "nodes/proxy", "namespaces", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"]
+  resources: ["nodes", "nodes/stats", "nodes/metrics", "nodes/proxy", "namespaces", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs", "ingresses", "services", "clusterrolebindings", "clusterroles", "roles", "rolebindings"]
   verbs: ["get", "watch", "list", "patch"]
 - apiGroups: ["*"]
   resources: ["*"]
