@@ -115,7 +115,7 @@ func NewEventer(
 
 // Start starts the eventer
 func (eventer *Eventer) Start() {
-	go eventer.observer.Start()
+	//go eventer.observer.Start()
 	//eventer.proc.Start()
 	//eventer.startBatchWriter()
 }
