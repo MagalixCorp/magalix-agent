@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	_ "net/http/pprof"
 )
 
 var usage = `agent - magalix services agent.
@@ -312,9 +311,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		}
 	}
 
-	go func() {
-		http.ListenAndServe(":6060", nil)
-	}()
 }
 
 func getKRestConfig(
