@@ -65,7 +65,7 @@ rules:
   resources: ["nodes", "nodes/stats", "nodes/metrics", "nodes/proxy", "namespaces", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs", "ingresses", "services"]
   verbs: ["get", "watch", "patch"]
 - apiGroups: ["", "rbac.authorization.k8s.io"]
-  resources: ["clusterrolebindings", "clusterroles", "roles", "rolebindings"]
+  resources: ["clusterrolebindings", "clusterroles", "roles", "rolebindings", "persistentvolumes", "persistentvolumeclaims"]
   verbs: ["get", "watch"]
 - apiGroups: ["*"]
   resources: ["*"]
