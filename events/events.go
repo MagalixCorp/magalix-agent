@@ -115,9 +115,9 @@ func NewEventer(
 
 // Start starts the eventer
 func (eventer *Eventer) Start() {
-	//go eventer.observer.Start()
-	//eventer.proc.Start()
-	//eventer.startBatchWriter()
+	go eventer.observer.Start()
+	eventer.proc.Start()
+	eventer.startBatchWriter()
 }
 
 // GetApplicationDesiredServices returns desired services of an application
