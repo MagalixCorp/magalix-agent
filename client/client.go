@@ -44,8 +44,6 @@ type Client struct {
 	ClusterID uuid.UUID
 	secret    []byte
 
-	packetV2Enabled bool
-
 	channel *channel.Client
 
 	connected  bool
@@ -80,7 +78,6 @@ func newClient(
 	timeouts timeouts,
 	parentLogger *log.Logger,
 	shouldSendLogs bool,
-	packetV2Enabled bool,
 ) *Client {
 	gwUrl, err := url.Parse(address)
 	if err != nil {
@@ -96,14 +93,13 @@ func newClient(
 	client := &Client{
 		parentLogger: parentLogger,
 
-		address:         address,
-		version:         version,
-		startID:         startID,
-		AccountID:       accountID,
-		ClusterID:       clusterID,
-		secret:          secret,
-		shouldSendLogs:  shouldSendLogs,
-		packetV2Enabled: packetV2Enabled,
+		address:        address,
+		version:        version,
+		startID:        startID,
+		AccountID:      accountID,
+		ClusterID:      clusterID,
+		secret:         secret,
+		shouldSendLogs: shouldSendLogs,
 
 		channel: channel.NewClient(*gwUrl, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
@@ -284,7 +280,6 @@ func InitClient(
 		},
 		parentLogger,
 		!args["--no-send-logs"].(bool),
-		args["--packets-v2"].(bool),
 	)
 	go sign.Notify(func(os.Signal) bool {
 		if !client.IsReady() {

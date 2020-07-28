@@ -21,10 +21,17 @@ spec:
             - --gateway=wss://agent-gateway.magalix.com/
             - --source=kubelet
             - --trace-log=/agent.log
-            - --packets-v2
           envFrom:
             - secretRef:
                 name: magalix-agent
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 80
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 80
 
 ---
 
@@ -35,9 +42,9 @@ metadata:
   namespace: kube-system
 type: Opaque
 data:
-  ACCOUNT_ID: #ADD ACCOUNT ID - go to https://console.magalix.com 
-  CLUSTER_ID: # ADD CLUSTER ID - go to https://console.magalix.com 
-  SECRET: # ADD CLUSTER SPECIFIC SECRET - go to https://console.magalix.com 
+  ACCOUNT_ID: #ADD ACCOUNT ID - go to https://console.magalix.com
+  CLUSTER_ID: # ADD CLUSTER ID - go to https://console.magalix.com
+  SECRET: # ADD CLUSTER SPECIFIC SECRET - go to https://console.magalix.com
 
 ---
 
@@ -54,9 +61,12 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: magalix-agent
 rules:
-- apiGroups: ["", "extensions", "apps", "batch", "metrics.k8s.io"]
-  resources: ["nodes", "nodes/stats", "nodes/metrics", "nodes/proxy", "namespaces", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"]
-  verbs: ["get", "watch", "list", "patch"]
+- apiGroups: ["", "extensions", "apps", "batch", "metrics.k8s.io", "networking.k8s.io"]
+  resources: ["nodes", "nodes/stats", "nodes/metrics", "nodes/proxy", "namespaces", "pods", "limitranges", "deployments", "replicationcontrollers", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs", "ingresses", "services"]
+  verbs: ["get", "watch", "patch"]
+- apiGroups: ["", "rbac.authorization.k8s.io"]
+  resources: ["clusterrolebindings", "clusterroles", "roles", "rolebindings", "persistentvolumes", "persistentvolumeclaims"]
+  verbs: ["get", "watch"]
 - apiGroups: ["*"]
   resources: ["*"]
   verbs: ["list"]

@@ -3,21 +3,19 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"k8s.io/client-go/util/cert"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"k8s.io/client-go/util/cert"
+
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/entities"
-	"github.com/MagalixCorp/magalix-agent/v2/events"
 	"github.com/MagalixCorp/magalix-agent/v2/executor"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/scalar"
-	"github.com/MagalixCorp/magalix-agent/v2/scalar2"
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
@@ -90,10 +88,12 @@ Options:
   --opt-in-analysis-data                     Send anonymous data for analysis.
   --analysis-data-interval <duration>        Analysis data send interval.
                                               [default: 5m]
-  --packets-v2                               Enable v2 packets (without ids).
+  --packets-v2                               Enable v2 packets (without ids). This is deprecated and kept for backward compatability.
   --disable-metrics                          Disable metrics collecting and sending.
   --disable-events                           Disable events collecting and sending.
   --disable-scalar                           Disable in-agent scalar.
+  --port <port>                              Port to start the server on for liveness and readiness probes
+                                               [default: 80]
   --dry-run                                  Disable decision execution.
   --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
@@ -142,7 +142,7 @@ func main() {
 	logger.Infof(
 		karma.Describe("version", version).
 			Describe("args", fmt.Sprintf("%q", utils.GetSanitizedArgs())),
-		"magalix agent started",
+		"magalix agent started.....",
 	)
 
 	secret, err := base64.StdEncoding.DecodeString(
@@ -155,7 +155,6 @@ func main() {
 		)
 		os.Exit(1)
 	}
-
 	// TODO: remove
 	// a hack to set default timeout for all http requests
 	http.DefaultClient = &http.Client{
@@ -166,6 +165,16 @@ func main() {
 		accountID = utils.ExpandEnvUUID(args, "--account-id")
 		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 	)
+
+	port := args["--port"].(string)
+	probes := NewProbesServer(":"+port, logger)
+	go func() {
+		err = probes.Start()
+		if err != nil {
+			logger.Fatalf(err, "unable to start probes server")
+			os.Exit(1)
+		}
+	}()
 
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, logger, connected)
@@ -181,18 +190,17 @@ func main() {
 	logger.Infof(nil, "Waiting for connection and authorization")
 	<-connected
 	logger.Infof(nil, "Connected and authorized")
+	probes.Authorized = true
 	initAgent(args, gwClient, logger, accountID, clusterID)
-
 }
 
 func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, accountID uuid.UUID, clusterID uuid.UUID) {
 	logger.Infof(nil, "Initializing Agent")
 	var (
-		metricsEnabled  = !args["--disable-metrics"].(bool)
-		eventsEnabled   = !args["--disable-events"].(bool)
-		scalarEnabled   = !args["--disable-scalar"].(bool)
+		metricsEnabled = !args["--disable-metrics"].(bool)
+		// eventsEnabled   = !args["--disable-events"].(bool)
+		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
-		packetV2Enabled = args["--packets-v2"].(bool)
 		dryRun          = args["--dry-run"].(bool)
 
 		skipNamespaces []string
@@ -206,7 +214,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
-	observer_ := kuber.NewObserver(
+	observer := kuber.NewObserver(
 		logger,
 		dynamicClient,
 		parentsStore,
@@ -214,10 +222,9 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		time.Minute*5,
 	)
 	t := entitiesSyncTimeout
-	err = observer_.WaitForCacheSync(&t)
+	err = observer.WaitForCacheSync(&t)
 	if err != nil {
-		logger.Errorf(err, "unable to start entities watcher")
-		packetV2Enabled = false // fallback to old scanner implementation
+		logger.Fatalf(err, "unable to start entities watcher")
 	}
 
 	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
@@ -234,44 +241,25 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 
 	var entityScanner *scanner.Scanner
 
-	if packetV2Enabled {
-		ew := entities.NewEntitiesWatcher(logger, observer_, gwClient)
-		err := ew.Start()
-		if err != nil {
-			logger.Fatalf(err, "unable to start entities watcher")
-		}
-
-		if scalarEnabled {
-			scalar2.InitScalars(logger, kube, observer_, dryRun)
-		}
-
-		entityScanner = scanner.InitScanner(
-			gwClient,
-			scanner.NewKuberFromObserver(ew),
-			skipNamespaces,
-			accountID,
-			clusterID,
-			optInAnalysisData,
-			analysisDataInterval,
-			false,
-		)
-
-	} else {
-		entityScanner = scanner.InitScanner(
-			gwClient,
-			kube,
-			skipNamespaces,
-			accountID,
-			clusterID,
-			optInAnalysisData,
-			analysisDataInterval,
-			true,
-		)
-
-		if scalarEnabled {
-			scalar.InitScalars(logger, entityScanner, kube, dryRun)
-		}
+	ew := entities.NewEntitiesWatcher(logger, observer, gwClient)
+	err = ew.Start()
+	if err != nil {
+		logger.Fatalf(err, "unable to start entities watcher")
 	}
+
+	/*if scalarEnabled {
+		scalar2.InitScalars(logger, kube, observer, dryRun)
+	}*/
+
+	entityScanner = scanner.InitScanner(
+		gwClient,
+		scanner.NewKuberFromObserver(ew),
+		skipNamespaces,
+		accountID,
+		clusterID,
+		optInAnalysisData,
+		analysisDataInterval,
+	)
 
 	e := executor.InitExecutor(
 		gwClient,
@@ -291,34 +279,29 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		return nil, nil
 	})
 
-	if eventsEnabled {
-		events.InitEvents(
-			gwClient,
-			kube,
-			skipNamespaces,
-			entityScanner,
-			args,
-		)
-	}
+	// @TODO reallow events when we start using them
+	// if eventsEnabled {
+	// 	events.InitEvents(
+	// 		gwClient,
+	// 		kube,
+	// 		skipNamespaces,
+	// 		entityScanner,
+	// 		args,
+	// 	)
+	// }
 
 	if metricsEnabled {
 		var nodesProvider metrics.NodesProvider
 		var entitiesProvider metrics.EntitiesProvider
 
-		if packetV2Enabled {
-			nodesProvider = observer_
-			entitiesProvider = observer_
-		} else {
-			nodesProvider = entityScanner
-			entitiesProvider = entityScanner
-		}
+		nodesProvider = observer
+		entitiesProvider = observer
 
 		err := metrics.InitMetrics(
 			gwClient,
 			nodesProvider,
 			entitiesProvider,
 			kube,
-			packetV2Enabled,
 			optInAnalysisData,
 			args,
 		)
@@ -327,6 +310,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			os.Exit(1)
 		}
 	}
+
 }
 
 func getKRestConfig(

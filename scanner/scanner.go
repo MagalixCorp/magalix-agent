@@ -60,8 +60,6 @@ type Scanner struct {
 	analysisDataSender func(args ...interface{})
 
 	dones []chan struct{}
-
-	enableSender bool
 }
 
 // deprecated: please use entities/EntitiesWatcher instead
@@ -74,7 +72,6 @@ func InitScanner(
 	clusterID uuid.UUID,
 	optInAnalysisData bool,
 	analysisDataInterval time.Duration,
-	enableSender bool,
 ) *Scanner {
 	scanner := &Scanner{
 		client:            client,
@@ -89,8 +86,6 @@ func InitScanner(
 
 		mutex: &sync.Mutex{},
 		dones: make([]chan struct{}, 0),
-
-		enableSender: enableSender,
 	}
 	if optInAnalysisData {
 		scanner.analysisDataSender = utils.Throttle(
@@ -157,7 +152,6 @@ func (scanner *Scanner) scanNodes() {
 		scanner.nodeList = nodeList.Items
 		scanner.nodesLastScan = time.Now().UTC()
 
-		scanner.SendNodes(nodes)
 		scanner.SendAnalysisData(map[string]interface{}{
 			"nodes": nodeList,
 		})
@@ -230,7 +224,6 @@ func (scanner *Scanner) scanApplications() {
 		scanner.apps = apps
 		scanner.appsLastScan = time.Now().UTC()
 
-		scanner.SendApplications(apps)
 		scanner.SendAnalysisData(rawResources)
 
 		scanner.logger.Infof(
