@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/MagalixCorp/magalix-agent/v2/events"
 	"net/http"
 	"os"
 	"strings"
@@ -198,7 +199,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	logger.Infof(nil, "Initializing Agent")
 	var (
 		metricsEnabled = !args["--disable-metrics"].(bool)
-		// eventsEnabled   = !args["--disable-events"].(bool)
+		 eventsEnabled   = !args["--disable-events"].(bool)
 		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
 		dryRun          = args["--dry-run"].(bool)
@@ -280,15 +281,15 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	})
 
 	// @TODO reallow events when we start using them
-	// if eventsEnabled {
-	// 	events.InitEvents(
-	// 		gwClient,
-	// 		kube,
-	// 		skipNamespaces,
-	// 		entityScanner,
-	// 		args,
-	// 	)
-	// }
+	 if eventsEnabled {
+	 	events.InitEvents(
+	 		gwClient,
+	 		kube,
+	 		skipNamespaces,
+			entityScanner,
+	 		args,
+	 	)
+	 }
 
 	if metricsEnabled {
 		var nodesProvider metrics.NodesProvider
@@ -311,6 +312,10 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		}
 	}
 
+
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
 }
 
 func getKRestConfig(
