@@ -48,6 +48,7 @@ var (
 		kuber.ReplicaSets,
 		kuber.Jobs,
 		kuber.CronJobs,
+		kuber.Ingress,
 	}
 )
 
@@ -139,7 +140,7 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 
 	for gvrk, w := range ew.watchers {
 		// no need for concurrent goroutines here because the lister uses
-		// in-memory cashed data
+		// in-memory cached data
 
 		resource := gvrk.Resource
 
