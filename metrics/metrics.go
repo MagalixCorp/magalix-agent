@@ -104,12 +104,13 @@ func watchMetrics(
 	defer close(metricsPipe)
 
 	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
+		client.Info("Retrieving metrics")
 		metrics, raw, err := source.GetMetrics(entitiesProvider, tickTime)
 
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
-		client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "finished getting metrics")
+		client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "finished retrieving metrics")
 
 		for i := 0; i < len(metrics); i += limit {
 			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
