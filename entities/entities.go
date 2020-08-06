@@ -172,6 +172,9 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 				ew.logger.Errorf(err, "unable to get object status data")
 			}
 
+			if u.GetKind() == "Ingress" {
+				ew.logger.Info("******** sending ingress packet in resync")
+			}
 			items[i] = &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"kind":       u.GetKind(),
@@ -351,6 +354,9 @@ func (ew *entitiesWatcher) deltasWorker() {
 		for {
 			select {
 			case item := <-ew.deltasQueue:
+				if item.Data.GetKind() == "Ingress" {
+					ew.logger.Info("******** ingress item in deltas worker")
+				}
 				identifier := fmt.Sprintf(
 					"%s:%s:%s",
 					item.Data.GetNamespace(),
@@ -387,6 +393,9 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
+		if item.Data.GetKind() == "Ingress" {
+			ew.logger.Info("******** ingress item in deltas request")
+		}
 		items[i] = item
 		i++
 	}
