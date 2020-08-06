@@ -52,7 +52,7 @@ jobs:
       - run:
           name: Should push?
           command: |
-            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" || "$CIRCLE_BRANCH" == "DEV-1817"]]
+            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" || "$CIRCLE_BRANCH" == "DEV-1817" ]]
             then
               echo 'export SHOULD_PUSH=true' >> $BASH_ENV
             else
