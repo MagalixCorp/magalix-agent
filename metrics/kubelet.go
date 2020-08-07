@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -107,14 +108,21 @@ func NewKubelet(
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
 	entitiesProvider EntitiesProvider, tickTime time.Time,
-) ([]*Metric, map[string]interface{}, error) {
+) (result []*Metric, rawResponses map[string]interface{}, err error) {
+	defer func() {
+		if tears := recover(); tears != nil {
+			err = karma.Describe("trace", string(debug.Stack())).Reason(tears)
+		}
+	}()
+
+
 	kubelet.collectGarbage()
 
 	metricsMutex := &sync.Mutex{}
 	metrics := make([]*Metric, 0)
 
 	rawMutex := &sync.Mutex{}
-	rawResponses := map[string]interface{}{}
+	rawResponses = map[string]interface{}{}
 
 	getKey := func(
 		measurement string,
@@ -413,6 +421,10 @@ func (kubelet *Kubelet) GetMetrics(
 		return nil, nil, karma.Format(err, "{kubelet} unable to get pods")
 	}
 
+	kubelet.Info("{kubelet} Fetched %d pods", len(pods))
+	processedPodsCount := 0
+	processedContainersCount := 0
+
 	for _, pod := range pods {
 		controllerName, controllerKind, err := entitiesProvider.FindController(pod.Namespace, pod.Name)
 		if err != nil {
@@ -423,6 +435,9 @@ func (kubelet *Kubelet) GetMetrics(
 				"{kubelet} unable to find pod controller",
 			)
 		}
+
+		processedPodsCount++
+		kubelet.Info("{kubelet} Processing %d containers in pod %s", len(pod.Spec.Containers), pod.Name)
 
 		for _, container := range pod.Spec.Containers {
 			for _, measurement := range []struct {
@@ -450,7 +465,11 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 		}
+
+		processedContainersCount += len(pod.Spec.Containers)
 	}
+
+	kubelet.Info("{kubelet} Processed %d pods and %d containers", processedPodsCount, processedContainersCount)
 
 	kubelet.Info("{kubelet} Fetching nodes metrics")
 
@@ -838,7 +857,7 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 	}
 
-	result := make([]*Metric, 0)
+	result = make([]*Metric, 0)
 
 	var context *karma.Context
 	for _, metrics := range metrics {
