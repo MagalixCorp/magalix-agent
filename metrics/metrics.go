@@ -110,16 +110,19 @@ func watchMetrics(
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
 		}
-		client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "finished retrieving metrics")
 
-		for i := 0; i < len(metrics); i += limit {
-			metricsPipe <- metrics[i:min(i+limit, len(metrics))]
-		}
+		if len(metrics) > 0 {
+			client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "finished retrieving metrics")
 
-		if raw != nil {
-			client.SendRaw(map[string]interface{}{
-				"metrics": raw,
-			})
+			for i := 0; i < len(metrics); i += limit {
+				metricsPipe <- metrics[i:min(i+limit, len(metrics))]
+			}
+
+			if raw != nil {
+				client.SendRaw(map[string]interface{}{
+					"metrics": raw,
+				})
+			}
 		}
 	})
 	ticker.Start(false, true, true)
