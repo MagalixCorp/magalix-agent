@@ -437,7 +437,7 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 
 		processedPodsCount++
-		kubelet.Info("{kubelet} Processing %d containers in pod %s", len(pod.Spec.Containers), pod.Name)
+		kubelet.Infof(nil, "{kubelet} Processing %d containers in pod %s", len(pod.Spec.Containers), pod.Name)
 
 		for _, container := range pod.Spec.Containers {
 			for _, measurement := range []struct {
@@ -469,7 +469,7 @@ func (kubelet *Kubelet) GetMetrics(
 		processedContainersCount += len(pod.Spec.Containers)
 	}
 
-	kubelet.Info("{kubelet} Processed %d pods and %d containers", processedPodsCount, processedContainersCount)
+	kubelet.Infof(nil, "{kubelet} Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
 
 	kubelet.Info("{kubelet} Fetching nodes metrics")
 
