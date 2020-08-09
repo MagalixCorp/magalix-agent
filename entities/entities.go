@@ -48,7 +48,9 @@ var (
 		kuber.ReplicaSets,
 		kuber.Jobs,
 		kuber.CronJobs,
-		kuber.Ingress,
+		kuber.Ingresses,
+		kuber.IngressClasses,
+		kuber.NetworkPolicies,
 	}
 )
 
