@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -606,7 +607,7 @@ func (kubelet *Kubelet) GetMetrics(
 						Value int64
 					}{
 						{"cpu/usage", tickTime, container.CPU.UsageCoreNanoSeconds},
-						{"memory/rss", tickTime, container.Memory.RSSBytes},
+						{"memory/rss", tickTime, int64(math.Max(float64(container.Memory.RSSBytes), float64(container.Memory.WorkingSetBytes)))},
 						{"memory/working_set", tickTime, container.Memory.WorkingSetBytes},
 					} {
 						addMetricValue(
