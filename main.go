@@ -239,8 +239,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		"--analysis-data-interval",
 	)
 
-	var entityScanner *scanner.Scanner
-
 	ew := entities.NewEntitiesWatcher(logger, observer, gwClient)
 	err = ew.Start()
 	if err != nil {
@@ -251,7 +249,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		scalar2.InitScalars(logger, kube, observer, dryRun)
 	}*/
 
-	entityScanner = scanner.InitScanner(
+	entityScanner := scanner.InitScanner(
 		gwClient,
 		scanner.NewKuberFromObserver(ew),
 		skipNamespaces,
