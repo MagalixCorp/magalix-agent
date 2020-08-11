@@ -278,15 +278,15 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	})
 
 	// @TODO reallow events when we start using them
-	// if eventsEnabled {
-	// 	events.InitEvents(
-	// 		gwClient,
-	// 		kube,
-	// 		skipNamespaces,
-	// 		entityScanner,
-	// 		args,
-	// 	)
-	// }
+	/* if eventsEnabled {
+	 	events.InitEvents(
+	 		gwClient,
+	 		kube,
+	 		skipNamespaces,
+			entityScanner,
+	 		args,
+	 	)
+	 } */
 
 	if metricsEnabled {
 		var nodesProvider metrics.NodesProvider
@@ -308,7 +308,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 			os.Exit(1)
 		}
 	}
-
 }
 
 func getKRestConfig(

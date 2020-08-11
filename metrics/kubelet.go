@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/MagalixTechnologies/alltogether-go"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -25,8 +27,9 @@ type KubeletSummaryContainer struct {
 	}
 
 	Memory struct {
-		Time     time.Time
-		RSSBytes int64
+		Time            time.Time
+		RSSBytes        int64
+		WorkingSetBytes int64
 	}
 }
 
@@ -114,7 +117,6 @@ func (kubelet *Kubelet) GetMetrics(
 			err = karma.Describe("trace", string(debug.Stack())).Reason(tears)
 		}
 	}()
-
 
 	kubelet.collectGarbage()
 
@@ -413,7 +415,6 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 	}
 
-
 	kubelet.Info("{kubelet} Fetching pods")
 
 	pods, err := entitiesProvider.GetPods()
@@ -491,6 +492,7 @@ func (kubelet *Kubelet) GetMetrics(
 			err := kubelet.withBackoff(func() error {
 				var err error
 				summaryBytes, err = kubelet.kubeletClient.GetBytes(&node, "stats/summary")
+
 				if err != nil {
 					if strings.Contains(err.Error(), "the server could not find the requested resource") {
 						kubelet.Warningf(err, "{kubelet} unable to get summary from node %q", node.Name)
@@ -629,7 +631,8 @@ func (kubelet *Kubelet) GetMetrics(
 						Value int64
 					}{
 						{"cpu/usage", tickTime, container.CPU.UsageCoreNanoSeconds},
-						{"memory/rss", tickTime, container.Memory.RSSBytes},
+						{"memory/rss", tickTime, int64(math.Max(float64(container.Memory.RSSBytes), float64(container.Memory.WorkingSetBytes)))},
+						{"memory/working_set", tickTime, container.Memory.WorkingSetBytes},
 					} {
 						addMetricValue(
 							TypePodContainer,
@@ -995,7 +998,7 @@ func GetNodeInstanceGroup(node corev1.Node) string {
 		memoryGi := node.Status.Capacity.Memory().Value() / 1024 / 1024 / 1024
 
 		instanceSize = fmt.Sprintf(
-			"cpu-%d--memory-%.2f",
+			"cpu-%d--memory-%.d",
 			cpuCores,
 			memoryGi,
 		)
