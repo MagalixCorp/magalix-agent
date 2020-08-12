@@ -50,7 +50,7 @@ var (
 		kuber.CronJobs,
 		kuber.Ingresses,
 		// kuber.IngressClasses,
-		kuber.NetworkPolicies,
+		// kuber.NetworkPolicies,
 	}
 )
 

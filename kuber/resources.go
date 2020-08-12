@@ -78,10 +78,10 @@ var (
 	// 	GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingressclasses"),
 	// 	Kind:                 "IngressClass",
 	// }
-	NetworkPolicies = GroupVersionResourceKind{
-		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("networkpolicies"),
-		Kind:                 "NetworkPolicy",
-	}
+	// NetworkPolicies = GroupVersionResourceKind{
+	// 	GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("networkpolicies"),
+	// 	Kind:                 "NetworkPolicy",
+	// }
 )
 
 // TODO: Refactor to a map[kind]GVRK
@@ -111,8 +111,8 @@ func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 		return &Ingresses, nil
 	// case IngressClasses.Kind:
 	// 	return &IngressClasses, nil
-	case NetworkPolicies.Kind:
-		return &NetworkPolicies, nil
+	// case NetworkPolicies.Kind:
+	// 	return &NetworkPolicies, nil
 	default:
 		return nil, karma.Format(
 			nil,
