@@ -74,10 +74,10 @@ var (
 		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingresses"),
 		Kind:                 "Ingress",
 	}
-	IngressClasses = GroupVersionResourceKind{
-		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingressclasses"),
-		Kind:                 "IngressClass",
-	}
+	// IngressClasses = GroupVersionResourceKind{
+	// 	GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingressclasses"),
+	// 	Kind:                 "IngressClass",
+	// }
 	NetworkPolicies = GroupVersionResourceKind{
 		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("networkpolicies"),
 		Kind:                 "NetworkPolicy",
@@ -109,8 +109,8 @@ func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 		return &CronJobs, nil
 	case Ingresses.Kind:
 		return &Ingresses, nil
-	case IngressClasses.Kind:
-		return &IngressClasses, nil
+	// case IngressClasses.Kind:
+	// 	return &IngressClasses, nil
 	case NetworkPolicies.Kind:
 		return &NetworkPolicies, nil
 	default:
