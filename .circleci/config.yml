@@ -102,9 +102,6 @@ jobs:
               export VERSION=dev
             fi
 
-            if [[ "$CIRCLE_BRANCH" ]]; then
-              export VERSION=dev-1817
-            fi
             make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
 
       - deploy:
