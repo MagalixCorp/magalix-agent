@@ -2,10 +2,12 @@ package kuber
 
 import (
 	"fmt"
-	"github.com/reconquest/karma-go"
-	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sync"
+
+	"github.com/reconquest/karma-go"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Identifiable interface {
@@ -40,6 +42,8 @@ func (s *ParentsStore) SetParents(namespace string, kind string, name string, pa
 }
 
 func (s *ParentsStore) GetParents(namespace string, kind string, name string) (*ParentController, bool) {
+	s.Lock()
+	defer s.Unlock()
 	parents, found := s.parents[GetEntityKey(namespace, kind, name)]
 	return parents, found
 }

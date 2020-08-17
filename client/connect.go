@@ -1,11 +1,12 @@
 package client
 
 import (
-	"github.com/MagalixTechnologies/channel"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/MagalixTechnologies/channel"
 )
 
 func (client *Client) onConnect(connected chan bool) error {
@@ -95,13 +96,17 @@ func (client *Client) StartWatchdog() {
 	startTime := time.Now()
 	for {
 		// it didn't sent anything before
-		if (client.lastSent == time.Time{}) {
-			if startTime.Add(10 * time.Minute).Before(time.Now()) {
+		client.blockedM.Lock()
+		{
+			if (client.lastSent == time.Time{}) {
+				if startTime.Add(10 * time.Minute).Before(time.Now()) {
+					break
+				}
+			} else if client.lastSent.Add(10 * time.Minute).Before(time.Now()) {
 				break
 			}
-		} else if client.lastSent.Add(10 * time.Minute).Before(time.Now()) {
-			break
 		}
+		client.blockedM.Unlock()
 		time.Sleep(time.Minute)
 	}
 	os.Exit(120)
