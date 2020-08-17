@@ -10,7 +10,9 @@ import (
 )
 
 func (client *Client) onConnect(connected chan bool) error {
+	client.blockedM.Lock()
 	client.connected = true
+	client.blockedM.Unlock()
 
 	expire := time.Now().Add(time.Minute * 10)
 	_ = client.WithBackoffLimit(func() error {
