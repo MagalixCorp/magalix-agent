@@ -8,6 +8,7 @@ require (
 	github.com/MagalixTechnologies/log-go v0.0.0-20191209143418-aff8f3a92a31
 	github.com/MagalixTechnologies/uuid-go v0.0.0-20191003092420-742176f3bcb7
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
+	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/golang/snappy v0.0.1
 	github.com/kovetskiy/lorg v0.0.0-20190701130800-9c6042b7edb0
 	github.com/reconquest/cog v0.0.0-20191208202052-266c2467b936
@@ -23,7 +24,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
-	k8s.io/api v0.18.0
-	k8s.io/apimachinery v0.18.0
-	k8s.io/client-go v0.18.0
+	k8s.io/api v0.18.8
+	k8s.io/apimachinery v0.18.8
+	k8s.io/client-go v0.18.8
 )
