@@ -48,7 +48,6 @@ var (
 		kuber.ReplicaSets,
 		kuber.Jobs,
 		kuber.CronJobs,
-		kuber.Ingresses,
 	}
 )
 
