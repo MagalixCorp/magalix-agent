@@ -2,10 +2,12 @@ package kuber
 
 import (
 	"fmt"
-	"github.com/reconquest/karma-go"
-	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sync"
+
+	"github.com/reconquest/karma-go"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Identifiable interface {
