@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
 	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -74,6 +75,18 @@ var (
 		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingresses"),
 		Kind:                 "Ingress",
 	}
+	IngressClasses = GroupVersionResourceKind{
+		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingressclasses"),
+		Kind:                 "IngressClass",
+	}
+	NetworkPolicies = GroupVersionResourceKind{
+		GroupVersionResource: networkingv1.SchemeGroupVersion.WithResource("networkpolicies"),
+		Kind:                 "NetworkPolicy",
+	}
+	Services = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("services"),
+		Kind:                 "Service",
+	}
 )
 
 // TODO: Refactor to a map[kind]GVRK
@@ -101,6 +114,12 @@ func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 		return &CronJobs, nil
 	case Ingresses.Kind:
 		return &Ingresses, nil
+	case IngressClasses.Kind:
+		return &IngressClasses, nil
+	case NetworkPolicies.Kind:
+		return &NetworkPolicies, nil
+	case Services.Kind:
+		return &Services, nil
 	default:
 		return nil, karma.Format(
 			nil,
