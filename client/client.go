@@ -208,7 +208,10 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 	if err != nil {
 		return err
 	}
+
+	client.blockedM.Lock()
 	client.lastSent = time.Now()
+	client.blockedM.Unlock()
 
 	if out == nil {
 		return nil
@@ -216,9 +219,8 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 
 	if kind == proto.PacketKindHello {
 		return proto.DecodeGOB(res, out)
-	} else {
-		return proto.DecodeSnappy(res, out)
 	}
+	return proto.DecodeSnappy(res, out)
 }
 
 // Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send

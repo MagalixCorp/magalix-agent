@@ -818,18 +818,20 @@ func (kubelet *Kubelet) GetMetrics(
 
 				rateMetric := *metric
 				rateMetric.Name += "_rate"
+				var multiplier int64 = 1e9
 
 				// TODO: cleanup when values are sent as floats
 				// covert seconds to milliseconds
 				if strings.Contains(rateMetric.Name, "seconds") {
 					rateMetric.Value *= 1000
+					multiplier = 1e6
 				}
 
 				// Container metrics use controller name & kind as entity name & kind
 				addMetricRate(
 					rateMetric.ControllerKind,
 					rateMetric.ControllerName,
-					1e9,
+					multiplier,
 					&rateMetric,
 				)
 			}
