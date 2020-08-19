@@ -146,9 +146,10 @@ func (kube *Kube) MinorVersion() (int, error) {
 	minor := version.Minor
 
 	// remove + if found contains
-	last1 := minor[len(minor)-1:]
-	if last1 == "+" {
-		minor = minor[0 : len(minor)-1]
+	lastIndex := len(minor) - 1
+	lastChar := minor[lastIndex:]
+	if lastChar == "+" {
+		minor = minor[0:lastIndex]
 	}
 
 	return strconv.Atoi(minor)
