@@ -49,7 +49,6 @@ var (
 		kuber.Jobs,
 		kuber.CronJobs,
 		kuber.Ingresses,
-		kuber.IngressClasses,
 		kuber.NetworkPolicies,
 		kuber.Services,
 	}
@@ -77,7 +76,12 @@ func NewEntitiesWatcher(
 	logger *log.Logger,
 	observer_ *kuber.Observer,
 	client_ *client.Client,
+	version int,
 ) EntitiesWatcher {
+	if version >= 18 {
+		watchedResources = append(watchedResources, kuber.IngressClasses)
+	}
+
 	ew := &entitiesWatcher{
 		logger: logger,
 
@@ -91,6 +95,7 @@ func NewEntitiesWatcher(
 	}
 	ew.snapshotIdentitiesTicker = utils.NewTicker("snapshot-resync", snapshotResyncTickerInterval, ew.snapshotResync)
 	ew.snapshotTicker = utils.NewTicker("snapshot", snapshotTickerInterval, ew.snapshot)
+
 	return ew
 }
 

@@ -232,6 +232,11 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		logger.Fatalf(err, "unable to initialize Kubernetes")
 		os.Exit(1)
 	}
+	serverVersion, err := kube.MinorVersion()
+	if err != nil {
+		logger.Fatalf(err, "unable to get Kubernetes server version")
+		os.Exit(1)
+	}
 
 	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
 	analysisDataInterval := utils.MustParseDuration(
@@ -239,7 +244,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		"--analysis-data-interval",
 	)
 
-	ew := entities.NewEntitiesWatcher(logger, observer, gwClient)
+	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, serverVersion)
 	err = ew.Start()
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")

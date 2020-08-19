@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 
 	appsV1 "k8s.io/api/apps/v1"
@@ -35,9 +37,9 @@ const (
 
 // Kube kube struct
 type Kube struct {
-	Clientset     *kubernetes.Clientset
-	ClientV1 	  *kapps.AppsV1Client
-	ClientBatch   *batch.BatchV1beta1Client
+	Clientset   *kubernetes.Clientset
+	ClientV1    *kapps.AppsV1Client
+	ClientBatch *batch.BatchV1beta1Client
 
 	core   kcore.CoreV1Interface
 	apps   kapps.AppsV1Interface
@@ -123,16 +125,33 @@ func InitKubernetes(
 	}
 
 	kube := &Kube{
-		Clientset:     clientset,
-		ClientV1: 	   clientV1,
-		core:          clientset.CoreV1(),
-		apps:          clientset.AppsV1(),
-		batch:         clientV1Beta1,
-		config:        config,
-		logger:        client.Logger,
+		Clientset: clientset,
+		ClientV1:  clientV1,
+		core:      clientset.CoreV1(),
+		apps:      clientset.AppsV1(),
+		batch:     clientV1Beta1,
+		config:    config,
+		logger:    client.Logger,
 	}
 
 	return kube, nil
+}
+
+func (kube *Kube) MinorVersion() (int, error) {
+	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
+	version, err := discoveryClient.ServerVersion()
+	if err != nil {
+		return 0, err
+	}
+	minor := version.Minor
+
+	// remove + if found contains
+	last1 := minor[len(minor)-1:]
+	if last1 == "+" {
+		minor = minor[0 : len(minor)-1]
+	}
+
+	return strconv.Atoi(minor)
 }
 
 // GetNodes get kubernetes nodes
@@ -684,7 +703,7 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
 	cronJob, err := kube.batch.
 		CronJobs(namespace).
-		Get(context.Background(),name, kmeta.GetOptions{})
+		Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -694,7 +713,7 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 
 	if cronJob != nil {
 
-			maskPodSpec(&cronJob.Spec.JobTemplate.Spec.Template.Spec)
+		maskPodSpec(&cronJob.Spec.JobTemplate.Spec.Template.Spec)
 
 	}
 
