@@ -318,6 +318,16 @@ func (executor *Executor) execute(
 			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
 			cpuRequest := container.Resources.Requests.Cpu().MilliValue()
 
+			if container.Resources.Limits != nil {
+				if container.Resources.Limits.Cpu() != nil {
+					*totalResources.Containers[0].Limits.CPU = container.Resources.Limits.Cpu().MilliValue()
+				}
+				if container.Resources.Limits.Memory() != nil {
+					*totalResources.Containers[0].Limits.Memory = container.Resources.Limits.Memory().Value() / 1024 / 1024
+				}
+			}
+
+
 			*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
 			*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
 			*totalResources.Containers[0].Limits.CPU = cpuLimit
