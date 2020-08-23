@@ -327,7 +327,14 @@ func (executor *Executor) execute(
 				}
 			}
 
-
+			if container.Resources.Requests != nil {
+				if container.Resources.Requests.Cpu() != nil {
+					*totalResources.Containers[0].Requests.CPU = container.Resources.Requests.Cpu().MilliValue()
+				}
+				if container.Resources.Requests.Memory() != nil {
+					*totalResources.Containers[0].Requests.Memory = container.Resources.Requests.Memory().Value() / 1024 / 1024
+				}
+			}
 			*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
 			*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
 			*totalResources.Containers[0].Limits.CPU = cpuLimit
