@@ -6,6 +6,7 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/kovetskiy/lorg"
 	structured "github.com/reconquest/cog"
 	"github.com/reconquest/karma-go"
@@ -26,16 +27,10 @@ func (client *Client) sendLogs(
 }
 
 func (client *Client) initLogger() {
-	client.Logger = client.parentLogger.NewChild()
-
-	// instead of default displayer we will display to stderr using global
-	// logger.
-	// Note that parentLogger is the global stderr
-	client.Logger.SetDisplayer(client.parentLogger.Display)
-
 	if client.shouldSendLogs {
 		// as sender we will use client's packet logs
-		client.Logger.SetSender(client.sendLogs)
+		// FIXME: figure away to send logs to agent-gw
+		// client.Logger.SetSender(client.sendLogs)
 		client.initLogsQueue()
 	}
 
@@ -55,7 +50,7 @@ func (client *Client) watchLogsQueue() {
 	client.logsQueueWorker.Add(1)
 	defer client.logsQueueWorker.Done()
 
-	client.parentLogger.Trace("{logs:queue} logs queue watcher started")
+	logger.Debug("logs queue watcher started")
 
 	var fatal bool
 

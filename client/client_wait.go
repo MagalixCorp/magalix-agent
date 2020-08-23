@@ -7,13 +7,13 @@ import (
 	"runtime"
 	"time"
 
-	karma "github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 // WaitExit waits for app exit
 func (client *Client) WaitExit() {
 	exitcode := <-client.exit
-	client.parentLogger.Debugf(karma.Describe("code", exitcode), "program is exiting")
+	logger.Debugw("program is exiting", "code", exitcode)
 	os.Exit(exitcode)
 }
 
@@ -37,7 +37,7 @@ func (client *Client) Done(exitcode int, jitter bool) {
 		// Set a random wait time of up to 600 seconds (10 minutes)
 		waitTime = time.Duration(rand.Intn(600)) * time.Second
 	}
-	client.parentLogger.Infof(nil, "Agent will exit with status code %d in %f seconds", exitcode, waitTime.Seconds())
+	logger.Infof("Agent will exit with status code %d in %f seconds", exitcode, waitTime.Seconds())
 	time.Sleep(waitTime)
 	client.exit <- exitcode
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/channel"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
@@ -34,8 +35,6 @@ type timeouts struct {
 // Client agent gateway client
 type Client struct {
 	*log.Logger
-
-	parentLogger *log.Logger
 
 	address   string
 	version   string
@@ -76,7 +75,6 @@ func newClient(
 	clusterID uuid.UUID,
 	secret []byte,
 	timeouts timeouts,
-	parentLogger *log.Logger,
 	shouldSendLogs bool,
 ) *Client {
 	gwUrl, err := url.Parse(address)
@@ -91,8 +89,6 @@ func newClient(
 	address = gwUrl.String()
 
 	client := &Client{
-		parentLogger: parentLogger,
-
 		address:        address,
 		version:        version,
 		startID:        startID,
@@ -115,8 +111,8 @@ func newClient(
 		timeouts: timeouts,
 	}
 
-	client.pipe = NewPipe(client, client.parentLogger)
-	client.pipeStatus = NewPipe(client, client.parentLogger)
+	client.pipe = NewPipe(client)
+	client.pipeStatus = NewPipe(client)
 
 	client.initLogger()
 
@@ -225,8 +221,9 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 
 // Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send
 func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
-	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
-	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
+	logger.Debugw("sending package", "kind", kind)
+
+	defer logger.Debugw("package sent", "kind", kind)
 	client.WaitForConnection(time.Minute)
 	return client.send(kind, in, out)
 }
@@ -268,7 +265,6 @@ func InitClient(
 	startID string,
 	accountID, clusterID uuid.UUID,
 	secret []byte,
-	parentLogger *log.Logger,
 	connected chan bool,
 ) (*Client, error) {
 	client := newClient(
@@ -280,7 +276,6 @@ func InitClient(
 			protoReconnect: utils.MustParseDuration(args, "--timeout-proto-reconnect"),
 			protoBackoff:   utils.MustParseDuration(args, "--timeout-proto-backoff"),
 		},
-		parentLogger,
 		!args["--no-send-logs"].(bool),
 	)
 	go sign.Notify(func(os.Signal) bool {

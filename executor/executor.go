@@ -95,7 +95,6 @@ func (executor *Executor) backoff(
 			Sleep:      sleep,
 			MaxRetries: maxRetries,
 		},
-		executor.logger,
 	)
 }
 

@@ -5,8 +5,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixTechnologies/log-go"
-	"github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 // PipeSender interface for sender
@@ -18,17 +17,15 @@ type PipeSender interface {
 type Pipe struct {
 	cond *sync.Cond
 
-	logger  *log.Logger
 	sender  PipeSender
 	storage PipeStore
 }
 
 // NewPipe creates a new pipe
-func NewPipe(sender PipeSender, logger *log.Logger) *Pipe {
+func NewPipe(sender PipeSender) *Pipe {
 	return &Pipe{
 		cond: sync.NewCond(&sync.Mutex{}),
 
-		logger:  logger,
 		sender:  sender,
 		storage: NewDefaultPipeStore(),
 	}
@@ -62,21 +59,19 @@ func (p *Pipe) start() {
 			}
 			p.cond.L.Unlock()
 
-			ctx := karma.Describe("kind", pack.Kind).
-				Describe("diff", time.Now().Sub(pack.time)).
-				Describe("remaining", p.storage.Len())
-
-			p.logger.Debugf(ctx, "sending packet")
+			logFields := logger.With(
+				"kind", pack.Kind,
+				"diff", time.Now().Sub(pack.time),
+				"remaining", p.storage.Len(),
+			)
+			logFields.Debug("sending packet....")
 
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
-			ctx = ctx.Describe("diff", time.Now().Sub(pack.time))
 			if err != nil {
 				p.storage.Add(pack)
-				ctx = ctx.Describe("remaining", p.storage.Len())
-				p.logger.Errorf(ctx.Reason(err), "error sending packet")
+				logger.Errorw("error sending packet", "error", err, "remaining", p.storage.Len())
 			} else {
-				ctx = ctx.Describe("remaining", p.storage.Len())
-				p.logger.Tracef(ctx, "completed sending packet")
+				logger.Debugw("completed sending packet", "remaining", p.storage.Len())
 			}
 		}
 	}()

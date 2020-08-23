@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759
 	github.com/MagalixTechnologies/channel v1.1.0
+	github.com/MagalixTechnologies/core/logger v1.0.2 // indirect
 	github.com/MagalixTechnologies/log-go v0.0.0-20191209143418-aff8f3a92a31
 	github.com/MagalixTechnologies/uuid-go v0.0.0-20191003092420-742176f3bcb7
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815

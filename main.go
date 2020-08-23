@@ -18,6 +18,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
@@ -96,6 +97,7 @@ Options:
                                                [default: 80]
   --dry-run                                  Disable decision execution.
   --no-send-logs                             Disable sending logs to the backend.
+  --log-level                                log level to be displayed, supported levels are info, debug, warn, error
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file
@@ -127,31 +129,39 @@ func main() {
 		panic(err)
 	}
 
-	logger := log.New(
-		args["--debug"].(bool),
-		args["--trace"].(bool),
-		args["--trace-log"].(string),
+	var (
+		accountID = utils.ExpandEnvUUID(args, "--account-id")
+		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 	)
-	// we need to disable default exit 1 for FATAL messages because we also
-	// need to send fatal messages on the remote server and send bye packet
-	// after fatal message (if we can), therefore all exits will be controlled
-	// manually
-	logger.SetExiter(func(int) {})
-	utils.SetLogger(logger)
 
-	logger.Infof(
-		karma.Describe("version", version).
-			Describe("args", fmt.Sprintf("%q", utils.GetSanitizedArgs())),
+	switch args["--log-level"].(string) {
+	case "info":
+		logger.Config(logger.InfoLevel)
+	case "debug":
+		logger.Config(logger.DebugLevel)
+	case "warn":
+		logger.Config(logger.WarnLevel)
+	case "error":
+		logger.Config(logger.ErrorLevel)
+	default:
+		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
+	}
+	logger.With("accountID", accountID, "clusterID", clusterID)
+	defer logger.Sync()
+
+	logger.Infow(
 		"magalix agent started.....",
+		"version", version,
+		"args", fmt.Sprintf("%q", utils.GetSanitizedArgs()),
 	)
 
 	secret, err := base64.StdEncoding.DecodeString(
 		utils.ExpandEnv(args, "--client-secret", false),
 	)
 	if err != nil {
-		logger.Fatalf(
-			err,
+		logger.Fatalw(
 			"unable to decode base64 secret specified as --client-secret flag",
+			"error", err,
 		)
 		os.Exit(1)
 	}
@@ -161,41 +171,36 @@ func main() {
 		Timeout: 20 * time.Second,
 	}
 
-	var (
-		accountID = utils.ExpandEnvUUID(args, "--account-id")
-		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
-	)
-
 	port := args["--port"].(string)
-	probes := NewProbesServer(":"+port, logger)
+	probes := NewProbesServer(":" + port)
 	go func() {
 		err = probes.Start()
 		if err != nil {
-			logger.Fatalf(err, "unable to start probes server")
+			logger.Fatalw("unable to start probes server", "error", err)
 			os.Exit(1)
 		}
 	}()
 
 	connected := make(chan bool)
-	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, logger, connected)
+	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, connected)
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
 
 	if err != nil {
-		logger.Fatalf(err, "unable to connect to gateway")
+		logger.Fatalw("unable to connect to gateway")
 		os.Exit(1)
 	}
 
-	logger.Infof(nil, "Waiting for connection and authorization")
+	logger.Infof("waiting for connection and authorization")
 	<-connected
-	logger.Infof(nil, "Connected and authorized")
+	logger.Infof("connected and authorized")
 	probes.Authorized = true
-	initAgent(args, gwClient, logger, accountID, clusterID)
+	initAgent(args, gwClient, accountID, clusterID)
 }
 
-func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, accountID uuid.UUID, clusterID uuid.UUID) {
-	logger.Infof(nil, "Initializing Agent")
+func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, clusterID uuid.UUID) {
+	logger.Infof("Initializing Agent")
 	var (
 		metricsEnabled = !args["--disable-metrics"].(bool)
 		// eventsEnabled   = !args["--disable-events"].(bool)
@@ -224,12 +229,12 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	t := entitiesSyncTimeout
 	err = observer.WaitForCacheSync(&t)
 	if err != nil {
-		logger.Fatalf(err, "unable to start entities watcher")
+		logger.Fatalw("unable to start entities watcher", "error", err)
 	}
 
 	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
 	if err != nil {
-		logger.Fatalf(err, "unable to initialize Kubernetes")
+		logger.Fatalw("unable to initialize Kubernetes", "error", err)
 		os.Exit(1)
 	}
 
@@ -242,7 +247,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	ew := entities.NewEntitiesWatcher(logger, observer, gwClient)
 	err = ew.Start()
 	if err != nil {
-		logger.Fatalf(err, "unable to start entities watcher")
+		logger.Fatalw("unable to start entities watcher", "error", err)
 	}
 
 	/*if scalarEnabled {
