@@ -11,6 +11,7 @@ import (
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	networkingv1 "k8s.io/api/networking/v1"
 	networkingv1beta1 "k8s.io/api/networking/v1beta1"
+	storagev1 "k8s.io/api/storage/v1"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -87,6 +88,18 @@ var (
 		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("services"),
 		Kind:                 "Service",
 	}
+	PersistentVolumes = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("persistentvolumes"),
+		Kind:                 "PersistentVolume",
+	}
+	PersistentVolumeClaims = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
+		Kind:                 "PersistentVolumeClaim",
+	}
+	StorageClasses = GroupVersionResourceKind{
+		GroupVersionResource: storagev1.SchemeGroupVersion.WithResource("storageclasses"),
+		Kind:                 "StorageClass",
+	}
 )
 
 // TODO: Refactor to a map[kind]GVRK
@@ -120,6 +133,12 @@ func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 		return &NetworkPolicies, nil
 	case Services.Kind:
 		return &Services, nil
+	case PersistentVolumes.Kind:
+		return &PersistentVolumes, nil
+	case PersistentVolumeClaims.Kind:
+		return &PersistentVolumeClaims, nil
+	case StorageClasses.Kind:
+		return &StorageClasses, nil
 	default:
 		return nil, karma.Format(
 			nil,

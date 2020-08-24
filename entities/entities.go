@@ -51,6 +51,9 @@ var (
 		kuber.Ingresses,
 		kuber.NetworkPolicies,
 		kuber.Services,
+		kuber.PersistentVolumes,
+		kuber.PersistentVolumeClaims,
+		kuber.StorageClasses,
 	}
 )
 
@@ -395,6 +398,11 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
+		if item.Data.GetKind() == "PersistentVolume" || item.Data.GetKind() == "PersistentVolumeClaim" || item.Data.GetKind() == "StorageClass" {
+			fmt.Printf("************** %s", item.Data.GetKind())
+			fmt.Println("")
+			continue
+		}
 		items[i] = item
 		i++
 	}
