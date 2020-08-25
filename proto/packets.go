@@ -46,6 +46,7 @@ type PacketHello struct {
 	AccountID       uuid.UUID `json:"account_id"`
 	ClusterID       uuid.UUID `json:"cluster_id"`
 	PacketV2Enabled bool      `json:"packet_v2_enabled,omitempty"`
+	ServerVersion   string    `json:"server_version"`
 }
 
 type PacketAuthorizationRequest struct {
