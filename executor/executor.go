@@ -319,19 +319,19 @@ func (executor *Executor) execute(
 
 			// handle if requests and limits is null in rollback DEV-2056"
 			if container.Resources.Limits != nil {
-				if container.Resources.Limits.Cpu() != nil {
+				if container.Resources.Limits.Cpu() != nil && cpuLimit != 0{
 					*totalResources.Containers[0].Limits.CPU = cpuLimit
 				}
-				if container.Resources.Limits.Memory() != nil {
+				if container.Resources.Limits.Memory() != nil && memoryLimit != 0 {
 					*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
 				}
 			}
 
 			if container.Resources.Requests != nil {
-				if container.Resources.Requests.Cpu() != nil {
+				if container.Resources.Requests.Cpu() != nil && cpuRequest != 0 {
 					*totalResources.Containers[0].Requests.CPU = cpuRequest
 				}
-				if container.Resources.Requests.Memory() != nil {
+				if container.Resources.Requests.Memory() != nil &&  memoryRequest != 0 {
 					*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
 				}
 			}
