@@ -422,7 +422,7 @@ func (kubelet *Kubelet) GetMetrics(
 		return nil, nil, karma.Format(err, "{kubelet} unable to get pods")
 	}
 
-	kubelet.Info("{kubelet} Fetched %d pods", len(pods))
+	kubelet.Infof(nil, "{kubelet} Fetched %d pods", len(pods))
 	processedPodsCount := 0
 	processedContainersCount := 0
 
