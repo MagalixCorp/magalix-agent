@@ -90,7 +90,7 @@ func (executor *Executor) podsStatusHandler(entity_name string, namespace string
 
 			for _, pod := range pods.Items {
 				//handle the bug of naming convention for pods in kubernetes DEV-2046
-				if strings.Contains(pod.Name, entitiName) || strings.Contains(pod.GenerateName, entitiName){
+				if strings.Contains(pod.GenerateName, entitiName){
 					executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
 					status = pod.Status.Phase
 					if status == kv1.PodRunning {
