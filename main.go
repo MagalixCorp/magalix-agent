@@ -176,8 +176,23 @@ func main() {
 		}
 	}()
 
+	kRestConfig, err := getKRestConfig(logger, args)
+
+	kube, err := kuber.InitKubernetes(kRestConfig, logger)
+	if err != nil {
+		logger.Fatalf(err, "unable to initialize Kubernetes")
+		os.Exit(1)
+	}
+
+	k8sServerVersion, err := kube.GetServerVersion()
+	if err != nil {
+		logger.Warningf(err, "failed to discover server version")
+	}
+
 	connected := make(chan bool)
-	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, logger, connected)
+	gwClient, err := client.InitClient(
+		args, version, startID, accountID, clusterID, secret, k8sServerVersion, logger, connected,
+	)
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
@@ -191,10 +206,18 @@ func main() {
 	<-connected
 	logger.Infof(nil, "Connected and authorized")
 	probes.Authorized = true
-	initAgent(args, gwClient, logger, accountID, clusterID)
+	initAgent(args, gwClient, kRestConfig, kube, logger, accountID, clusterID)
 }
 
-func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, accountID uuid.UUID, clusterID uuid.UUID) {
+func initAgent(
+	args docopt.Opts,
+	gwClient *client.Client,
+	kRestConfig *rest.Config,
+	kube *kuber.Kube,
+	logger *log.Logger,
+	accountID uuid.UUID,
+	clusterID uuid.UUID,
+) {
 	logger.Infof(nil, "Initializing Agent")
 	var (
 		metricsEnabled = !args["--disable-metrics"].(bool)
@@ -210,8 +233,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 		skipNamespaces = namespaces
 	}
 
-	kRestConfig, err := getKRestConfig(logger, args)
-
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
 	observer := kuber.NewObserver(
@@ -225,12 +246,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, logger *log.Logger, ac
 	err = observer.WaitForCacheSync(&t)
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")
-	}
-
-	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
-	if err != nil {
-		logger.Fatalf(err, "unable to initialize Kubernetes")
-		os.Exit(1)
 	}
 
 	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
