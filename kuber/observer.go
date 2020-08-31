@@ -3,12 +3,15 @@ package kuber
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/log-go"
+	"github.com/pkg/errors"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -23,12 +26,10 @@ type Observer struct {
 	dynamicinformer.DynamicSharedInformerFactory
 	ParentsStore *ParentsStore
 
-	logger *log.Logger
 	stopCh chan struct{}
 }
 
 func NewObserver(
-	logger *log.Logger,
 	client dynamic.Interface,
 	parentsStore *ParentsStore,
 	stopCh chan struct{},
@@ -37,20 +38,12 @@ func NewObserver(
 	return &Observer{
 		DynamicSharedInformerFactory: dynamicinformer.NewDynamicSharedInformerFactory(client, defaultResync),
 		ParentsStore:                 parentsStore,
-		logger:                       logger,
 		stopCh:                       stopCh,
 	}
 }
 
-func (observer *Observer) Watch(
-	gvrk GroupVersionResourceKind,
-) *watcher {
-	observer.logger.Infof(
-		nil,
-		"subscribed on changes about resource: %s",
-		gvrk.String(),
-	)
-
+func (observer *Observer) Watch(gvrk GroupVersionResourceKind) *watcher {
+	logger.Debugw("subscribed on changes", "resource", gvrk.String())
 	watcher := observer.WatcherFor(gvrk)
 	observer.Start()
 
@@ -72,10 +65,7 @@ func (observer *Observer) WatchAndWaitForSync(gvrk GroupVersionResourceKind) (*w
 	case <-done:
 		return watcher, nil
 	case <-time.After(timeout):
-		return nil, karma.
-			Describe("GVRK", gvrk).
-			Describe("timeout", timeout).
-			Format(nil, "Time out waiting for informer sync")
+		return nil, fmt.Errorf("Time out waiting for informer sync: (GVRK, %+v), (timeout, %v)", gvrk, timeout)
 	}
 }
 
@@ -86,7 +76,6 @@ func (observer *Observer) WatcherFor(
 
 	return &watcher{
 		gvrk:     gvrk,
-		logger:   observer.logger,
 		informer: informer,
 	}
 }
@@ -169,9 +158,7 @@ func (observer *Observer) GetPods() ([]corev1.Pod, error) {
 }
 
 func (observer *Observer) FindController(namespaceName string, podName string) (string, string, error) {
-	ctx := karma.
-		Describe("pod_name", podName).
-		Describe("namespace_name", namespaceName)
+	lg := logger.With("pod", podName, "namespace", namespaceName)
 
 	watcher, err := observer.WatchAndWaitForSync(Pods)
 	if err != nil {
@@ -180,19 +167,19 @@ func (observer *Observer) FindController(namespaceName string, podName string) (
 
 	pod, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(podName)
 	if err != nil {
-		return "", "", karma.Format(ctx.Reason(err), "unable to get pod")
+		return "", "", errors.Wrap(err, "unable to get pod")
 	}
 
 	parent, err := GetParents(pod.(*unstructured.Unstructured), observer.ParentsStore, func(kind string) (Watcher, bool) {
 		gvrk, err := KindToGvrk(kind)
 		if err != nil {
-			observer.logger.Warningf(ctx.Describe("kind", kind).Reason(err), "unable to get GVRK for kind")
+			lg.Warnw("unable to get GVRK for kind", "kind", kind, "error", err)
 			return nil, false
 		}
 
 		watcher, err := observer.WatchAndWaitForSync(*gvrk)
 		if err != nil {
-			observer.logger.Errorf(err, "unable to get watcher for parent")
+			lg.Errorw("unable to get watcher for parent", "error", err)
 			return nil, false
 		}
 

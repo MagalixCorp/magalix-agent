@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MagalixTechnologies/channel"
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 func (client *Client) onConnect(connected chan bool) error {
@@ -31,8 +32,10 @@ func (client *Client) onConnect(connected chan bool) error {
 		}
 
 		err = client.authorize()
+
 		if err != nil {
 			connectionError, ok := err.(*channel.ProtocolError)
+
 			if ok {
 				if connectionError.Code == 404 {
 					// TODO: Remove this loop once we get permission to delete the agent
@@ -43,12 +46,13 @@ func (client *Client) onConnect(connected chan bool) error {
 				}
 			}
 
-			client.Errorf(
-				err,
+			logger.Errorw(
 				"unable to authorize client",
+				"error", err,
 			)
 			return err // continue condition for backoff
 		}
+
 		client.authorized = true
 		connected <- true
 
@@ -58,6 +62,7 @@ func (client *Client) onConnect(connected chan bool) error {
 			k.(chan struct{}) <- struct{}{}
 			return true
 		})
+
 		client.blocked = sync.Map{}
 
 		return nil

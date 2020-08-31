@@ -70,13 +70,10 @@ type entitiesWatcher struct {
 }
 
 func NewEntitiesWatcher(
-	logger *log.Logger,
 	observer_ *kuber.Observer,
 	client_ *client.Client,
 ) EntitiesWatcher {
 	ew := &entitiesWatcher{
-		logger: logger,
-
 		client: client_,
 
 		observer:       observer_,

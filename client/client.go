@@ -114,8 +114,6 @@ func newClient(
 	client.pipe = NewPipe(client)
 	client.pipeStatus = NewPipe(client)
 
-	client.initLogger()
-
 	return client
 }
 
@@ -200,6 +198,7 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 			return err
 		}
 	}
+
 	res, err := client.channel.Send(kind.String(), req)
 	if err != nil {
 		return err

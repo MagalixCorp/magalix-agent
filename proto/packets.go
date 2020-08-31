@@ -15,7 +15,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
-	"github.com/kovetskiy/lorg"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -80,9 +79,8 @@ type PacketPong struct {
 }
 
 type PacketLogItem struct {
-	Level lorg.Level  `json:"level"`
-	Date  time.Time   `json:"date"`
-	Data  interface{} `json:"data"`
+	Date time.Time `json:"date"`
+	Data []byte    `json:"data"`
 }
 
 type PacketRegisterEntityItem struct {

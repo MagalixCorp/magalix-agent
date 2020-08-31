@@ -19,10 +19,9 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
-	"github.com/reconquest/karma-go"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -134,21 +133,6 @@ func main() {
 		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 	)
 
-	switch args["--log-level"].(string) {
-	case "info":
-		logger.Config(logger.InfoLevel)
-	case "debug":
-		logger.Config(logger.DebugLevel)
-	case "warn":
-		logger.Config(logger.WarnLevel)
-	case "error":
-		logger.Config(logger.ErrorLevel)
-	default:
-		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
-	}
-	logger.With("accountID", accountID, "clusterID", clusterID)
-	defer logger.Sync()
-
 	logger.Infow(
 		"magalix agent started.....",
 		"version", version,
@@ -183,18 +167,31 @@ func main() {
 
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, connected)
-
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
+	logger.Infof("waiting for connection and authorization")
+	<-connected
+
+	switch args["--log-level"].(string) {
+	case "info":
+		logger.ConfigWriterSync(logger.InfoLevel, gwClient)
+	case "debug":
+		logger.ConfigWriterSync(logger.DebugLevel, gwClient)
+	case "warn":
+		logger.ConfigWriterSync(logger.WarnLevel, gwClient)
+	case "error":
+		logger.ConfigWriterSync(logger.ErrorLevel, gwClient)
+	default:
+		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
+	}
+	logger.With("accountID", accountID, "clusterID", clusterID)
+	defer logger.Sync()
 
 	if err != nil {
 		logger.Fatalw("unable to connect to gateway")
 		os.Exit(1)
 	}
 
-	logger.Infof("waiting for connection and authorization")
-	<-connected
-	logger.Infof("connected and authorized")
 	probes.Authorized = true
 	initAgent(args, gwClient, accountID, clusterID)
 }
@@ -215,12 +212,11 @@ func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, c
 		skipNamespaces = namespaces
 	}
 
-	kRestConfig, err := getKRestConfig(logger, args)
+	kRestConfig, err := getKRestConfig(args)
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
 	observer := kuber.NewObserver(
-		logger,
 		dynamicClient,
 		parentsStore,
 		make(chan struct{}, 0),
@@ -244,7 +240,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, c
 		"--analysis-data-interval",
 	)
 
-	ew := entities.NewEntitiesWatcher(logger, observer, gwClient)
+	ew := entities.NewEntitiesWatcher(observer, gwClient)
 	err = ew.Start()
 	if err != nil {
 		logger.Fatalw("unable to start entities watcher", "error", err)
@@ -316,25 +312,18 @@ func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, c
 }
 
 func getKRestConfig(
-	logger *log.Logger,
 	args map[string]interface{},
 ) (config *rest.Config, err error) {
 	if args["--kube-incluster"].(bool) {
-		logger.Infof(nil, "initializing kubernetes incluster config")
+		logger.Info("initializing kubernetes incluster config")
 
 		config, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, karma.Format(
-				err,
-				"unable to get incluster config",
-			)
+			return nil, errors.Wrap(err, "unable to get incluster config")
 		}
 
 	} else {
-		logger.Infof(
-			nil,
-			"initializing kubernetes user-defined config",
-		)
+		logger.Info("initializing kubernetes user-defined config")
 
 		token, _ := args["--kube-token"].(string)
 		if token == "" {
