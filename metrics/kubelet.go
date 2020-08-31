@@ -182,10 +182,10 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	addMetric := func(metric *Metric) {
-		kubelet.Infof(nil, "Adding metric %s", metric.Name)
+		kubelet.Infof(nil, "{kubelet} Adding metric %s for %s", metric.Name, metric.ContainerName)
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
-		defer kubelet.Infof(nil, "Finished Adding metric %s", metric.Name)
+		defer kubelet.Infof(nil, "{kubelet} Finished Adding metric %s for %s", metric.Name, metric.ContainerName)
 
 		if metric.Timestamp.Equal(time.Time{}) {
 			kubelet.Errorf(
