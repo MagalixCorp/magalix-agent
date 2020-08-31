@@ -182,8 +182,11 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	addMetric := func(metric *Metric) {
+		kubelet.Infof(nil, "Adding metric %s", metric.Name)
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
+		defer kubelet.Infof(nil, "Finished Adding metric %s", metric.Name)
+
 		if metric.Timestamp.Equal(time.Time{}) {
 			kubelet.Errorf(
 				karma.Describe("metric", metric.Name).
@@ -422,7 +425,7 @@ func (kubelet *Kubelet) GetMetrics(
 		return nil, nil, karma.Format(err, "{kubelet} unable to get pods")
 	}
 
-	kubelet.Info("{kubelet} Fetched %d pods", len(pods))
+	kubelet.Infof(nil, "{kubelet} Fetched %d pods", len(pods))
 	processedPodsCount := 0
 	processedContainersCount := 0
 
