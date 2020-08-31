@@ -87,7 +87,7 @@ func (executor *Executor) podsStatusHandler(entity_name string, namespace string
 				result = proto.DecisionExecutionStatusFailed
 				break
 			}
-
+			// TODO update the execution flow to check pods status across controllers
 			for _, pod := range pods.Items {
 				//handle the bug of naming convention for pods in kubernetes DEV-2046
 				if strings.Contains(pod.GenerateName, entitiName){
