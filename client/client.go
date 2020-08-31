@@ -37,13 +37,14 @@ type Client struct {
 
 	parentLogger *log.Logger
 
-	address       string
-	version       string
-	startID       string
-	AccountID     uuid.UUID
-	ClusterID     uuid.UUID
-	secret        []byte
-	ServerVersion string
+	address          string
+	version          string
+	startID          string
+	AccountID        uuid.UUID
+	ClusterID        uuid.UUID
+	secret           []byte
+	ServerVersion    string
+	AgentPermissions string
 
 	channel *channel.Client
 
@@ -77,6 +78,7 @@ func newClient(
 	clusterID uuid.UUID,
 	secret []byte,
 	serverVersion string,
+	agentPermissions string,
 	timeouts timeouts,
 	parentLogger *log.Logger,
 	shouldSendLogs bool,
@@ -95,14 +97,15 @@ func newClient(
 	client := &Client{
 		parentLogger: parentLogger,
 
-		address:        address,
-		version:        version,
-		startID:        startID,
-		AccountID:      accountID,
-		ClusterID:      clusterID,
-		secret:         secret,
-		ServerVersion: serverVersion,
-		shouldSendLogs: shouldSendLogs,
+		address:          address,
+		version:          version,
+		startID:          startID,
+		AccountID:        accountID,
+		ClusterID:        clusterID,
+		secret:           secret,
+		ServerVersion:    serverVersion,
+		shouldSendLogs:   shouldSendLogs,
+		AgentPermissions: agentPermissions,
 
 		channel: channel.NewClient(*gwUrl, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
@@ -272,11 +275,12 @@ func InitClient(
 	accountID, clusterID uuid.UUID,
 	secret []byte,
 	serverVersion string,
+	agentPermissions string,
 	parentLogger *log.Logger,
 	connected chan bool,
 ) (*Client, error) {
 	client := newClient(
-		args["--gateway"].(string), version, startID, accountID, clusterID, secret, serverVersion,
+		args["--gateway"].(string), version, startID, accountID, clusterID, secret, serverVersion, agentPermissions,
 		timeouts{
 			protoHandshake: utils.MustParseDuration(args, "--timeout-proto-handshake"),
 			protoWrite:     utils.MustParseDuration(args, "--timeout-proto-write"),
