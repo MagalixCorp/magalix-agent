@@ -189,9 +189,14 @@ func main() {
 		logger.Warningf(err, "failed to discover server version")
 	}
 
+	agentPermissions, err := kube.GetAgentPermissions()
+	if err != nil {
+		logger.Warningf(err, "Failed to get agent permissions")
+	}
+
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(
-		args, version, startID, accountID, clusterID, secret, k8sServerVersion, logger, connected,
+		args, version, startID, accountID, clusterID, secret, k8sServerVersion, agentPermissions, logger, connected,
 	)
 
 	defer gwClient.WaitExit()

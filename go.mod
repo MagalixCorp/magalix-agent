@@ -6,7 +6,7 @@ require (
 	github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759
 	github.com/MagalixTechnologies/channel v1.1.0
 	github.com/MagalixTechnologies/log-go v0.0.0-20191209143418-aff8f3a92a31
-	github.com/MagalixTechnologies/uuid-go v0.0.0-20191003092420-742176f3bcb7
+	github.com/MagalixTechnologies/uuid-go v0.0.0-20200102125057-aa0bb55c403a
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/golang/snappy v0.0.1

@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/client-go/discovery"
 	"regexp"
 	"strings"
 	"sync"
+
+	"k8s.io/client-go/discovery"
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/log-go"
@@ -35,9 +36,9 @@ const (
 
 // Kube kube struct
 type Kube struct {
-	Clientset     *kubernetes.Clientset
-	ClientV1 	  *kapps.AppsV1Client
-	ClientBatch   *batch.BatchV1beta1Client
+	Clientset   *kubernetes.Clientset
+	ClientV1    *kapps.AppsV1Client
+	ClientBatch *batch.BatchV1beta1Client
 
 	core   kcore.CoreV1Interface
 	apps   kapps.AppsV1Interface
@@ -123,13 +124,13 @@ func InitKubernetes(
 	}
 
 	kube := &Kube{
-		Clientset:     clientset,
-		ClientV1: 	   clientV1,
-		core:          clientset.CoreV1(),
-		apps:          clientset.AppsV1(),
-		batch:         clientV1Beta1,
-		config:        config,
-		logger:        logger,
+		Clientset: clientset,
+		ClientV1:  clientV1,
+		core:      clientset.CoreV1(),
+		apps:      clientset.AppsV1(),
+		batch:     clientV1Beta1,
+		config:    config,
+		logger:    logger,
 	}
 
 	return kube, nil
@@ -684,7 +685,7 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
 	cronJob, err := kube.batch.
 		CronJobs(namespace).
-		Get(context.Background(),name, kmeta.GetOptions{})
+		Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -694,7 +695,7 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 
 	if cronJob != nil {
 
-			maskPodSpec(&cronJob.Spec.JobTemplate.Spec.Template.Spec)
+		maskPodSpec(&cronJob.Spec.JobTemplate.Spec.Template.Spec)
 
 	}
 
@@ -931,4 +932,58 @@ func (kube *Kube) GetServerVersion() (string, error) {
 	}
 
 	return version.String(), nil
+}
+
+func (kube *Kube) GetAgentPermissions() (string, error) {
+	resourceName := "magalix-agent"
+	namespace := "kube-system"
+	kube.logger.Debugf(nil, "{kubernetes} Checking agent service account name")
+	agentDeploy, err := kube.apps.Deployments(namespace).Get(context.Background(), resourceName, kmeta.GetOptions{})
+	if err != nil {
+		errMsg := "unable to get agent deployment information"
+		return errMsg, karma.Format(
+			err,
+			errMsg,
+		)
+	}
+	serviceAccountName := agentDeploy.Spec.Template.Spec.ServiceAccountName
+
+	kube.logger.Debugf(nil, "{kubernetes} getting cluster role binding for the agent")
+	roleBindings, err := kube.Clientset.RbacV1().ClusterRoleBindings().List(context.Background(), kmeta.ListOptions{})
+	if err != nil {
+		errMsg := "unable to get agent's cluster role binding"
+		return errMsg, karma.Format(
+			err,
+			errMsg,
+		)
+	}
+
+	roleBindingIndex := -1
+	for i, rb := range roleBindings.Items {
+		if len(rb.Subjects) > 0 {
+			if rb.Subjects[0].Kind == "ServiceAccount" && rb.Subjects[0].Name == serviceAccountName {
+				roleBindingIndex = i
+				break
+			}
+		}
+	}
+	if roleBindingIndex == -1 {
+		errMsg := "unable to find cluster role binding of agent's service account"
+		return errMsg, karma.Format(
+			err,
+			errMsg,
+		)
+	}
+	roleBinding := roleBindings.Items[roleBindingIndex]
+	kube.logger.Debugf(nil, "{kubernetes} getting cluster role for the agent")
+	role, err := kube.Clientset.RbacV1().ClusterRoles().Get(context.Background(), roleBinding.RoleRef.Name, kmeta.GetOptions{})
+	if err != nil {
+		errMsg := "unable to get agent's cluster role"
+		return errMsg, karma.Format(
+			err,
+			errMsg,
+		)
+	}
+	rules, _ := json.Marshal(role.Rules)
+	return fmt.Sprintf("Cluster role %s with rules: %s", role.ObjectMeta.Name, string(rules)), nil
 }
