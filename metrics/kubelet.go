@@ -182,10 +182,17 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	addMetric := func(metric *Metric) {
-		kubelet.Infof(nil, "{kubelet} Adding metric %s for %s", metric.Name, metric.ContainerName)
+		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
+			kubelet.Infof(nil, "{kubelet} Adding metric %s for %s", metric.Name, metric.ContainerName)
+		}
+
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
-		defer kubelet.Infof(nil, "{kubelet} Finished Adding metric %s for %s", metric.Name, metric.ContainerName)
+
+		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
+			defer kubelet.Infof(nil, "{kubelet} Finished Adding metric %s for %s", metric.Name, metric.ContainerName)
+
+		}
 
 		if metric.Timestamp.Equal(time.Time{}) {
 			kubelet.Errorf(
