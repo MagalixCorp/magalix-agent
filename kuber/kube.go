@@ -136,24 +136,6 @@ func InitKubernetes(
 	return kube, nil
 }
 
-func (kube *Kube) MinorVersion() (int, error) {
-	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
-	version, err := discoveryClient.ServerVersion()
-	if err != nil {
-		return 0, err
-	}
-	minor := version.Minor
-
-	// remove + if found contains
-	lastIndex := len(minor) - 1
-	lastChar := minor[lastIndex:]
-	if lastChar == "+" {
-		minor = minor[0:lastIndex]
-	}
-
-	return strconv.Atoi(minor)
-}
-
 // GetNodes get kubernetes nodes
 func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of nodes")
