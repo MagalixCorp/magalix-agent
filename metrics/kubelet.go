@@ -539,7 +539,6 @@ func (kubelet *Kubelet) GetMetrics(
 				{"cpu/usage", tickTime, summary.Node.CPU.UsageCoreNanoSeconds / 1e6},
 				{"memory/rss", tickTime, summary.Node.Memory.RSSBytes},
 			} {
-				fmt.Println("===================================", measurement.Value)
 				addMetricValue(
 					TypeNode,
 					measurement.Name,
