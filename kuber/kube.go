@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	appsV1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authorization/v1"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -935,51 +936,18 @@ func (kube *Kube) GetServerVersion() (string, error) {
 }
 
 func (kube *Kube) GetAgentPermissions() (string, error) {
-	resourceName := "magalix-agent"
-	namespace := "kube-system"
-	kube.logger.Debugf(nil, "{kubernetes} Checking agent service account name")
-	agentDeploy, err := kube.apps.Deployments(namespace).Get(context.Background(), resourceName, kmeta.GetOptions{})
+	kube.logger.Debugf(nil, "{kubernetes} getting agent permissions")
+	spec := authv1.SelfSubjectRulesReviewSpec{Namespace: "kube-system"}
+	status := authv1.SubjectRulesReviewStatus{Incomplete: false}
+	rulesSpec := authv1.SelfSubjectRulesReview{Spec: spec, Status: status}
+	subjectRules, err := kube.Clientset.AuthorizationV1().SelfSubjectRulesReviews().Create(context.Background(), &rulesSpec, kmeta.CreateOptions{})
 	if err != nil {
 		return "", karma.Format(
 			err,
-			"unable to get agent deployment information",
-		)
-	}
-	serviceAccountName := agentDeploy.Spec.Template.Spec.ServiceAccountName
-
-	kube.logger.Debugf(nil, "{kubernetes} getting cluster role binding for the agent")
-	roleBindings, err := kube.Clientset.RbacV1().ClusterRoleBindings().List(context.Background(), kmeta.ListOptions{})
-	if err != nil {
-		return "", karma.Format(
-			err,
-			"unable to get agent's cluster role binding",
+			"unable to get agent permissions",
 		)
 	}
 
-	roleBindingIndex := -1
-	for i, rb := range roleBindings.Items {
-		if len(rb.Subjects) > 0 {
-			if rb.Subjects[0].Kind == "ServiceAccount" && rb.Subjects[0].Name == serviceAccountName {
-				roleBindingIndex = i
-				break
-			}
-		}
-	}
-	if roleBindingIndex == -1 {
-		return "", karma.Format(
-			err,
-			"unable to find cluster role binding of agent's service account",
-		)
-	}
-	roleBinding := roleBindings.Items[roleBindingIndex]
-	kube.logger.Debugf(nil, "{kubernetes} getting cluster role for the agent")
-	role, err := kube.Clientset.RbacV1().ClusterRoles().Get(context.Background(), roleBinding.RoleRef.Name, kmeta.GetOptions{})
-	if err != nil {
-		return "", karma.Format(
-			err,
-			"unable to get agent's cluster role",
-		)
-	}
-	rules, _ := json.Marshal(role.Rules)
-	return fmt.Sprintf("Cluster role %s with rules: %s", role.ObjectMeta.Name, string(rules)), nil
+	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
+	return string(rules), nil
 }
