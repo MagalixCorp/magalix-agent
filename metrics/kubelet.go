@@ -178,9 +178,18 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	addMetric := func(metric *Metric) {
-		logger.Infow("Adding metric", "metric", metric.Name)
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
+		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
+			logger.Debugw("Adding metric", "metric", metric.Name, "container", metric.ContainerName)
+		}
+
+		metricsMutex.Lock()
+		defer metricsMutex.Unlock()
+
+		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
+			defer logger.Debugw("Finished Adding metric", "metric", metric.Name, "container", metric.ContainerName)
+		}
 
 		if metric.Timestamp.Equal(time.Time{}) {
 			logger.Errorw("invalid timestamp detect. defaulting to tickTime",
