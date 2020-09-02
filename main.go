@@ -254,7 +254,12 @@ func initAgent(
 		"--analysis-data-interval",
 	)
 
-	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, serverVersion)
+	k8sMinorVersion, err := kube.GetMinorVersion()
+	if err != nil {
+		logger.Warningf(err, "failed to discover server minor version")
+	}
+
+	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, k8sMinorVersion)
 	err = ew.Start()
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/client-go/discovery"
 	"regexp"
 	"strconv"
 	"strings"
@@ -125,13 +124,13 @@ func InitKubernetes(
 	}
 
 	kube := &Kube{
-		Clientset:     clientset,
-		ClientV1: 	   clientV1,
-		core:          clientset.CoreV1(),
-		apps:          clientset.AppsV1(),
-		batch:         clientV1Beta1,
-		config:        config,
-		logger:        logger,
+		Clientset: clientset,
+		ClientV1:  clientV1,
+		core:      clientset.CoreV1(),
+		apps:      clientset.AppsV1(),
+		batch:     clientV1Beta1,
+		config:    config,
+		logger:    logger,
 	}
 
 	return kube, nil
@@ -951,4 +950,21 @@ func (kube *Kube) GetServerVersion() (string, error) {
 	}
 
 	return version.String(), nil
+}
+
+func (kube *Kube) GetMinorVersion() (int, error) {
+	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
+	version, err := discoveryClient.ServerVersion()
+	if err != nil {
+		return 0, err
+	}
+	minor := version.Minor
+
+	// remove + if found contains
+	last1 := minor[len(minor)-1:]
+	if last1 == "+" {
+		minor = minor[0 : len(minor)-1]
+	}
+
+	return strconv.Atoi(minor)
 }

@@ -106,6 +106,8 @@ func (observer *Observer) WaitForCacheSync(timeout *time.Duration) error {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+
 	finished := make(chan struct{})
 
 	go func() {
@@ -116,7 +118,6 @@ func (observer *Observer) WaitForCacheSync(timeout *time.Duration) error {
 	for {
 		select {
 		case <-finished:
-			cancel()
 			return nil
 		case <-ctx.Done():
 			return karma.Format(
