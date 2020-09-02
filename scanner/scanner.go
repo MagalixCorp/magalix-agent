@@ -131,7 +131,7 @@ func (scanner *Scanner) scan() {
 
 func (scanner *Scanner) scanNodes() {
 	for {
-		logger.Info("scanning kubernetes nodes")
+		logger.Debug("scanning kubernetes nodes")
 
 		nodes, nodeList, err := scanner.getNodes()
 		if err != nil {
@@ -140,7 +140,7 @@ func (scanner *Scanner) scanNodes() {
 			continue
 		}
 
-		logger.Infof(
+		logger.Debugf(
 			"found %d kubernetes nodes, sending to the gateway",
 			len(nodes),
 		)
@@ -153,7 +153,7 @@ func (scanner *Scanner) scanNodes() {
 			"nodes": nodeList,
 		})
 
-		logger.Debug("nodes sent")
+		logger.Info("nodes information is sent")
 		break
 	}
 }

@@ -199,7 +199,7 @@ func main() {
 	default:
 		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
 	}
-	logger.With("accountID", accountID, "clusterID", clusterID)
+	logger.WithGlobal("accountID", accountID, "clusterID", clusterID)
 	defer logger.Sync()
 
 	if err != nil {

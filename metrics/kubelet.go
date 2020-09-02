@@ -184,9 +184,6 @@ func (kubelet *Kubelet) GetMetrics(
 			logger.Debugw("Adding metric", "metric", metric.Name, "container", metric.ContainerName)
 		}
 
-		metricsMutex.Lock()
-		defer metricsMutex.Unlock()
-
 		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
 			defer logger.Debugw("Finished Adding metric", "metric", metric.Name, "container", metric.ContainerName)
 		}
@@ -347,6 +344,7 @@ func (kubelet *Kubelet) GetMetrics(
 		return nil, nil, errors.Wrap(err, "can't get nodes")
 	}
 
+	logger.Info("===============================")
 	addMetricValue(
 		TypeCluster,
 		"nodes/count",
@@ -360,6 +358,8 @@ func (kubelet *Kubelet) GetMetrics(
 		tickTime,
 		int64(len(nodes)),
 	)
+
+	logger.Info("===============================")
 
 	instanceGroups := map[string]int64{}
 	for _, node := range nodes {

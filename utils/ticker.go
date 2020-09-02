@@ -3,8 +3,6 @@ package utils
 import (
 	"sync"
 	"time"
-
-	"github.com/MagalixTechnologies/core/logger"
 )
 
 type Ticker struct {
@@ -40,7 +38,6 @@ func (ticker *Ticker) nextTick() <-chan time.Time {
 	//	stderr.Infof(nil, "{%s ticker} next tick after %v", ticker.name, next)
 	//	return time.After(next)
 	//}
-	logger.Infof("{%s ticker} next tick after interval %v at %v", ticker.name, interval, time.Now().Add(interval))
 	return time.After(interval)
 }
 

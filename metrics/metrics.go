@@ -226,8 +226,6 @@ func InitMetrics(
 	for _, metricsSource := range metricsSourcesNames {
 		switch metricsSource {
 		case "kubelet":
-			logger.Info("using kubelet as metrics source")
-
 			kubelet, err := NewKubelet(
 				kubeletClient,
 				metricsInterval,

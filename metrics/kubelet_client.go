@@ -111,14 +111,11 @@ func (client *KubeletClient) discoverNodesAddress() (
 
 	nodes, err := client.nodesProvider.GetNodes()
 	if err != nil {
-		return nil, karma.Format(err, "can't test kubelet access")
+		return nil, errors.Wrap(err, "can't test kubelet access")
 	}
 	if len(nodes) == 0 {
 		return nil,
-			karma.Format(
-				nil,
-				"can't test kubelet access. no discovered nodes",
-			)
+			errors.New("can't test kubelet access. no discovered nodes")
 	}
 
 	ctx := context.TODO()
@@ -162,7 +159,7 @@ func (client *KubeletClient) discoverNodesAddress() (
 	}
 
 	go func() {
-		err = group.Wait()
+		group.Wait()
 		close(done)
 	}()
 

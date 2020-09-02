@@ -28,7 +28,6 @@ func (client *Client) Recover() {
 		"PANIC OCCURRED: %v\n%s\n", tears, string(stackTrace()),
 	)
 
-	fmt.Println("============", message)
 	logger.Fatal(message)
 }
 
