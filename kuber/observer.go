@@ -10,7 +10,6 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/MagalixTechnologies/log-go"
 	"github.com/pkg/errors"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -225,7 +224,6 @@ type Watcher interface {
 
 type watcher struct {
 	gvrk     GroupVersionResourceKind
-	logger   *log.Logger
 	informer informers.GenericInformer
 }
 
@@ -238,11 +236,11 @@ func (w *watcher) Lister() cache.GenericLister {
 }
 
 func (w *watcher) AddEventHandler(handler ResourceEventHandler) {
-	w.informer.Informer().AddEventHandler(wrapHandler(handler, w.logger, w.gvrk))
+	w.informer.Informer().AddEventHandler(wrapHandler(handler, w.gvrk))
 }
 
 func (w *watcher) AddEventHandlerWithResyncPeriod(handler ResourceEventHandler, resyncPeriod time.Duration) {
-	w.informer.Informer().AddEventHandlerWithResyncPeriod(wrapHandler(handler, w.logger, w.gvrk), resyncPeriod)
+	w.informer.Informer().AddEventHandlerWithResyncPeriod(wrapHandler(handler, w.gvrk), resyncPeriod)
 }
 
 func (w *watcher) HasSynced() bool {
@@ -255,7 +253,6 @@ func (w *watcher) LastSyncResourceVersion() string {
 
 func wrapHandler(
 	wrapped ResourceEventHandler,
-	logger *log.Logger,
 	gvrk GroupVersionResourceKind,
 ) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
@@ -268,7 +265,7 @@ func wrapHandler(
 			if objUn != nil {
 				objUn, err := maskUnstructured(objUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
 				wrapped.OnAdd(now, gvrk, *objUn)
@@ -292,11 +289,11 @@ func wrapHandler(
 				// deep check that nothing has changed
 				oldJson, err := oldUn.MarshalJSON()
 				if err != nil {
-					logger.Errorf(err, "unable to marshal oldUn to json")
+					logger.Errorw("unable to marshal oldUn to json", "error", err)
 				}
 				newJson, err := newUn.MarshalJSON()
 				if err != nil {
-					logger.Errorf(err, "unable to marshal newUn to json")
+					logger.Errorf("unable to marshal newUn to json", "error", err)
 				}
 				if err == nil {
 					if bytes.Equal(oldJson, newJson) {
@@ -307,11 +304,11 @@ func wrapHandler(
 			if oldUn != nil && newUn != nil {
 				oldUn, err := maskUnstructured(oldUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 				}
 				newUn, err := maskUnstructured(newUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
 				wrapped.OnUpdate(now, gvrk, *oldUn, *newUn)
@@ -326,7 +323,7 @@ func wrapHandler(
 			if objUn != nil {
 				objUn, err := maskUnstructured(objUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
 				wrapped.OnDelete(now, gvrk, *objUn)

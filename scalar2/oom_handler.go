@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/reconquest/karma-go"
 	"golang.org/x/net/context"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -17,7 +17,6 @@ import (
 const OOMKilledReason = "OOMKilled"
 
 type OOMKillsProcessor struct {
-	logger   *log.Logger
 	kube     *kuber.Kube
 	observer *kuber.Observer
 
@@ -40,14 +39,12 @@ func (p *Pod) GetAPIVersion() string {
 }
 
 func NewOOMKillsProcessor(
-	logger *log.Logger,
 	kube *kuber.Kube,
 	observer_ *kuber.Observer,
 	timeout time.Duration,
 	dryRun bool,
 ) *OOMKillsProcessor {
 	return &OOMKillsProcessor{
-		logger:   logger,
 		kube:     kube,
 		observer: observer_,
 
@@ -61,9 +58,9 @@ func NewOOMKillsProcessor(
 func (p *OOMKillsProcessor) Start() {
 	for s := range p.pipe {
 		if err := p.handlePod(s); err != nil {
-			p.logger.Errorf(
-				err,
+			logger.Errorw(
 				"unable to handle pod",
+				"error", err,
 			)
 		}
 	}
@@ -131,7 +128,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 			toChangeContainers = append(
 				toChangeContainers,
 				kuber.ContainerResourcesRequirements{
-					Name: container.Name,
+					Name:   container.Name,
 					Limits: new(kuber.RequestLimit),
 				},
 			)
@@ -164,14 +161,13 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 	controllerKind := rootParent.Kind
 	controllerName := rootParent.Name
 
-	ctx := karma.
-		Describe("name", strings.Join([]string{namespace, controllerKind, controllerName}, "/")).
-		Describe("containers", strings.Join(containersDebugData, " | ")).
-		Describe("dry run", p.dryRun)
-
 	if p.dryRun {
 		//	log info about dryRun
-		p.logger.Infof(ctx, "dry-run enabled, skipping OOMKill handler")
+		logger.Infow("dry-run enabled, skipping OOMKill handler",
+			"name", strings.Join([]string{namespace, controllerKind, controllerName}, "/"),
+			"containers", strings.Join(containersDebugData, " | "),
+			"dry run", p.dryRun,
+		)
 		return nil
 	}
 
@@ -198,7 +194,11 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 		)
 	}*/
 
-	p.logger.Infof(ctx, "OOMKill handler executed")
+	logger.Infow("OOMKill handler executed",
+		"name", strings.Join([]string{namespace, controllerKind, controllerName}, "/"),
+		"containers", strings.Join(containersDebugData, " | "),
+		"dry run", p.dryRun,
+	)
 
 	return nil
 

@@ -24,7 +24,7 @@ func (client *Client) onConnect(connected chan bool) error {
 
 		err := client.hello()
 		if err != nil {
-			client.Errorf(err, "unable to verify protocol version with remote server")
+			logger.Errorw("unable to verify protocol version with remote server", "error", err)
 			if time.Now().After(expire) || strings.Contains(err.Error(), "unsupported version") {
 				return nil // breaking condition for backoff
 			}

@@ -2,19 +2,19 @@ package proc
 
 import (
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
-	karma "github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 // GetPodStatus a helper function to get the status of a pod
 func GetPodStatus(pod Pod) watcher.Status {
-	context := karma.
-		Describe("application_id", pod.ApplicationID).
-		Describe("service_id", pod.ServiceID).
-		Describe("kubernetes/status", pod.Status.String())
+	lg := logger.With(
+		"application_id", pod.ApplicationID,
+		"service_id", pod.ServiceID,
+		"kubernetes/status", pod.Status.String,
+	)
 
 	if pod.Status == watcher.StatusTerminated {
-		debugf(
-			context,
+		lg.Debugf(
 			"pod: %s (%s) status: %s",
 			pod.ID,
 			pod.Name,
@@ -41,8 +41,7 @@ func GetPodStatus(pod Pod) watcher.Status {
 		case status == watcher.StatusCompleted:
 			completed++
 		case status == watcher.StatusUnknown:
-			warningf(
-				nil,
+			lg.Warnf(
 				"container: %s unknown status, proceeding as error anyway",
 				container,
 			)
@@ -55,12 +54,13 @@ func GetPodStatus(pod Pod) watcher.Status {
 
 	total := len(pod.Containers)
 
-	context = context.
-		Describe("containers/running", running).
-		Describe("containers/pending", pending).
-		Describe("containers/completed", completed).
-		Describe("containers/errors", errors).
-		Describe("containers/total", total)
+	lg = lg.With(
+		"containers/running", running,
+		"containers/pending", pending,
+		"containers/completed", completed,
+		"containers/errors", errors,
+		"containers/total", total,
+	)
 
 	newStatus := pod.Status
 	switch {
@@ -80,8 +80,7 @@ func GetPodStatus(pod Pod) watcher.Status {
 		newStatus = watcher.StatusRunning
 	}
 
-	debugf(
-		context,
+	lg.Debugf(
 		"pod: %s (%s) status: %s",
 		pod.ID, pod.Name, newStatus.String(),
 	)

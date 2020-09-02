@@ -96,7 +96,6 @@ Options:
                                                [default: 80]
   --dry-run                                  Disable decision execution.
   --no-send-logs                             Disable sending logs to the backend.
-  --log-level                                log level to be displayed, supported levels are info, debug, warn, error
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file
@@ -165,14 +164,30 @@ func main() {
 		}
 	}()
 
+	kRestConfig, err := getKRestConfig(args)
+
+	kube, err := kuber.InitKubernetes(kRestConfig)
+	if err != nil {
+		logger.Fatalw("unable to initialize Kubernetes", "error", err)
+		os.Exit(1)
+	}
+
+	k8sServerVersion, err := kube.GetServerVersion()
+	if err != nil {
+		logger.Warnw("failed to discover server version", "error", err)
+	}
+
 	connected := make(chan bool)
-	gwClient, err := client.InitClient(args, version, startID, accountID, clusterID, secret, connected)
+	gwClient, err := client.InitClient(
+		args, version, startID, accountID, clusterID, secret, k8sServerVersion, connected,
+	)
+
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
 	logger.Infof("waiting for connection and authorization")
 	<-connected
 
-	switch args["--log-level"].(string) {
+	switch "info" {
 	case "info":
 		logger.ConfigWriterSync(logger.InfoLevel, gwClient)
 	case "debug":
@@ -193,11 +208,18 @@ func main() {
 	}
 
 	probes.Authorized = true
-	initAgent(args, gwClient, accountID, clusterID)
+	initAgent(args, gwClient, kRestConfig, kube, accountID, clusterID)
 }
 
-func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, clusterID uuid.UUID) {
-	logger.Infof("Initializing Agent")
+func initAgent(
+	args docopt.Opts,
+	gwClient *client.Client,
+	kRestConfig *rest.Config,
+	kube *kuber.Kube,
+	accountID uuid.UUID,
+	clusterID uuid.UUID,
+) {
+	logger.Info("Initializing Agent")
 	var (
 		metricsEnabled = !args["--disable-metrics"].(bool)
 		// eventsEnabled   = !args["--disable-events"].(bool)
@@ -212,8 +234,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, c
 		skipNamespaces = namespaces
 	}
 
-	kRestConfig, err := getKRestConfig(args)
-
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
 	observer := kuber.NewObserver(
@@ -226,12 +246,6 @@ func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, c
 	err = observer.WaitForCacheSync(&t)
 	if err != nil {
 		logger.Fatalw("unable to start entities watcher", "error", err)
-	}
-
-	kube, err := kuber.InitKubernetes(kRestConfig, gwClient)
-	if err != nil {
-		logger.Fatalw("unable to initialize Kubernetes", "error", err)
-		os.Exit(1)
 	}
 
 	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
@@ -305,7 +319,7 @@ func initAgent(args docopt.Opts, gwClient *client.Client, accountID uuid.UUID, c
 			args,
 		)
 		if err != nil {
-			gwClient.Fatalf(err, "unable to initialize metrics sources")
+			logger.Fatalw("unable to initialize metrics sources", "error", err)
 			os.Exit(1)
 		}
 	}

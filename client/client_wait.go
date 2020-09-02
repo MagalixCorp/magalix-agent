@@ -27,7 +27,9 @@ func (client *Client) Recover() {
 	message := fmt.Sprintf(
 		"PANIC OCCURRED: %v\n%s\n", tears, string(stackTrace()),
 	)
-	client.Fatal(message)
+
+	fmt.Println("============", message)
+	logger.Fatal(message)
 }
 
 // Done sends the exit signal

@@ -11,9 +11,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
-	"github.com/reconquest/karma-go"
 	"github.com/reconquest/sign-go"
 )
 
@@ -33,18 +31,17 @@ type timeouts struct {
 }
 
 // Client agent gateway client
+// Client agent gateway client
 type Client struct {
-	*log.Logger
+	address       string
+	version       string
+	startID       string
+	AccountID     uuid.UUID
+	ClusterID     uuid.UUID
+	secret        []byte
+	ServerVersion string
 
-	address   string
-	version   string
-	startID   string
-	AccountID uuid.UUID
-	ClusterID uuid.UUID
-	secret    []byte
-
-	channel *channel.Client
-
+	channel    *channel.Client
 	connected  bool
 	authorized bool
 
@@ -74,6 +71,7 @@ func newClient(
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
 	secret []byte,
+	serverVersion string,
 	timeouts timeouts,
 	shouldSendLogs bool,
 ) *Client {
@@ -95,6 +93,7 @@ func newClient(
 		AccountID:      accountID,
 		ClusterID:      clusterID,
 		secret:         secret,
+		ServerVersion:  serverVersion,
 		shouldSendLogs: shouldSendLogs,
 
 		channel: channel.NewClient(*gwUrl, channel.ChannelOptions{
@@ -160,22 +159,14 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 		// 300ms -> 600ms -> [...] -> 3000ms -> 300ms
 		timeout := client.timeouts.protoBackoff * time.Duration(try%10+1)
 
-		client.Errorf(
-			karma.Describe("retry", try).Reason(err),
-			"unhandled error occurred, retrying after %s",
-			timeout,
-		)
+		logger.Errorw("unhandled error occurred, retires limit is exceeded", "limit", limit, "error", err)
 
 		if try+1 < limit {
 			time.Sleep(timeout)
 		}
 	}
 	if err != nil {
-		client.Errorf(
-			karma.Describe("limit", limit).Reason(err),
-			"unhandled error occurred, retires limit %v is exceeded",
-			limit,
-		)
+		logger.Errorw("unhandled error occurred, retires limit is exceeded", "limit", limit, "error", err)
 	}
 	return err
 }
@@ -235,7 +226,7 @@ func (client *Client) PipeStatus(pack Package) {
 	}
 	i := client.pipeStatus.Send(pack)
 	if i > 0 {
-		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+		logger.Errorw("discarded packets to agent-gateway", "#packets", i)
 	}
 }
 
@@ -246,7 +237,7 @@ func (client *Client) Pipe(pack Package) {
 	}
 	i := client.pipe.Send(pack)
 	if i > 0 {
-		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+		logger.Errorw("discarded packets to agent-gateway", "#packets", i)
 	}
 }
 
@@ -264,10 +255,11 @@ func InitClient(
 	startID string,
 	accountID, clusterID uuid.UUID,
 	secret []byte,
+	serverVersion string,
 	connected chan bool,
 ) (*Client, error) {
 	client := newClient(
-		args["--gateway"].(string), version, startID, accountID, clusterID, secret,
+		args["--gateway"].(string), version, startID, accountID, clusterID, secret, serverVersion,
 		timeouts{
 			protoHandshake: utils.MustParseDuration(args, "--timeout-proto-handshake"),
 			protoWrite:     utils.MustParseDuration(args, "--timeout-proto-write"),
@@ -282,11 +274,11 @@ func InitClient(
 			return true
 		}
 
-		client.Infof(nil, "got SIGHUP signal, sending ping-pong")
+		logger.Info("got SIGHUP signal, sending ping-pong")
 		client.WithBackoff(func() error {
 			err := client.ping()
 			if err != nil {
-				client.Errorf(err, "unable to send ping-pong request to gateway")
+				logger.Errorw("unable to send ping-pong request to gateway", "error", err)
 				return err
 			}
 

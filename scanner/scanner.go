@@ -8,7 +8,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 
@@ -38,7 +38,6 @@ type Scanner struct {
 	*utils.Ticker
 
 	client            *client.Client
-	logger            *log.Logger
 	resourcesProvider ResourcesProvider
 	skipNamespaces    []string
 	accountID         uuid.UUID
@@ -75,7 +74,6 @@ func InitScanner(
 ) *Scanner {
 	scanner := &Scanner{
 		client:            client,
-		logger:            client.Logger,
 		resourcesProvider: resourcesProvider,
 		skipNamespaces:    skipNamespaces,
 		accountID:         accountID,
@@ -96,7 +94,7 @@ func InitScanner(
 				if data, ok := args[0].(map[string]interface{}); ok {
 					go scanner.client.SendRaw(data)
 				} else {
-					scanner.logger.Error(
+					logger.Error(
 						"invalid raw data type! Please contact developer",
 					)
 				}
@@ -133,17 +131,16 @@ func (scanner *Scanner) scan() {
 
 func (scanner *Scanner) scanNodes() {
 	for {
-		scanner.logger.Infof(nil, "scanning kubernetes nodes")
+		logger.Info("scanning kubernetes nodes")
 
 		nodes, nodeList, err := scanner.getNodes()
 		if err != nil {
-			scanner.logger.Errorf(err, "unable to scan kubernetes nodes")
+			logger.Errorw("unable to scan kubernetes nodes", "error", err)
 			time.Sleep(timeoutScannerBackoff)
 			continue
 		}
 
-		scanner.logger.Infof(
-			nil,
+		logger.Infof(
 			"found %d kubernetes nodes, sending to the gateway",
 			len(nodes),
 		)
@@ -156,10 +153,7 @@ func (scanner *Scanner) scanNodes() {
 			"nodes": nodeList,
 		})
 
-		scanner.logger.Infof(
-			nil,
-			"nodes sent",
-		)
+		logger.Debug("nodes sent")
 		break
 	}
 }
@@ -201,24 +195,23 @@ func (scanner *Scanner) getNodes() ([]kuber.Node, *corev1.NodeList, error) {
 
 func (scanner *Scanner) scanApplications() {
 	for {
-		scanner.logger.Infof(nil, "scanning kubernetes applications")
+		logger.Info("scanning kubernetes applications")
 
 		apps, rawResources, err := scanner.getApplications()
 		if err != nil {
-			scanner.logger.Errorf(err, "unable to scan kubernetes applications")
+			logger.Errorw("unable to scan kubernetes applications", "error", err)
 			time.Sleep(timeoutScannerBackoff)
 			continue
 		}
 
-		scanner.logger.Infof(
-			nil,
+		logger.Infof(
 			"found %d kubernetes applications, sending to the gateway",
 			len(apps),
 		)
 
-		scanner.logger.Tracef(
-			karma.Describe("apps", scanner.logger.TraceJSON(apps)),
+		logger.Debugw(
 			"sending applications to the gateway",
+			"apps", apps,
 		)
 
 		scanner.apps = apps
@@ -226,8 +219,7 @@ func (scanner *Scanner) scanApplications() {
 
 		scanner.SendAnalysisData(rawResources)
 
-		scanner.logger.Infof(
-			nil,
+		logger.Info(
 			"applications sent",
 		)
 		break
@@ -255,13 +247,7 @@ func (scanner *Scanner) getApplications() (
 
 	for _, resource := range resources {
 		if utils.InSkipNamespace(scanner.skipNamespaces, resource.Namespace) {
-			scanner.client.Tracef(
-				nil,
-				"skipping namespace %q: resource %q",
-				resource.Namespace,
-				resource.Name,
-			)
-
+			logger.Debugw("skipping namespace and resource", "namespace", resource.Namespace, "resource", resource.Name)
 			continue
 		}
 
@@ -321,13 +307,12 @@ func (scanner *Scanner) getApplications() (
 				ReadinessProbe: container.ReadinessProbe,
 			})
 
-			scanner.logger.Tracef(
-				karma.
-					Describe("application", app.Name).
-					Describe("service", service.Name),
-				"found container %q %q",
-				container.Name,
-				container.Image,
+			logger.Debugw(
+				"found container",
+				"name", container.Name,
+				"image", container.Image,
+				"application", app.Name,
+				"service", service.Name,
 			)
 		}
 
@@ -647,8 +632,7 @@ func (scanner *Scanner) FindService(
 		return uuid.Nil, uuid.Nil, false
 	}
 
-	scanner.logger.Tracef(
-		nil,
+	logger.Debugf(
 		"scanner: find service: %s %s",
 		namespace,
 		podName,
@@ -686,8 +670,7 @@ func (scanner *Scanner) FindContainer(
 		return uuid.Nil, uuid.Nil, nil, false
 	}
 
-	scanner.logger.Tracef(
-		nil,
+	logger.Debugf(
 		"scanner: find container: %s %s %s",
 		namespace,
 		podName,

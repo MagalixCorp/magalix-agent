@@ -7,8 +7,8 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
-	"github.com/reconquest/karma-go"
 )
 
 func (eventer *Eventer) startBatchWriter() {
@@ -54,20 +54,22 @@ func (eventer *Eventer) sendEvents(events []watcher.Event) {
 		}
 	}
 	if len(newEvents) > 0 {
-		eventer.client.Infof(
-			karma.Describe("timestamp", events[0].Timestamp).
-				Describe("count", len(events)).
-				Describe("new", len(newEvents)),
-			"sending events",
+		logger.Debugw("sending events",
+			"timestamp", events[0].Timestamp,
+			"count", len(events),
+			"new", len(newEvents),
 		)
 		eventer.sendEventsBatch(events)
-		eventer.client.Infof(karma.Describe("timestamp", events[0].Timestamp), "events sent")
+		logger.Infow("events sent",
+			"timestamp", events[0].Timestamp,
+			"count", len(events),
+			"new", len(newEvents),
+		)
 	} else if len(events) > 0 {
-		eventer.client.Debugf(
-			karma.Describe("timestamp", events[0].Timestamp).
-				Describe("count", len(events)).
-				Describe("new", len(newEvents)),
-			"skipping sending events, nothing new",
+		logger.Debugw("skipping sending events, nothing new",
+			"timestamp", events[0].Timestamp,
+			"count", len(events),
+			"new", len(newEvents),
 		)
 	}
 }
@@ -92,13 +94,10 @@ func (eventer *Eventer) sendStatus(
 	source *watcher.ContainerStatusSource,
 	timestamp time.Time,
 ) {
-	eventer.client.Debugf(
-		karma.
-			Describe("entity", entity).
-			Describe("id", id.String()).
-			Describe("status", status.String()),
-
-		"{eventer} changing status",
+	logger.Debugw("changing status",
+		"entity", entity,
+		"id", id.String(),
+		"status", status.String(),
 	)
 
 	eventer.client.PipeStatus(client.Package{

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -18,8 +18,6 @@ type PodProcessor interface {
 }
 
 type ScannerListener struct {
-	logger *log.Logger
-
 	observer      *kuber.Observer
 	podsWatcher   kuber.Watcher
 	podsChan      chan corev1.Pod
@@ -28,11 +26,9 @@ type ScannerListener struct {
 }
 
 func NewScannerListener(
-	logger *log.Logger,
 	observer_ *kuber.Observer,
 ) *ScannerListener {
 	return &ScannerListener{
-		logger: logger,
 
 		observer: observer_,
 		podsChan: make(chan corev1.Pod, 0),
@@ -66,9 +62,9 @@ func (sl *ScannerListener) handleUnstructuredPod(u *unstructured.Unstructured) {
 	var pod corev1.Pod
 	err := transcodeUnstructured(u, &pod)
 	if err != nil {
-		sl.logger.Errorf(
-			err,
+		logger.Errorw(
 			"unable to decode Unstructured to corev1.Pod",
+			"error", err,
 		)
 	}
 	sl.podsChan <- pod
@@ -86,9 +82,9 @@ func (sl *ScannerListener) processPods() {
 		for _, listener := range sl.podsListeners {
 			err := listener.Submit(pod)
 			if err != nil {
-				sl.logger.Errorf(
-					err,
+				logger.Errorw(
 					"error submitting pod to listener",
+					"error", err,
 				)
 			}
 		}

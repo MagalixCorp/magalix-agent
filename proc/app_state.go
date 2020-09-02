@@ -4,8 +4,8 @@ import (
 	"sync"
 
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
+	"github.com/MagalixTechnologies/core/logger"
 	uuid "github.com/MagalixTechnologies/uuid-go"
-	karma "github.com/reconquest/karma-go"
 )
 
 // AppState holds application (namespace) state
@@ -93,15 +93,14 @@ func GetAppStateStatus(id watcher.Identity, services []*ServiceState, desired in
 		status = watcher.StatusPending
 	}
 
-	debugf(
-		karma.
-			Describe("application_id", id.ApplicationID).
-			Describe("services/running", running).
-			Describe("services/pending", pending).
-			Describe("services/completed", completed).
-			Describe("services/errors", errors).
-			Describe("services/desired", desired),
-		"application status: %s", status.String(),
+	logger.Debugw(
+		"application status: "+status.String(),
+		"application_id", id.ApplicationID,
+		"services/running", running,
+		"services/pending", pending,
+		"services/completed", completed,
+		"services/errors", errors,
+		"services/desired", desired,
 	)
 
 	return status

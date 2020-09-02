@@ -10,9 +10,9 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
-	"github.com/reconquest/karma-go"
 )
 
 // EventIdentifier entity identifier for events
@@ -79,9 +79,6 @@ func NewEventer(
 
 	// @TODO
 	// eventer/pkg/watcher doesn't support non-package wide logger
-	child := client.Logger.NewChildWithPrefix("{eventer}")
-
-	proc.SetLogger(child)
 
 	// @TODO
 	// health is passed to watcher, state of health is not propagated to the
@@ -124,11 +121,7 @@ func (eventer *Eventer) Start() {
 func (eventer *Eventer) GetApplicationDesiredServices(
 	id uuid.UUID,
 ) ([]uuid.UUID, error) {
-	eventer.client.Debugf(
-		karma.Describe("id", id.String()),
-		"{eventer} get application desired services",
-	)
-
+	logger.Infow("get application desired services", "id", id.String())
 	found := false
 
 	services := []uuid.UUID{}
@@ -163,10 +156,7 @@ func (eventer *Eventer) ChangeStatus(
 
 // WriteEvent writes an event
 func (eventer *Eventer) WriteEvent(event *watcher.Event) error {
-	eventer.client.Tracef(
-		karma.Describe("event", eventer.client.TraceJSON(event)),
-		"adding event to batch writer buffer",
-	)
+	logger.Debugw("adding event to batch writer buffer", "event", event)
 
 	// sending events to channel, batch writer is running in background
 	eventer.buffer <- *event
