@@ -13,16 +13,15 @@ require (
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/golang/snappy v0.0.1
-	github.com/kovetskiy/lorg v0.0.0-20190701130800-9c6042b7edb0
+	github.com/kovetskiy/lorg v0.0.0-20190701130800-9c6042b7edb0 // indirect
 	github.com/pkg/errors v0.8.1
-	github.com/reconquest/cog v0.0.0-20191208202052-266c2467b936
+	github.com/reconquest/cog v0.0.0-20191208202052-266c2467b936 // indirect
 	github.com/reconquest/health-go v0.0.0-20181113092653-ea90ecace101
 	github.com/reconquest/karma-go v0.0.0-20190930125156-7b5c19ad6eab
 	github.com/reconquest/sign-go v0.0.0-20181113092801-8d4f8c5854ae
 	github.com/reconquest/stats-go v0.0.0-20180307085907-df9f297af353
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b
-	github.com/stretchr/testify v1.4.0
 	github.com/zazab/zhash v0.0.0-20170403032415-ad45b89afe7a // indirect
 	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553
 	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6 // indirect
