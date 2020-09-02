@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/client-go/discovery"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
@@ -90,9 +90,9 @@ type RawResources struct {
 
 func InitKubernetes(
 	config *krest.Config,
-	client *client.Client,
+	logger *log.Logger,
 ) (*Kube, error) {
-	client.Debugf(
+	logger.Debugf(
 		karma.
 			Describe("url", config.Host).
 			Describe("token", config.BearerToken).
@@ -125,13 +125,13 @@ func InitKubernetes(
 	}
 
 	kube := &Kube{
-		Clientset: clientset,
-		ClientV1:  clientV1,
-		core:      clientset.CoreV1(),
-		apps:      clientset.AppsV1(),
-		batch:     clientV1Beta1,
-		config:    config,
-		logger:    client.Logger,
+		Clientset:     clientset,
+		ClientV1: 	   clientV1,
+		core:          clientset.CoreV1(),
+		apps:          clientset.AppsV1(),
+		batch:         clientV1Beta1,
+		config:        config,
+		logger:        logger,
 	}
 
 	return kube, nil
@@ -941,4 +941,14 @@ func maskArgs(args []string) (masked []string) {
 		masked[i] = maskedValue
 	}
 	return
+}
+
+func (kube *Kube) GetServerVersion() (string, error) {
+	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
+	version, err := discoveryClient.ServerVersion()
+	if err != nil {
+		return "", err
+	}
+
+	return version.String(), nil
 }

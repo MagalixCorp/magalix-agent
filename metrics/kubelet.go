@@ -156,7 +156,6 @@ func (kubelet *Kubelet) GetMetrics(
 		key string,
 		timestamp time.Time,
 		value int64,
-		multiplier int64,
 	) (int64, error) {
 		previous, err := kubelet.getPreviousValue(key)
 
@@ -164,9 +163,10 @@ func (kubelet *Kubelet) GetMetrics(
 			return 0, err
 		}
 
-		duration := timestamp.UnixNano() - previous.Timestamp.UnixNano()
+		// calculate the duration in seconds
+		duration := int64(timestamp.Sub(previous.Timestamp).Seconds())
 
-		if duration <= time.Second.Nanoseconds() {
+		if duration <= 1 {
 			return 0, karma.Format(nil, "timestamp less than or equal previous one")
 		}
 
@@ -176,14 +176,24 @@ func (kubelet *Kubelet) GetMetrics(
 			// value is reset so we should reset as well
 			previousValue = 0
 		}
-		rate := multiplier * (value - previousValue) / duration
+		rate := (value - previousValue) / duration
 
 		return rate, nil
 	}
 
 	addMetric := func(metric *Metric) {
+		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
+			kubelet.Infof(nil, "{kubelet} Adding metric %s for %s", metric.Name, metric.ContainerName)
+		}
+
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
+
+		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
+			defer kubelet.Infof(nil, "{kubelet} Finished Adding metric %s for %s", metric.Name, metric.ContainerName)
+
+		}
+
 		if metric.Timestamp.Equal(time.Time{}) {
 			kubelet.Errorf(
 				karma.Describe("metric", metric.Name).
@@ -259,7 +269,6 @@ func (kubelet *Kubelet) GetMetrics(
 	addMetricRate := func(
 		entityKind string,
 		entityName string,
-		multiplier int64,
 		metric *Metric,
 	) {
 		if metric.Timestamp.Equal(time.Time{}) {
@@ -276,7 +285,7 @@ func (kubelet *Kubelet) GetMetrics(
 		metric.Timestamp = metric.Timestamp.Truncate(time.Minute)
 
 		key := getKey(metric.Name, metric.NamespaceName, entityKind, entityName, metric.PodName, metric.ContainerName)
-		rate, err := calcRate(key, metric.Timestamp, metric.Value, multiplier)
+		rate, err := calcRate(key, metric.Timestamp, metric.Value)
 		kubelet.updatePreviousValue(key, &KubeletValue{
 			Timestamp: metric.Timestamp,
 			Value:     metric.Value,
@@ -309,12 +318,10 @@ func (kubelet *Kubelet) GetMetrics(
 		podName string,
 		timestamp time.Time,
 		value int64,
-		multiplier int64,
 	) {
 		addMetricRate(
 			entityKind,
 			entityName,
-			multiplier,
 			&Metric{
 				Name:           measurement,
 				Type:           measurementType,
@@ -422,7 +429,7 @@ func (kubelet *Kubelet) GetMetrics(
 		return nil, nil, karma.Format(err, "{kubelet} unable to get pods")
 	}
 
-	kubelet.Info("{kubelet} Fetched %d pods", len(pods))
+	kubelet.Infof(nil, "{kubelet} Fetched %d pods", len(pods))
 	processedPodsCount := 0
 	processedContainersCount := 0
 
@@ -539,7 +546,7 @@ func (kubelet *Kubelet) GetMetrics(
 				Time  time.Time
 				Value int64
 			}{
-				{"cpu/usage", tickTime, summary.Node.CPU.UsageCoreNanoSeconds},
+				{"cpu/usage", tickTime, summary.Node.CPU.UsageCoreNanoSeconds / 1e6},
 				{"memory/rss", tickTime, summary.Node.Memory.RSSBytes},
 			} {
 				addMetricValue(
@@ -558,12 +565,12 @@ func (kubelet *Kubelet) GetMetrics(
 			}
 
 			for _, measurement := range []struct {
-				Name       string
-				Time       time.Time
-				Value      int64
-				Multiplier int64
+				Name  string
+				Time  time.Time
+				Value int64
 			}{
-				{"cpu/usage_rate", tickTime, summary.Node.CPU.UsageCoreNanoSeconds, 1000},
+				// calculate the usage in milli seconds
+				{"cpu/usage_rate", tickTime, summary.Node.CPU.UsageCoreNanoSeconds / 1e6},
 			} {
 
 				addMetricValueRate(
@@ -580,7 +587,6 @@ func (kubelet *Kubelet) GetMetrics(
 					"",
 					measurement.Time,
 					measurement.Value,
-					measurement.Multiplier,
 				)
 			}
 
@@ -662,8 +668,7 @@ func (kubelet *Kubelet) GetMetrics(
 						container.Name,
 						pod.PodRef.Name,
 						tickTime,
-						container.CPU.UsageCoreNanoSeconds,
-						1000, // cpu_rate is in millicore
+						container.CPU.UsageCoreNanoSeconds/1e6,
 					)
 
 					// Set default zero values for throttled metrics
@@ -818,20 +823,17 @@ func (kubelet *Kubelet) GetMetrics(
 
 				rateMetric := *metric
 				rateMetric.Name += "_rate"
-				var multiplier int64 = 1e9
 
 				// TODO: cleanup when values are sent as floats
 				// covert seconds to milliseconds
 				if strings.Contains(rateMetric.Name, "seconds") {
 					rateMetric.Value *= 1000
-					multiplier = 1e6
 				}
 
 				// Container metrics use controller name & kind as entity name & kind
 				addMetricRate(
 					rateMetric.ControllerKind,
 					rateMetric.ControllerName,
-					multiplier,
 					&rateMetric,
 				)
 			}

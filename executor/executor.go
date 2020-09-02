@@ -312,16 +312,29 @@ func (executor *Executor) execute(
 
 			msg = statusMap[kv1.PodFailed]
 			result = proto.DecisionExecutionStatusFailed
-
 			memoryLimit := container.Resources.Limits.Memory().Value()
 			memoryRequest := container.Resources.Requests.Memory().Value()
 			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
 			cpuRequest := container.Resources.Requests.Cpu().MilliValue()
 
-			*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
-			*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
-			*totalResources.Containers[0].Limits.CPU = cpuLimit
-			*totalResources.Containers[0].Requests.CPU = cpuRequest
+			// handle if requests and limits is null in rollback DEV-2056"
+			if container.Resources.Limits != nil {
+				if container.Resources.Limits.Cpu() != nil && cpuLimit != 0{
+					*totalResources.Containers[0].Limits.CPU = cpuLimit
+				}
+				if container.Resources.Limits.Memory() != nil && memoryLimit != 0 {
+					*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
+				}
+			}
+
+			if container.Resources.Requests != nil {
+				if container.Resources.Requests.Cpu() != nil && cpuRequest != 0 {
+					*totalResources.Containers[0].Requests.CPU = cpuRequest
+				}
+				if container.Resources.Requests.Memory() != nil &&  memoryRequest != 0 {
+					*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
+				}
+			}
 
 			// execute the decision with old values to rollback
 			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
