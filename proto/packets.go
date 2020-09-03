@@ -39,14 +39,15 @@ var (
 )
 
 type PacketHello struct {
-	Major           uint      `json:"major"`
-	Minor           uint      `json:"minor"`
-	Build           string    `json:"build"`
-	StartID         string    `json:"start_id"`
-	AccountID       uuid.UUID `json:"account_id"`
-	ClusterID       uuid.UUID `json:"cluster_id"`
-	PacketV2Enabled bool      `json:"packet_v2_enabled,omitempty"`
-	ServerVersion   string    `json:"server_version"`
+	Major            uint      `json:"major"`
+	Minor            uint      `json:"minor"`
+	Build            string    `json:"build"`
+	StartID          string    `json:"start_id"`
+	AccountID        uuid.UUID `json:"account_id"`
+	ClusterID        uuid.UUID `json:"cluster_id"`
+	PacketV2Enabled  bool      `json:"packet_v2_enabled,omitempty"`
+	ServerVersion    string    `json:"server_version"`
+	AgentPermissions string    `json:"agent_permissions"`
 }
 
 type PacketAuthorizationRequest struct {

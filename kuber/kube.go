@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/client-go/discovery"
 	"regexp"
 	"strings"
 	"sync"
+
+	"k8s.io/client-go/discovery"
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/log-go"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	appsV1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authorization/v1"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,9 +37,9 @@ const (
 
 // Kube kube struct
 type Kube struct {
-	Clientset     *kubernetes.Clientset
-	ClientV1 	  *kapps.AppsV1Client
-	ClientBatch   *batch.BatchV1beta1Client
+	Clientset   *kubernetes.Clientset
+	ClientV1    *kapps.AppsV1Client
+	ClientBatch *batch.BatchV1beta1Client
 
 	core   kcore.CoreV1Interface
 	apps   kapps.AppsV1Interface
@@ -123,13 +125,13 @@ func InitKubernetes(
 	}
 
 	kube := &Kube{
-		Clientset:     clientset,
-		ClientV1: 	   clientV1,
-		core:          clientset.CoreV1(),
-		apps:          clientset.AppsV1(),
-		batch:         clientV1Beta1,
-		config:        config,
-		logger:        logger,
+		Clientset: clientset,
+		ClientV1:  clientV1,
+		core:      clientset.CoreV1(),
+		apps:      clientset.AppsV1(),
+		batch:     clientV1Beta1,
+		config:    config,
+		logger:    logger,
 	}
 
 	return kube, nil
@@ -684,7 +686,7 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
 	cronJob, err := kube.batch.
 		CronJobs(namespace).
-		Get(context.Background(),name, kmeta.GetOptions{})
+		Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
 		return nil, karma.Format(
 			err,
@@ -694,7 +696,7 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 
 	if cronJob != nil {
 
-			maskPodSpec(&cronJob.Spec.JobTemplate.Spec.Template.Spec)
+		maskPodSpec(&cronJob.Spec.JobTemplate.Spec.Template.Spec)
 
 	}
 
@@ -931,4 +933,21 @@ func (kube *Kube) GetServerVersion() (string, error) {
 	}
 
 	return version.String(), nil
+}
+
+func (kube *Kube) GetAgentPermissions() (string, error) {
+	kube.logger.Debugf(nil, "{kubernetes} getting agent permissions")
+	spec := authv1.SelfSubjectRulesReviewSpec{Namespace: "kube-system"}
+	status := authv1.SubjectRulesReviewStatus{Incomplete: false}
+	rulesSpec := authv1.SelfSubjectRulesReview{Spec: spec, Status: status}
+	subjectRules, err := kube.Clientset.AuthorizationV1().SelfSubjectRulesReviews().Create(context.Background(), &rulesSpec, kmeta.CreateOptions{})
+	if err != nil {
+		return "", karma.Format(
+			err,
+			"unable to get agent permissions",
+		)
+	}
+
+	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
+	return string(rules), nil
 }
