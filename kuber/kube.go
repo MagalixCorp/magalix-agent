@@ -18,7 +18,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 
 	appsV1 "k8s.io/api/apps/v1"
@@ -952,6 +951,7 @@ func (kube *Kube) GetAgentPermissions() (string, error) {
 
 	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
 	return string(rules), nil
+}
 
 func (kube *Kube) GetMinorVersion() (int, error) {
 	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
