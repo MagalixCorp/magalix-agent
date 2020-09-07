@@ -267,6 +267,8 @@ func initAgent(
 
 	logger.Info("Getting entities watcher")
 	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, k8sMinorVersion)
+	logger.Info("Starting entities watcher")
+
 	err = ew.Start()
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")

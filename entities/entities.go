@@ -103,6 +103,7 @@ func NewEntitiesWatcher(
 }
 
 func (ew *entitiesWatcher) Start() error {
+	ew.logger.Info("entities watcher start waitforcache resync")
 	// this method should be called only once
 
 	// TODO: if a packet expires or failed to be sent
@@ -118,6 +119,7 @@ func (ew *entitiesWatcher) Start() error {
 	if err != nil {
 		return err
 	}
+	ew.logger.Info("entities watcher start waitforcache resync done")
 
 	go ew.deltasWorker()
 
@@ -144,6 +146,7 @@ func (ew *entitiesWatcher) WatcherFor(
 }
 
 func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
+	ew.logger.Info("entities watcher snapshotresync")
 	packet := proto.PacketEntitiesResyncRequest{
 		Snapshot:  map[string]proto.PacketEntitiesResyncItem{},
 		Timestamp: tickTime.UTC(),
@@ -209,6 +212,7 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 }
 
 func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
+	ew.logger.Info("entities watcher snapshot")
 	// send nodes and namespaces before all other deltas because they act as
 	// parents for other resources
 	nodesWatcher := ew.watchers[kuber.Nodes]
