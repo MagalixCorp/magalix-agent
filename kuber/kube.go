@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/client-go/discovery"
+
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/reconquest/karma-go"
@@ -20,6 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	appsV1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authorization/v1"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -933,6 +936,22 @@ func (kube *Kube) GetServerVersion() (string, error) {
 
 	return version.String(), nil
 }
+
+func (kube *Kube) GetAgentPermissions() (string, error) {
+	kube.logger.Debugf(nil, "{kubernetes} getting agent permissions")
+	spec := authv1.SelfSubjectRulesReviewSpec{Namespace: "kube-system"}
+	status := authv1.SubjectRulesReviewStatus{Incomplete: false}
+	rulesSpec := authv1.SelfSubjectRulesReview{Spec: spec, Status: status}
+	subjectRules, err := kube.Clientset.AuthorizationV1().SelfSubjectRulesReviews().Create(context.Background(), &rulesSpec, kmeta.CreateOptions{})
+	if err != nil {
+		return "", karma.Format(
+			err,
+			"unable to get agent permissions",
+		)
+	}
+
+	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
+	return string(rules), nil
 
 func (kube *Kube) GetMinorVersion() (int, error) {
 	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
