@@ -265,11 +265,13 @@ func initAgent(
 		logger.Warningf(err, "failed to discover server minor version")
 	}
 
+	logger.Info("Getting entities watcher")
 	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, k8sMinorVersion)
 	err = ew.Start()
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")
 	}
+	logger.Info("Started entities watcher")
 
 	/*if scalarEnabled {
 		scalar2.InitScalars(logger, kube, observer, dryRun)
@@ -284,6 +286,7 @@ func initAgent(
 		optInAnalysisData,
 		analysisDataInterval,
 	)
+	logger.Info("Initializing scanner")
 
 	e := executor.InitExecutor(
 		gwClient,
@@ -321,6 +324,8 @@ func initAgent(
 		nodesProvider = observer
 		entitiesProvider = observer
 
+		logger.Info("Initializing metrics")
+
 		err := metrics.InitMetrics(
 			gwClient,
 			nodesProvider,
@@ -329,6 +334,7 @@ func initAgent(
 			optInAnalysisData,
 			args,
 		)
+		logger.Info("Initialized metrics")
 		if err != nil {
 			gwClient.Fatalf(err, "unable to initialize metrics sources")
 			os.Exit(1)
