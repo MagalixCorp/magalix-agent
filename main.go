@@ -108,10 +108,6 @@ var version = "[manual build]"
 
 var startID string
 
-const (
-	entitiesSyncTimeout = time.Minute
-)
-
 func getVersion() string {
 	return strings.Join([]string{
 		"magalix agent " + version,
@@ -248,7 +244,7 @@ func initAgent(
 		make(chan struct{}, 0),
 		time.Minute*5,
 	)
-	t := entitiesSyncTimeout
+	t := entities.EntitiesSyncTimeout
 	err = observer.WaitForCacheSync(&t)
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")

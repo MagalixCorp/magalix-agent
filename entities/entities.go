@@ -33,7 +33,9 @@ const (
 	resyncPacketExpireCount = 2
 	resyncPacketPriority    = 0
 	resyncPacketRetries     = 5
-	entitiesSyncTimeout     = time.Minute
+
+	// EntitiesSyncTimeout specifies the cache sync timeout
+	EntitiesSyncTimeout = time.Minute
 )
 
 var (
@@ -120,7 +122,7 @@ func (ew *entitiesWatcher) Start() error {
 		ew.watchersByKind[gvrk.Kind] = w
 	}
 
-	t := entitiesSyncTimeout
+	t := EntitiesSyncTimeout
 	ew.observer.WaitForCacheSync(&t)
 
 	go ew.deltasWorker()
