@@ -33,6 +33,7 @@ const (
 	resyncPacketExpireCount = 2
 	resyncPacketPriority    = 0
 	resyncPacketRetries     = 5
+	entitiesSyncTimeout     = time.Second * 30
 )
 
 var (
@@ -120,7 +121,8 @@ func (ew *entitiesWatcher) Start() error {
 		ew.watchersByKind[gvrk.Kind] = w
 	}
 
-	err := ew.observer.WaitForCacheSync(nil)
+	t := entitiesSyncTimeout
+	err := ew.observer.WaitForCacheSync(&t)
 	if err != nil {
 		return err
 	}
