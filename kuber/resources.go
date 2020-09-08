@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	appsv1 "k8s.io/api/apps/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -100,6 +101,26 @@ var (
 		GroupVersionResource: storagev1.SchemeGroupVersion.WithResource("storageclasses"),
 		Kind:                 "StorageClass",
 	}
+	Roles = GroupVersionResourceKind{
+		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("roles"),
+		Kind:                 "Role",
+	}
+	RoleBindings = GroupVersionResourceKind{
+		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("rolebindings"),
+		Kind:                 "RoleBinding",
+	}
+	ClusterRoles = GroupVersionResourceKind{
+		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("clusterroles"),
+		Kind:                 "ClusterRole",
+	}
+	ClusterRoleBindings = GroupVersionResourceKind{
+		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("clusterrolebindings"),
+		Kind:                 "ClusterRoleBinding",
+	}
+	ServiceAccounts = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("serviceaccounts"),
+		Kind:                 "ServiceAccount",
+	}
 )
 
 // TODO: Refactor to a map[kind]GVRK
@@ -139,6 +160,16 @@ func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 		return &PersistentVolumeClaims, nil
 	case StorageClasses.Kind:
 		return &StorageClasses, nil
+	case Roles.Kind:
+		return &Roles, nil
+	case RoleBindings.Kind:
+		return &RoleBindings, nil
+	case ClusterRoles.Kind:
+		return &ClusterRoles, nil
+	case ClusterRoleBindings.Kind:
+		return &ClusterRoleBindings, nil
+	case ServiceAccounts.Kind:
+		return &ServiceAccounts, nil
 	default:
 		return nil, karma.Format(
 			nil,
