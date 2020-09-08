@@ -33,7 +33,7 @@ const (
 	resyncPacketExpireCount = 2
 	resyncPacketPriority    = 0
 	resyncPacketRetries     = 5
-	entitiesSyncTimeout     = time.Second * 30
+	entitiesSyncTimeout     = time.Minute
 )
 
 var (
@@ -109,7 +109,6 @@ func NewEntitiesWatcher(
 }
 
 func (ew *entitiesWatcher) Start() error {
-	ew.logger.Info("entities watcher start waitforcache resync")
 	// this method should be called only once
 
 	// TODO: if a packet expires or failed to be sent
@@ -123,10 +122,6 @@ func (ew *entitiesWatcher) Start() error {
 
 	t := entitiesSyncTimeout
 	ew.observer.WaitForCacheSync(&t)
-	// if err != nil {
-	// 	return err
-	// }
-	ew.logger.Info("entities watcher start waitforcache resync done")
 
 	go ew.deltasWorker()
 
@@ -153,7 +148,6 @@ func (ew *entitiesWatcher) WatcherFor(
 }
 
 func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
-	ew.logger.Info("entities watcher snapshotresync")
 	packet := proto.PacketEntitiesResyncRequest{
 		Snapshot:  map[string]proto.PacketEntitiesResyncItem{},
 		Timestamp: tickTime.UTC(),
@@ -219,7 +213,6 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 }
 
 func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
-	ew.logger.Info("entities watcher snapshot")
 	// send nodes and namespaces before all other deltas because they act as
 	// parents for other resources
 	nodesWatcher := ew.watchers[kuber.Nodes]
@@ -406,11 +399,9 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	if len(deltas) == 0 {
 		return
 	}
-	ew.logger.Info("Sending deltas")
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
-		ew.logger.Infof(nil, "sending %s", item.Data.GetKind())
 		items[i] = item
 		i++
 	}
@@ -426,6 +417,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 		Retries:     deltasPacketRetries,
 		Data:        packet,
 	})
+	ew.logger.Info("deltas sent")
 }
 
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {
