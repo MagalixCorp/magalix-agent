@@ -54,11 +54,11 @@ var (
 		kuber.PersistentVolumes,
 		kuber.PersistentVolumeClaims,
 		kuber.StorageClasses,
-		kuber.Roles,
-		kuber.RoleBindings,
-		kuber.ClusterRoles,
-		kuber.ClusterRoleBindings,
-		kuber.ServiceAccounts,
+		// kuber.Roles,
+		// kuber.RoleBindings,
+		// kuber.ClusterRoles,
+		// kuber.ClusterRoleBindings,
+		// kuber.ServiceAccounts,
 	}
 )
 
