@@ -404,9 +404,6 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
-		if item.Data.GetKind() == "Roles" {
-			ew.logger.Info("***********")
-		}
 		items[i] = item
 		i++
 	}
