@@ -406,10 +406,11 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	if len(deltas) == 0 {
 		return
 	}
+	ew.logger.Info("Sending deltas")
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
-
+		ew.logger.Infof(nil, "sending %s", item.Data.GetKind())
 		items[i] = item
 		i++
 	}
