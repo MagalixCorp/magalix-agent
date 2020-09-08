@@ -122,10 +122,10 @@ func (ew *entitiesWatcher) Start() error {
 	}
 
 	t := entitiesSyncTimeout
-	err := ew.observer.WaitForCacheSync(&t)
-	if err != nil {
-		return err
-	}
+	ew.observer.WaitForCacheSync(&t)
+	// if err != nil {
+	// 	return err
+	// }
 	ew.logger.Info("entities watcher start waitforcache resync done")
 
 	go ew.deltasWorker()
