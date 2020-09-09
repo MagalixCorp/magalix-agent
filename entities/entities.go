@@ -33,9 +33,6 @@ const (
 	resyncPacketExpireCount = 2
 	resyncPacketPriority    = 0
 	resyncPacketRetries     = 5
-
-	// EntitiesSyncTimeout specifies the cache sync timeout
-	EntitiesSyncTimeout = time.Minute
 )
 
 var (
@@ -66,7 +63,7 @@ var (
 )
 
 type EntitiesWatcher interface {
-	Start() error
+	Start()
 	WatcherFor(gvrk kuber.GroupVersionResourceKind) (kuber.Watcher, error)
 }
 
@@ -110,7 +107,7 @@ func NewEntitiesWatcher(
 	return ew
 }
 
-func (ew *entitiesWatcher) Start() error {
+func (ew *entitiesWatcher) Start() {
 	// this method should be called only once
 
 	// TODO: if a packet expires or failed to be sent
@@ -122,8 +119,11 @@ func (ew *entitiesWatcher) Start() error {
 		ew.watchersByKind[gvrk.Kind] = w
 	}
 
-	t := EntitiesSyncTimeout
-	ew.observer.WaitForCacheSync(&t)
+	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
+	err := ew.observer.WaitForCacheSync()
+	if err != nil {
+		ew.logger.Warning(err)
+	}
 
 	go ew.deltasWorker()
 
@@ -133,8 +133,6 @@ func (ew *entitiesWatcher) Start() error {
 	for _, watcher := range ew.watchers {
 		watcher.AddEventHandler(ew)
 	}
-
-	return nil
 }
 
 func (ew *entitiesWatcher) WatcherFor(

@@ -244,8 +244,8 @@ func initAgent(
 		make(chan struct{}, 0),
 		time.Minute*5,
 	)
-	t := entities.EntitiesSyncTimeout
-	err = observer.WaitForCacheSync(&t)
+
+	err = observer.WaitForCacheSync()
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")
 	}
@@ -256,17 +256,14 @@ func initAgent(
 		"--analysis-data-interval",
 	)
 
-	k8sMinorVersion, err := kube.GetMinorVersion()
+	k8sMinorVersion, err := kube.GetServerMinorVersion()
 	if err != nil {
 		logger.Warningf(err, "failed to discover server minor version")
 	}
 
 	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, k8sMinorVersion)
 
-	err = ew.Start()
-	if err != nil {
-		logger.Fatalf(err, "unable to start entities watcher")
-	}
+	ew.Start()
 
 	/*if scalarEnabled {
 		scalar2.InitScalars(logger, kube, observer, dryRun)

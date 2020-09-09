@@ -936,6 +936,23 @@ func (kube *Kube) GetServerVersion() (string, error) {
 	return version.String(), nil
 }
 
+func (kube *Kube) GetServerMinorVersion() (int, error) {
+	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
+	version, err := discoveryClient.ServerVersion()
+	if err != nil {
+		return 0, err
+	}
+	minor := version.Minor
+
+	// remove + if found contains
+	last1 := minor[len(minor)-1:]
+	if last1 == "+" {
+		minor = minor[0 : len(minor)-1]
+	}
+
+	return strconv.Atoi(minor)
+}
+
 func (kube *Kube) GetAgentPermissions() (string, error) {
 	kube.logger.Debugf(nil, "{kubernetes} getting agent permissions")
 	spec := authv1.SelfSubjectRulesReviewSpec{Namespace: "kube-system"}
@@ -951,21 +968,4 @@ func (kube *Kube) GetAgentPermissions() (string, error) {
 
 	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
 	return string(rules), nil
-}
-
-func (kube *Kube) GetMinorVersion() (int, error) {
-	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
-	version, err := discoveryClient.ServerVersion()
-	if err != nil {
-		return 0, err
-	}
-	minor := version.Minor
-
-	// remove + if found contains
-	last1 := minor[len(minor)-1:]
-	if last1 == "+" {
-		minor = minor[0 : len(minor)-1]
-	}
-
-	return strconv.Atoi(minor)
 }
