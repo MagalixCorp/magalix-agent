@@ -7,11 +7,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	appsv1 "k8s.io/api/apps/v1"
-	authorizationv1 "k8s.io/api/authorization/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	networkingv1 "k8s.io/api/networking/v1"
 	networkingv1beta1 "k8s.io/api/networking/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -102,19 +102,19 @@ var (
 		Kind:                 "StorageClass",
 	}
 	Roles = GroupVersionResourceKind{
-		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("roles"),
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("roles"),
 		Kind:                 "Role",
 	}
 	RoleBindings = GroupVersionResourceKind{
-		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("rolebindings"),
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("rolebindings"),
 		Kind:                 "RoleBinding",
 	}
 	ClusterRoles = GroupVersionResourceKind{
-		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("clusterroles"),
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("clusterroles"),
 		Kind:                 "ClusterRole",
 	}
 	ClusterRoleBindings = GroupVersionResourceKind{
-		GroupVersionResource: authorizationv1.SchemeGroupVersion.WithResource("clusterrolebindings"),
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("clusterrolebindings"),
 		Kind:                 "ClusterRoleBinding",
 	}
 	ServiceAccounts = GroupVersionResourceKind{
