@@ -52,7 +52,7 @@ jobs:
       - run:
           name: Should push?
           command: |
-            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" || "$CIRCLE_BRANCH" == "DEV-1817" ]]
+            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" ]]
             then
               echo 'export SHOULD_PUSH=true' >> $BASH_ENV
             else
@@ -100,10 +100,6 @@ jobs:
 
             if [[ "$CIRCLE_BRANCH" == "dev" ]]; then
               export VERSION=dev
-            fi
-
-            if [[ "$CIRCLE_BRANCH" == "DEV-1817" ]]; then
-              export VERSION=dev-1817
             fi
 
             make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
