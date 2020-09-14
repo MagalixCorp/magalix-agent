@@ -48,11 +48,22 @@ var (
 		kuber.ReplicaSets,
 		kuber.Jobs,
 		kuber.CronJobs,
+		kuber.Ingresses,
+		kuber.NetworkPolicies,
+		kuber.Services,
+		kuber.PersistentVolumes,
+		kuber.PersistentVolumeClaims,
+		kuber.StorageClasses,
+		kuber.Roles,
+		kuber.RoleBindings,
+		kuber.ClusterRoles,
+		kuber.ClusterRoleBindings,
+		kuber.ServiceAccounts,
 	}
 )
 
 type EntitiesWatcher interface {
-	Start() error
+	Start()
 	WatcherFor(gvrk kuber.GroupVersionResourceKind) (kuber.Watcher, error)
 }
 
@@ -72,7 +83,12 @@ type entitiesWatcher struct {
 func NewEntitiesWatcher(
 	observer_ *kuber.Observer,
 	client_ *client.Client,
+	version int,
 ) EntitiesWatcher {
+	if version >= 18 {
+		watchedResources = append(watchedResources, kuber.IngressClasses)
+	}
+
 	ew := &entitiesWatcher{
 		client: client_,
 
@@ -84,10 +100,11 @@ func NewEntitiesWatcher(
 	}
 	ew.snapshotIdentitiesTicker = utils.NewTicker("snapshot-resync", snapshotResyncTickerInterval, ew.snapshotResync)
 	ew.snapshotTicker = utils.NewTicker("snapshot", snapshotTickerInterval, ew.snapshot)
+
 	return ew
 }
 
-func (ew *entitiesWatcher) Start() error {
+func (ew *entitiesWatcher) Start() {
 	// this method should be called only once
 
 	// TODO: if a packet expires or failed to be sent
@@ -99,9 +116,10 @@ func (ew *entitiesWatcher) Start() error {
 		ew.watchersByKind[gvrk.Kind] = w
 	}
 
-	err := ew.observer.WaitForCacheSync(nil)
+	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
+	err := ew.observer.WaitForCacheSync()
 	if err != nil {
-		return err
+		ew.logger.Warning(err)
 	}
 
 	go ew.deltasWorker()
@@ -112,8 +130,6 @@ func (ew *entitiesWatcher) Start() error {
 	for _, watcher := range ew.watchers {
 		watcher.AddEventHandler(ew)
 	}
-
-	return nil
 }
 
 func (ew *entitiesWatcher) WatcherFor(
@@ -398,6 +414,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 		Retries:     deltasPacketRetries,
 		Data:        packet,
 	})
+	ew.logger.Info("deltas sent")
 }
 
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {

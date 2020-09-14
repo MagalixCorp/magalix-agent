@@ -87,13 +87,10 @@ func (observer *Observer) Stop() {
 	observer.stopCh <- struct{}{}
 }
 
-func (observer *Observer) WaitForCacheSync(timeout *time.Duration) error {
-	if timeout == nil {
-		observer.DynamicSharedInformerFactory.WaitForCacheSync(observer.stopCh)
-		return nil
-	}
+func (observer *Observer) WaitForCacheSync() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	finished := make(chan struct{})
 
 	go func() {
@@ -104,7 +101,6 @@ func (observer *Observer) WaitForCacheSync(timeout *time.Duration) error {
 	for {
 		select {
 		case <-finished:
-			cancel()
 			return nil
 		case <-ctx.Done():
 			return karma.Format(

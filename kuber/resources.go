@@ -9,6 +9,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
+	networkingv1beta1 "k8s.io/api/networking/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -69,6 +73,54 @@ var (
 		GroupVersionResource: batchv1beta1.SchemeGroupVersion.WithResource("cronjobs"),
 		Kind:                 "CronJob",
 	}
+	Ingresses = GroupVersionResourceKind{
+		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingresses"),
+		Kind:                 "Ingress",
+	}
+	IngressClasses = GroupVersionResourceKind{
+		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingressclasses"),
+		Kind:                 "IngressClass",
+	}
+	NetworkPolicies = GroupVersionResourceKind{
+		GroupVersionResource: networkingv1.SchemeGroupVersion.WithResource("networkpolicies"),
+		Kind:                 "NetworkPolicy",
+	}
+	Services = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("services"),
+		Kind:                 "Service",
+	}
+	PersistentVolumes = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("persistentvolumes"),
+		Kind:                 "PersistentVolume",
+	}
+	PersistentVolumeClaims = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
+		Kind:                 "PersistentVolumeClaim",
+	}
+	StorageClasses = GroupVersionResourceKind{
+		GroupVersionResource: storagev1.SchemeGroupVersion.WithResource("storageclasses"),
+		Kind:                 "StorageClass",
+	}
+	Roles = GroupVersionResourceKind{
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("roles"),
+		Kind:                 "Role",
+	}
+	RoleBindings = GroupVersionResourceKind{
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("rolebindings"),
+		Kind:                 "RoleBinding",
+	}
+	ClusterRoles = GroupVersionResourceKind{
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("clusterroles"),
+		Kind:                 "ClusterRole",
+	}
+	ClusterRoleBindings = GroupVersionResourceKind{
+		GroupVersionResource: rbacv1.SchemeGroupVersion.WithResource("clusterrolebindings"),
+		Kind:                 "ClusterRoleBinding",
+	}
+	ServiceAccounts = GroupVersionResourceKind{
+		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("serviceaccounts"),
+		Kind:                 "ServiceAccount",
+	}
 )
 
 // TODO: Refactor to a map[kind]GVRK
@@ -94,6 +146,30 @@ func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 		return &Jobs, nil
 	case CronJobs.Kind:
 		return &CronJobs, nil
+	case Ingresses.Kind:
+		return &Ingresses, nil
+	case IngressClasses.Kind:
+		return &IngressClasses, nil
+	case NetworkPolicies.Kind:
+		return &NetworkPolicies, nil
+	case Services.Kind:
+		return &Services, nil
+	case PersistentVolumes.Kind:
+		return &PersistentVolumes, nil
+	case PersistentVolumeClaims.Kind:
+		return &PersistentVolumeClaims, nil
+	case StorageClasses.Kind:
+		return &StorageClasses, nil
+	case Roles.Kind:
+		return &Roles, nil
+	case RoleBindings.Kind:
+		return &RoleBindings, nil
+	case ClusterRoles.Kind:
+		return &ClusterRoles, nil
+	case ClusterRoleBindings.Kind:
+		return &ClusterRoleBindings, nil
+	case ServiceAccounts.Kind:
+		return &ServiceAccounts, nil
 	default:
 		return nil, karma.Format(
 			nil,

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -20,6 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	appsV1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authorization/v1"
 	kbeta1 "k8s.io/api/batch/v1beta1"
 	kv1 "k8s.io/api/core/v1"
 	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -928,4 +930,38 @@ func (kube *Kube) GetServerVersion() (string, error) {
 	}
 
 	return version.String(), nil
+}
+
+func (kube *Kube) GetServerMinorVersion() (int, error) {
+	discoveryClient := discovery.NewDiscoveryClient(kube.Clientset.CoreV1().RESTClient())
+	version, err := discoveryClient.ServerVersion()
+	if err != nil {
+		return 0, err
+	}
+	minor := version.Minor
+
+	// remove + if found contains
+	last1 := minor[len(minor)-1:]
+	if last1 == "+" {
+		minor = minor[0 : len(minor)-1]
+	}
+
+	return strconv.Atoi(minor)
+}
+
+func (kube *Kube) GetAgentPermissions() (string, error) {
+	logger.Debug("getting agent permissions")
+	spec := authv1.SelfSubjectRulesReviewSpec{Namespace: "kube-system"}
+	status := authv1.SubjectRulesReviewStatus{Incomplete: false}
+	rulesSpec := authv1.SelfSubjectRulesReview{Spec: spec, Status: status}
+	subjectRules, err := kube.Clientset.AuthorizationV1().SelfSubjectRulesReviews().Create(context.Background(), &rulesSpec, kmeta.CreateOptions{})
+	if err != nil {
+		return "", karma.Format(
+			err,
+			"unable to get agent permissions",
+		)
+	}
+
+	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
+	return string(rules), nil
 }
