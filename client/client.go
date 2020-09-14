@@ -89,7 +89,7 @@ func newClient(
 	}
 
 	if gwUrl.Scheme == "ws" {
-		gwUrl.Scheme = "ws"
+		gwUrl.Scheme = "wss"
 	}
 
 	address = gwUrl.String()
