@@ -108,10 +108,6 @@ var version = "[manual build]"
 
 var startID string
 
-const (
-	entitiesSyncTimeout = time.Minute
-)
-
 func getVersion() string {
 	return strings.Join([]string{
 		"magalix agent " + version,
@@ -189,9 +185,15 @@ func main() {
 		logger.Warningf(err, "failed to discover server version")
 	}
 
+	agentPermissions, err := kube.GetAgentPermissions()
+	if err != nil {
+		agentPermissions = err.Error()
+		logger.Warningf(err, "Failed to get agent permissions")
+	}
+
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(
-		args, version, startID, accountID, clusterID, secret, k8sServerVersion, logger, connected,
+		args, version, startID, accountID, clusterID, secret, k8sServerVersion, agentPermissions, logger, connected,
 	)
 
 	defer gwClient.WaitExit()
@@ -242,8 +244,8 @@ func initAgent(
 		make(chan struct{}, 0),
 		time.Minute*5,
 	)
-	t := entitiesSyncTimeout
-	err = observer.WaitForCacheSync(&t)
+
+	err = observer.WaitForCacheSync()
 	if err != nil {
 		logger.Fatalf(err, "unable to start entities watcher")
 	}
@@ -254,11 +256,14 @@ func initAgent(
 		"--analysis-data-interval",
 	)
 
-	ew := entities.NewEntitiesWatcher(logger, observer, gwClient)
-	err = ew.Start()
+	k8sMinorVersion, err := kube.GetServerMinorVersion()
 	if err != nil {
-		logger.Fatalf(err, "unable to start entities watcher")
+		logger.Warningf(err, "failed to discover server minor version")
 	}
+
+	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, k8sMinorVersion)
+
+	ew.Start()
 
 	/*if scalarEnabled {
 		scalar2.InitScalars(logger, kube, observer, dryRun)

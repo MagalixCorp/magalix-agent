@@ -2,7 +2,6 @@ package proc
 
 import (
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/reconquest/karma-go"
 	"github.com/reconquest/stats-go"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -31,7 +29,7 @@ import (
 // Observer kubernetes objects observer
 type Observer struct {
 	clientset     *kubernetes.Clientset
-	clientV1 *v1client.AppsV1Client
+	clientV1      *v1client.AppsV1Client
 	batchV1Beta1  *beta1batchclient.BatchV1beta1Client
 	pods          chan Pod
 	replicas      chan ReplicaSpec
@@ -51,7 +49,7 @@ func NewObserver(
 ) *Observer {
 	observer := &Observer{
 		clientset:     clientset,
-		clientV1: 	   clientV1,
+		clientV1:      clientV1,
 		batchV1Beta1:  batchV1Beta1,
 		pods:          make(chan Pod),
 		replicas:      make(chan ReplicaSpec),
@@ -76,23 +74,6 @@ func (observer *Observer) GetPipeReplicas() chan ReplicaSpec {
 // SetSyncCallback setter for sync callback
 func (observer *Observer) SetSyncCallback(fn func()) {
 	observer.syncer.SetOnSync(fn)
-}
-
-func (observer *Observer) minorVersion() (int, error) {
-	discoveryClient := discovery.NewDiscoveryClient(observer.clientset.CoreV1().RESTClient())
-	version, err := discoveryClient.ServerVersion()
-	if err != nil {
-		return 0, err
-	}
-	minor := version.Minor
-
-	// remove + if found contains
-	last1 := minor[len(minor)-1:]
-	if last1 == "+" {
-		minor = minor[0 : len(minor)-1]
-	}
-
-	return strconv.Atoi(minor)
 }
 
 // Start start the observer
@@ -135,10 +116,8 @@ func (observer *Observer) Start() {
 		watchers.Add(1)
 		go observer.watchStatefulSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
 
-
 		watchers.Add(1)
 		go observer.watchDaemonSets(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
-
 
 		watchers.Add(1)
 		go observer.watchDeployments(watchers, observer.clientset.AppsV1().RESTClient(), stopCh)
@@ -338,7 +317,7 @@ func (observer *Observer) watchStatefulSets(
 				}
 			},
 		)
-	}else {
+	} else {
 		observer.watch(
 			watchers,
 			stopCh,

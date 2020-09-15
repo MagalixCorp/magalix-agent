@@ -148,4 +148,3 @@ workflows:
     jobs:
       - "build & push":
           context: org-global
-
