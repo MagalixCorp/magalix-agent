@@ -47,7 +47,7 @@ type Client struct {
 	authorized bool
 
 	shouldSendLogs  bool
-	logsQueue       chan proto.PacketLogItem
+	logBuffer       chan proto.PacketLogItem
 	logsQueueWorker *sync.WaitGroup
 
 	exit chan int
@@ -104,10 +104,10 @@ func newClient(
 			ProtoRead:      timeouts.protoRead,
 			ProtoReconnect: timeouts.protoReconnect,
 		}),
-		exit: make(chan int, 1),
-
-		blocked:  sync.Map{},
-		blockedM: sync.Mutex{},
+		exit:      make(chan int, 1),
+		logBuffer: make(chan proto.PacketLogItem, 50),
+		blocked:   sync.Map{},
+		blockedM:  sync.Mutex{},
 
 		timeouts: timeouts,
 	}

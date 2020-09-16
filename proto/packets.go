@@ -82,7 +82,7 @@ type PacketPong struct {
 
 type PacketLogItem struct {
 	Date time.Time `json:"date"`
-	Data []byte    `json:"data"`
+	Data string    `json:"data"`
 }
 
 type PacketRegisterEntityItem struct {

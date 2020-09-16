@@ -188,6 +188,7 @@ func main() {
 	defer gwClient.Recover()
 	logger.Infof("waiting for connection and authorization")
 	<-connected
+	go gwClient.Sync()
 
 	switch "info" {
 	case "info":

@@ -8,7 +8,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -68,7 +68,6 @@ type EntitiesWatcher interface {
 }
 
 type entitiesWatcher struct {
-	logger   *log.Logger
 	client   *client.Client
 	observer *kuber.Observer
 
@@ -119,7 +118,7 @@ func (ew *entitiesWatcher) Start() {
 	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
 	err := ew.observer.WaitForCacheSync()
 	if err != nil {
-		ew.logger.Warning(err)
+		logger.Warn(err)
 	}
 
 	go ew.deltasWorker()
@@ -158,9 +157,9 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 
 		ret, err := w.Lister().List(labels.Everything())
 		if err != nil {
-			ew.logger.Errorf(
-				err,
-				"unable to list %s", resource,
+			logger.Errorw(
+				"unable to list "+resource,
+				"error", err,
 			)
 		}
 		if len(ret) == 0 {
@@ -172,16 +171,16 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 			u := *ret[i].(*unstructured.Unstructured)
 			meta, found, err := unstructured.NestedFieldNoCopy(u.Object, "metadata")
 			if !found || err != nil {
-				ew.logger.Errorf(
-					err,
-					"unable to find metadata field of Unstructured: %s",
-					resource,
+				logger.Errorw(
+					"unable to find metadata field",
+					"error", err,
+					"resource", resource,
 				)
 			}
 
 			status, err := getObjectStatus(&u, gvrk)
 			if err != nil {
-				ew.logger.Errorf(err, "unable to get object status data")
+				logger.Errorw("unable to get object status data", "error", err)
 			}
 
 			items[i] = &unstructured.Unstructured{
@@ -239,9 +238,9 @@ func (ew *entitiesWatcher) publishGvrk(
 	resource := gvrk.Resource
 	ret, err := w.Lister().List(labels.Everything())
 	if err != nil {
-		ew.logger.Errorf(
-			err,
-			"unable to list %s", resource,
+		logger.Errorf(
+			"unable to list "+resource,
+			"error", err,
 		)
 	}
 	if len(ret) == 0 {
@@ -306,7 +305,7 @@ func (ew *entitiesWatcher) OnAdd(
 		},
 	)
 	if err != nil {
-		ew.logger.Warningf(err, "unable to handle OnAdd delta")
+		logger.Warnw("unable to handle OnAdd delta", "error", err)
 		return
 	}
 	ew.deltasQueue <- delta
@@ -326,7 +325,7 @@ func (ew *entitiesWatcher) OnUpdate(
 		},
 	)
 	if err != nil {
-		ew.logger.Warningf(err, "unable to handle onUpdate delta")
+		logger.Warnw("unable to handle onUpdate delta", "error", err)
 		return
 	}
 	ew.deltasQueue <- delta
@@ -347,7 +346,7 @@ func (ew *entitiesWatcher) OnDelete(
 		},
 	)
 	if err != nil {
-		ew.logger.Warningf(err, "unable to handle OnDelete delta")
+		logger.Warnw("unable to handle OnDelete delta", "error", err)
 		return
 	}
 	ew.deltasQueue <- delta
@@ -414,7 +413,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 		Retries:     deltasPacketRetries,
 		Data:        packet,
 	})
-	ew.logger.Info("deltas sent")
+	logger.Info("deltas sent")
 }
 
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {
