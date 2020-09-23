@@ -95,7 +95,7 @@ Options:
   --port <port>                              Port to start the server on for liveness and readiness probes
                                                [default: 80]
   --dry-run                                  Disable decision execution.
-  --no-send-logs                             DisabDEV-2184le sending logs to the backend.
+  --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file
