@@ -243,19 +243,6 @@ type PacketNodesStoreResponse struct{}
 
 type PacketLogs []PacketLogItem
 
-type PacketEventsStoreRequest []watcher.Event
-type PacketEventsStoreResponse struct{}
-
-type PacketEventLastValueRequest struct {
-	Entity    string `json:"entity"`
-	EntityID  string `json:"entity_id"`
-	EventKind string `json:"kind"`
-}
-
-type PacketEventLastValueResponse struct {
-	Value interface{} `json:"value"`
-}
-
 type PacketStatusStoreRequest struct {
 	Entity    string                         `json:"entity"`
 	EntityID  uuid.UUID                      `json:"entity_id"`
