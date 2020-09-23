@@ -105,7 +105,7 @@ func watchMetrics(
 
 	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
 		client.Info("Retrieving metrics")
-		metrics, raw, err := source.GetMetrics(entitiesProvider, tickTime)
+		metrics, err := source.GetMetrics(entitiesProvider, tickTime)
 
 		if err != nil {
 			client.Errorf(err, "unable to retrieve metrics from sink")
@@ -116,12 +116,6 @@ func watchMetrics(
 
 			for i := 0; i < len(metrics); i += limit {
 				metricsPipe <- metrics[i:min(i+limit, len(metrics))]
-			}
-
-			if raw != nil {
-				client.SendRaw(map[string]interface{}{
-					"metrics": raw,
-				})
 			}
 		}
 	})
@@ -199,7 +193,6 @@ func InitMetrics(
 	nodesProvider NodesProvider,
 	entitiesProvider EntitiesProvider,
 	kube *kuber.Kube,
-	optInAnalysisData bool,
 	args map[string]interface{},
 ) error {
 	var (
@@ -237,7 +230,6 @@ func InitMetrics(
 						maxRetries: utils.MustParseInt(args, "--kubelet-backoff-max-retries"),
 					},
 				},
-				optInAnalysisData,
 			)
 			if err != nil {
 				foundErrors = append(foundErrors, karma.Format(

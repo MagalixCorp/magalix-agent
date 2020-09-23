@@ -80,8 +80,6 @@ type Kubelet struct {
 	previousMutex *sync.Mutex
 	timeouts      kubeletTimeouts
 	kubeletClient *KubeletClient
-
-	optInAnalysisData bool
 }
 
 // NewKubelet returns new kubelet
@@ -90,7 +88,6 @@ func NewKubelet(
 	log *log.Logger,
 	resolution time.Duration,
 	timeouts kubeletTimeouts,
-	optInAnalysisData bool,
 ) (*Kubelet, error) {
 	kubelet := &Kubelet{
 		Logger: log,
@@ -101,8 +98,6 @@ func NewKubelet(
 		previous:      map[string]KubeletValue{},
 		previousMutex: &sync.Mutex{},
 		timeouts:      timeouts,
-
-		optInAnalysisData: optInAnalysisData,
 	}
 
 	return kubelet, nil
@@ -111,7 +106,7 @@ func NewKubelet(
 // GetMetrics gets metrics
 func (kubelet *Kubelet) GetMetrics(
 	entitiesProvider EntitiesProvider, tickTime time.Time,
-) (result []*Metric, rawResponses map[string]interface{}, err error) {
+) (result []*Metric, err error) {
 	defer func() {
 		if tears := recover(); tears != nil {
 			err = karma.Describe("trace", string(debug.Stack())).Reason(tears)
@@ -122,9 +117,6 @@ func (kubelet *Kubelet) GetMetrics(
 
 	metricsMutex := &sync.Mutex{}
 	metrics := make([]*Metric, 0)
-
-	rawMutex := &sync.Mutex{}
-	rawResponses = map[string]interface{}{}
 
 	getKey := func(
 		measurement string,
@@ -338,18 +330,12 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	addRawResponse := func(nodeName string, data interface{}) {
-		rawMutex.Lock()
-		defer rawMutex.Unlock()
-		rawResponses[nodeName] = data
-	}
-
 	kubelet.Info("{kubelet} Fetching nodes")
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes, err := entitiesProvider.GetNodes()
 	if err != nil {
-		return nil, nil, karma.Format(err, "{kubelet} Can't get nodes")
+		return nil, karma.Format(err, "{kubelet} Can't get nodes")
 	}
 
 	addMetricValue(
@@ -426,7 +412,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 	pods, err := entitiesProvider.GetPods()
 	if err != nil {
-		return nil, nil, karma.Format(err, "{kubelet} unable to get pods")
+		return nil, karma.Format(err, "{kubelet} unable to get pods")
 	}
 
 	kubelet.Infof(nil, "{kubelet} Fetched %d pods", len(pods))
@@ -517,20 +503,6 @@ func (kubelet *Kubelet) GetMetrics(
 
 			if err != nil {
 				return err
-			}
-
-			if kubelet.optInAnalysisData {
-				var summaryInterface interface{}
-				err = json.Unmarshal(summaryBytes, &summaryInterface)
-				if err != nil {
-					kubelet.Errorf(
-						err,
-						"{kubelet} unable to unmarshal summary response to its raw interface",
-					)
-				}
-				if summaryInterface != nil {
-					addRawResponse(node.Name, &summaryInterface)
-				}
 			}
 
 			err = json.Unmarshal(summaryBytes, &summary)
@@ -900,11 +872,7 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	if !kubelet.optInAnalysisData {
-		rawResponses = nil
-	}
-
-	return result, rawResponses, nil
+	return result, nil
 }
 
 func (kubelet *Kubelet) collectGarbage() {

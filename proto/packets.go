@@ -243,16 +243,6 @@ type PacketNodesStoreResponse struct{}
 
 type PacketLogs []PacketLogItem
 
-type PacketStatusStoreRequest struct {
-	Entity    string                         `json:"entity"`
-	EntityID  uuid.UUID                      `json:"entity_id"`
-	Status    watcher.Status                 `json:"status"`
-	Source    *watcher.ContainerStatusSource `json:"source"`
-	Timestamp time.Time                      `json:"timestamp"`
-}
-
-type PacketStatusStoreResponse struct{}
-
 type RequestLimit struct {
 	CPU    *int64 `json:"cpu,omitempty"`
 	Memory *int64 `json:"memory,omitempty"`
@@ -303,14 +293,6 @@ type PacketDecisionPullResponse struct {
 type PacketRestart struct {
 	Status int `json:"status"`
 }
-
-type PacketRaw map[string]interface{}
-type PacketRawRequest struct {
-	PacketRaw
-
-	Timestamp time.Time
-}
-type PacketRawResponse struct{}
 
 type EntityDeltaKind string
 

@@ -85,17 +85,17 @@ Options:
   --timeout-proto-backoff <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
-  --opt-in-analysis-data                     Send anonymous data for analysis.
-  --analysis-data-interval <duration>        Analysis data send interval.
+  --opt-in-analysis-data                     Send anonymous data for analysis.(Deprecated)
+  --analysis-data-interval <duration>        Analysis data send interval.(Deprecated)
                                               [default: 5m]
-  --packets-v2                               Enable v2 packets (without ids). This is deprecated and kept for backward compatability.
+  --packets-v2                               Enable v2 packets (without ids). (Deprecated)
   --disable-metrics                          Disable metrics collecting and sending.
   --disable-events                           Disable events collecting and sending(Deprecated).
   --disable-scalar                           Disable in-agent scalar.
   --port <port>                              Port to start the server on for liveness and readiness probes
                                                [default: 80]
   --dry-run                                  Disable decision execution.
-  --no-send-logs                             Disable sending logs to the backend.
+  --no-send-logs                             DisabDEV-2184le sending logs to the backend.
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file
@@ -249,12 +249,6 @@ func initAgent(
 		logger.Fatalf(err, "unable to start entities watcher")
 	}
 
-	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
-	analysisDataInterval := utils.MustParseDuration(
-		args,
-		"--analysis-data-interval",
-	)
-
 	k8sMinorVersion, err := kube.GetServerMinorVersion()
 	if err != nil {
 		logger.Warningf(err, "failed to discover server minor version")
@@ -274,8 +268,6 @@ func initAgent(
 		skipNamespaces,
 		accountID,
 		clusterID,
-		optInAnalysisData,
-		analysisDataInterval,
 	)
 
 	e := executor.InitExecutor(
@@ -308,7 +300,6 @@ func initAgent(
 			nodesProvider,
 			entitiesProvider,
 			kube,
-			optInAnalysisData,
 			args,
 		)
 		if err != nil {
