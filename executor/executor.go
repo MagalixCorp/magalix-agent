@@ -8,21 +8,17 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
-	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	kv1 "k8s.io/api/core/v1"
 )
 
 const (
 	decisionsBufferLength  = 1000
 	decisionsBufferTimeout = 10 * time.Second
-
-	decisionsPullBufferTimeout     = 2 * time.Minute
-	decisionsPullBackoffSleep      = 1 * time.Second
-	decisionsPullBackoffMaxRetries = 10
 
 	decisionsFeedbackExpiryTime     = 30 * time.Minute
 	decisionsFeedbackExpiryCount    = 0
@@ -32,16 +28,21 @@ const (
 	podStatusSleep                  = 15 * time.Second
 )
 
+type EntitiesFinder interface {
+	FindController(namespaceName string, controllerKind string, controllerName string) (*unstructured.Unstructured, error)
+	FindContainer(namespaceName string, controllerKind string, controllerName string, containerName string) (*kv1.Container, error)
+}
+
 // Executor decision executor
 type Executor struct {
-	client         *client.Client
-	logger         *log.Logger
-	kube           *kuber.Kube
-	scanner        *scanner.Scanner
-	dryRun         bool
-	workersCount   int
-	decisionsChan  chan *proto.PacketDecision
-	inProgressJobs map[string]bool
+	client          *client.Client
+	logger          *log.Logger
+	kube            *kuber.Kube
+	entitiesFinder  EntitiesFinder
+	dryRun          bool
+	workersCount    int
+	automationsChan chan *proto.PacketAutomation
+	inProgressJobs  map[string]bool
 }
 
 type Replica struct {
@@ -54,11 +55,11 @@ type Replica struct {
 func InitExecutor(
 	client *client.Client,
 	kube *kuber.Kube,
-	scanner *scanner.Scanner,
+	entitiesFinder EntitiesFinder,
 	workersCount int,
 	dryRun bool,
 ) *Executor {
-	e := NewExecutor(client, kube, scanner, workersCount, dryRun)
+	e := NewExecutor(client, kube, entitiesFinder, workersCount, dryRun)
 	e.startWorkers()
 	return e
 }
@@ -67,20 +68,20 @@ func InitExecutor(
 func NewExecutor(
 	client *client.Client,
 	kube *kuber.Kube,
-	scanner *scanner.Scanner,
+	entitiesFinder EntitiesFinder,
 	workersCount int,
 	dryRun bool,
 ) *Executor {
 	executor := &Executor{
-		client:  client,
-		logger:  client.Logger,
-		kube:    kube,
-		scanner: scanner,
-		dryRun:  dryRun,
+		client:         client,
+		logger:         client.Logger,
+		kube:           kube,
+		entitiesFinder: entitiesFinder,
+		dryRun:         dryRun,
 
-		workersCount:   workersCount,
-		inProgressJobs: map[string]bool{},
-		decisionsChan:  make(chan *proto.PacketDecision, decisionsBufferLength),
+		workersCount:    workersCount,
+		inProgressJobs:  map[string]bool{},
+		automationsChan: make(chan *proto.PacketAutomation, decisionsBufferLength),
 	}
 
 	return executor
@@ -107,70 +108,59 @@ func (executor *Executor) startWorkers() {
 }
 
 func (executor *Executor) handleExecutionError(
-	ctx *karma.Context, decision *proto.PacketDecision, err error, containerId *uuid.UUID,
-) *proto.PacketDecisionFeedbackRequest {
+	ctx *karma.Context, automation *proto.PacketAutomation, err error,
+) *proto.PacketAutomationFeedbackRequest {
 	executor.logger.Errorf(ctx.Reason(err), "unable to execute decision")
 
-	return &proto.PacketDecisionFeedbackRequest{
-		ID:          decision.ID,
-		Status:      proto.DecisionExecutionStatusFailed,
-		Message:     err.Error(),
-		ServiceId:   decision.ServiceId,
-		ContainerId: decision.ContainerId,
-	}
+	return makeAutomationFailedResponse(automation, err.Error())
 }
 func (executor *Executor) handleExecutionSkipping(
-	ctx *karma.Context, decision *proto.PacketDecision, msg string,
-) *proto.PacketDecisionFeedbackRequest {
+	ctx *karma.Context, aut *proto.PacketAutomation, msg string,
+) *proto.PacketAutomationFeedbackRequest {
 
 	executor.logger.Infof(ctx, "skipping execution: %s", msg)
 
-	return &proto.PacketDecisionFeedbackRequest{
-		ID:        decision.ID,
-		ServiceId: decision.ServiceId,
-		Status:    proto.DecisionExecutionStatusFailed,
-		Message:   msg,
-	}
+	return makeAutomationFailedResponse(aut, msg)
 }
 
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 
-	var decision proto.PacketDecision
-	if err = proto.DecodeSnappy(in, &decision); err != nil {
+	var automation proto.PacketAutomation
+	if err = proto.DecodeSnappy(in, &automation); err != nil {
 		return
 	}
-	_, exist := executor.inProgressJobs[decision.ID.String()]
+	_, exist := executor.inProgressJobs[automation.ID.String()]
 	if !exist {
-		executor.inProgressJobs[decision.ID.String()] = true
-		convertDecisionMemoryFromKiloByteToMegabyte(&decision)
+		executor.inProgressJobs[automation.ID.String()] = true
+		convertDecisionMemoryFromKiloByteToMegabyte(&automation)
 
-		err = executor.submitDecision(&decision, decisionsBufferTimeout)
+		err = executor.submitAutomation(&automation, decisionsBufferTimeout)
 		if err != nil {
 			errMessage := err.Error()
-			return proto.EncodeSnappy(proto.PacketDecisionResponse{
+			return proto.EncodeSnappy(proto.PacketAutomationResponse{
 				Error: &errMessage,
 			})
 		}
 	}
 
-	return proto.EncodeSnappy(proto.PacketDecisionResponse{})
+	return proto.EncodeSnappy(proto.PacketAutomationResponse{})
 }
 
-func convertDecisionMemoryFromKiloByteToMegabyte(decision *proto.PacketDecision) {
-	if decision.ContainerResources.Requests != nil && decision.ContainerResources.Requests.Memory != nil {
-		*decision.ContainerResources.Requests.Memory = *decision.ContainerResources.Requests.Memory / 1024
+func convertDecisionMemoryFromKiloByteToMegabyte(automation *proto.PacketAutomation) {
+	if automation.ContainerResources.Requests != nil && automation.ContainerResources.Requests.Memory != nil {
+		*automation.ContainerResources.Requests.Memory = *automation.ContainerResources.Requests.Memory / 1024
 	}
-	if decision.ContainerResources.Limits != nil && decision.ContainerResources.Limits.Memory != nil {
-		*decision.ContainerResources.Limits.Memory = *decision.ContainerResources.Limits.Memory / 1024
+	if automation.ContainerResources.Limits != nil && automation.ContainerResources.Limits.Memory != nil {
+		*automation.ContainerResources.Limits.Memory = *automation.ContainerResources.Limits.Memory / 1024
 	}
 }
 
-func (executor *Executor) submitDecision(
-	decision *proto.PacketDecision,
+func (executor *Executor) submitAutomation(
+	automation *proto.PacketAutomation,
 	timeout time.Duration,
 ) error {
 	select {
-	case executor.decisionsChan <- decision:
+	case executor.automationsChan <- automation:
 	case <-time.After(timeout):
 		return fmt.Errorf(
 			"timeout (after %s) waiting to push decision into buffer chan",
@@ -181,9 +171,9 @@ func (executor *Executor) submitDecision(
 }
 
 func (executor *Executor) executorWorker() {
-	for decision := range executor.decisionsChan {
+	for automation := range executor.automationsChan {
 		// TODO: execute decisions in batches
-		response, err := executor.execute(decision)
+		response, err := executor.execute(automation)
 		if err != nil {
 			executor.logger.Errorf(
 				err,
@@ -191,11 +181,11 @@ func (executor *Executor) executorWorker() {
 			)
 		}
 
-		delete(executor.inProgressJobs, decision.ID.String())
+		delete(executor.inProgressJobs, automation.ID.String())
 
 		executor.client.Pipe(
 			client.Package{
-				Kind:        proto.PacketKindDecisionFeedback,
+				Kind:        proto.PacketKindAutomationFeedback,
 				ExpiryTime:  utils.After(decisionsFeedbackExpiryTime),
 				ExpiryCount: decisionsFeedbackExpiryCount,
 				Priority:    decisionsFeedbackExpiryPriority,
@@ -207,42 +197,32 @@ func (executor *Executor) executorWorker() {
 }
 
 func (executor *Executor) execute(
-	decision *proto.PacketDecision,
-) (*proto.PacketDecisionFeedbackRequest, error) {
+	automation *proto.PacketAutomation,
+) (*proto.PacketAutomationFeedbackRequest, error) {
 
 	ctx := karma.
-		Describe("decision-id", decision.ID).
-		Describe("service-id", decision.ServiceId).
-		Describe("container-id", decision.ContainerId)
+		Describe("decision-id", automation.ID).
+		Describe("namespace-name", automation.NamespaceName).
+		Describe("controller-name", automation.ControllerName).
+		Describe("controller-kind", automation.ControllerKind).
+		Describe("container-name", automation.ContainerName)
 
-	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
+	c, err := executor.entitiesFinder.FindContainer(
+		automation.NamespaceName,
+		automation.ControllerKind,
+		automation.ControllerName,
+		automation.ContainerName,
+	)
 	if err != nil {
-		return &proto.PacketDecisionFeedbackRequest{
-				ID:        decision.ID,
-				ServiceId: decision.ServiceId,
-				Status:    proto.DecisionExecutionStatusFailed,
-				Message:   "unable to get service details",
-			}, karma.Format(
-				err,
-				"unable to get service details",
-			)
+		return makeAutomationFailedResponse(automation, fmt.Sprintf("unable to get container details %s", err.Error())),
+			karma.Format(err, "unable to get container details")
 	}
 
-	ctx = ctx.Describe("namespace", namespace).
-		Describe("service-name", name).
-		Describe("kind", kind)
-
-	container, err := executor.getContainerDetails(decision.ContainerId)
+	var container kv1.Container
+	err = utils.Transcode(c, container)
 	if err != nil {
-		return &proto.PacketDecisionFeedbackRequest{
-				ID:        decision.ID,
-				ServiceId: decision.ServiceId,
-				Status:    proto.DecisionExecutionStatusFailed,
-				Message:   "unable to get container details",
-			}, karma.Format(
-				err,
-				"unable to get container details",
-			)
+		return makeAutomationFailedResponse(automation, fmt.Sprintf("unable to get container details %s", err.Error())),
+			karma.Format(err, "unable to get container details")
 	}
 
 	totalResources := kuber.TotalResources{
@@ -254,20 +234,20 @@ func (executor *Executor) execute(
 			},
 		},
 	}
-	if decision.ContainerResources.Requests != nil {
-		if decision.ContainerResources.Requests.CPU != nil {
-			totalResources.Containers[0].Requests.CPU = decision.ContainerResources.Requests.CPU
+	if automation.ContainerResources.Requests != nil {
+		if automation.ContainerResources.Requests.CPU != nil {
+			totalResources.Containers[0].Requests.CPU = automation.ContainerResources.Requests.CPU
 		}
-		if decision.ContainerResources.Requests.Memory != nil {
-			totalResources.Containers[0].Requests.Memory = decision.ContainerResources.Requests.Memory
+		if automation.ContainerResources.Requests.Memory != nil {
+			totalResources.Containers[0].Requests.Memory = automation.ContainerResources.Requests.Memory
 		}
 	}
-	if decision.ContainerResources.Limits != nil {
-		if decision.ContainerResources.Limits.CPU != nil {
-			totalResources.Containers[0].Limits.CPU = decision.ContainerResources.Limits.CPU
+	if automation.ContainerResources.Limits != nil {
+		if automation.ContainerResources.Limits.CPU != nil {
+			totalResources.Containers[0].Limits.CPU = automation.ContainerResources.Limits.CPU
 		}
-		if decision.ContainerResources.Limits.Memory != nil {
-			totalResources.Containers[0].Limits.Memory = decision.ContainerResources.Limits.Memory
+		if automation.ContainerResources.Limits.Memory != nil {
+			totalResources.Containers[0].Limits.Memory = automation.ContainerResources.Limits.Memory
 		}
 	}
 
@@ -284,17 +264,22 @@ func (executor *Executor) execute(
 	)
 
 	if executor.dryRun {
-		response := executor.handleExecutionSkipping(ctx, decision, "dry run enabled")
+		response := executor.handleExecutionSkipping(ctx, automation, "dry run enabled")
 		return response, nil
 	} else {
-		skipped, err := executor.kube.SetResources(kind, name, namespace, totalResources)
+		skipped, err := executor.kube.SetResources(
+			automation.ControllerKind,
+			automation.ControllerName,
+			automation.NamespaceName,
+			totalResources,
+		)
 		if err != nil {
 			// TODO: do we need to retry execution before fail?
-			var response *proto.PacketDecisionFeedbackRequest
+			var response *proto.PacketAutomationFeedbackRequest
 			if skipped {
-				response = executor.handleExecutionSkipping(ctx, decision, err.Error())
+				response = executor.handleExecutionSkipping(ctx, automation, err.Error())
 			} else {
-				response = executor.handleExecutionError(ctx, decision, err, nil)
+				response = executor.handleExecutionError(ctx, automation, err)
 			}
 			return response, nil
 		}
@@ -305,13 +290,18 @@ func (executor *Executor) execute(
 		statusMap[kv1.PodFailed] = "pods failed to restart"
 		statusMap[kv1.PodUnknown] = "pods status is unknown"
 
-		result, msg, targetPodCount, runningPods := executor.podsStatusHandler(name, namespace, kind, statusMap)
+		result, msg, targetPodCount, runningPods := executor.podsStatusHandler(
+			automation.ControllerName,
+			automation.NamespaceName,
+			automation.ControllerKind,
+			statusMap,
+		)
 
 		//rollback in case of failed to restart all pods
 		if runningPods < targetPodCount {
 
 			msg = statusMap[kv1.PodFailed]
-			result = proto.DecisionExecutionStatusFailed
+			result = proto.AutomationFailed
 			memoryLimit := container.Resources.Limits.Memory().Value()
 			memoryRequest := container.Resources.Requests.Memory().Value()
 			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
@@ -319,7 +309,7 @@ func (executor *Executor) execute(
 
 			// handle if requests and limits is null in rollback DEV-2056"
 			if container.Resources.Limits != nil {
-				if container.Resources.Limits.Cpu() != nil && cpuLimit != 0{
+				if container.Resources.Limits.Cpu() != nil && cpuLimit != 0 {
 					*totalResources.Containers[0].Limits.CPU = cpuLimit
 				}
 				if container.Resources.Limits.Memory() != nil && memoryLimit != 0 {
@@ -331,13 +321,18 @@ func (executor *Executor) execute(
 				if container.Resources.Requests.Cpu() != nil && cpuRequest != 0 {
 					*totalResources.Containers[0].Requests.CPU = cpuRequest
 				}
-				if container.Resources.Requests.Memory() != nil &&  memoryRequest != 0 {
+				if container.Resources.Requests.Memory() != nil && memoryRequest != 0 {
 					*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
 				}
 			}
 
 			// execute the decision with old values to rollback
-			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
+			_, err := executor.kube.SetResources(
+				automation.ControllerKind,
+				automation.ControllerName,
+				automation.NamespaceName,
+				totalResources,
+			)
 
 			if err != nil {
 				executor.logger.Warning(ctx, "can't rollback decision")
@@ -346,31 +341,27 @@ func (executor *Executor) execute(
 
 		executor.logger.Infof(ctx, msg)
 
-		return &proto.PacketDecisionFeedbackRequest{
-			ID:          decision.ID,
-			ServiceId:   decision.ServiceId,
-			ContainerId: decision.ContainerId,
-			Status:      result,
-			Message:     msg,
+		return &proto.PacketAutomationFeedbackRequest{
+			ID:             automation.ID,
+			NamespaceName:  automation.NamespaceName,
+			ControllerName: automation.ControllerName,
+			ControllerKind: automation.ControllerKind,
+			ContainerName:  automation.ContainerName,
+			Status:         result,
+			Message:        msg,
 		}, nil
 	}
 
 }
 
-func (executor *Executor) getServiceDetails(serviceID uuid.UUID) (namespace, name, kind string, err error) {
-	namespace, name, kind, ok := executor.scanner.FindServiceByID(executor.scanner.GetApplications(), serviceID)
-	if !ok {
-		err = karma.Describe("id", serviceID).
-			Reason("service not found")
+func makeAutomationFailedResponse(automation *proto.PacketAutomation, msg string) *proto.PacketAutomationFeedbackRequest {
+	return &proto.PacketAutomationFeedbackRequest{
+		ID:             automation.ID,
+		NamespaceName:  automation.NamespaceName,
+		ControllerKind: automation.ControllerName,
+		ControllerName: automation.ControllerName,
+		ContainerName:  automation.ContainerName,
+		Status:         proto.AutomationFailed,
+		Message:        msg,
 	}
-	return
-}
-
-func (executor *Executor) getContainerDetails(containerID uuid.UUID) (container *scanner.Container, err error) {
-	container, ok := executor.scanner.FindContainerByID(executor.scanner.GetApplications(), containerID)
-	if !ok {
-		err = karma.Describe("id", containerID).
-			Reason("container not found")
-	}
-	return
 }

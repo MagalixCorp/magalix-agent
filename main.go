@@ -16,7 +16,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/log-go"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -226,13 +225,7 @@ func initAgent(
 		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
 		dryRun          = args["--dry-run"].(bool)
-
-		skipNamespaces []string
 	)
-
-	if namespaces, ok := args["--skip-namespace"].([]string); ok {
-		skipNamespaces = namespaces
-	}
 
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
@@ -262,23 +255,15 @@ func initAgent(
 		scalar2.InitScalars(logger, kube, observer, dryRun)
 	}*/
 
-	entityScanner := scanner.InitScanner(
-		gwClient,
-		scanner.NewKuberFromObserver(ew),
-		skipNamespaces,
-		accountID,
-		clusterID,
-	)
-
 	e := executor.InitExecutor(
 		gwClient,
 		kube,
-		entityScanner,
+		observer,
 		executorWorkers,
 		dryRun,
 	)
 
-	gwClient.AddListener(proto.PacketKindDecision, e.Listener)
+	gwClient.AddListener(proto.PacketKindAutomation, e.Listener)
 	gwClient.AddListener(proto.PacketKindRestart, func(in []byte) (out []byte, err error) {
 		var restart proto.PacketRestart
 		if err = proto.DecodeSnappy(in, &restart); err != nil {
@@ -289,16 +274,10 @@ func initAgent(
 	})
 
 	if metricsEnabled {
-		var nodesProvider metrics.NodesProvider
-		var entitiesProvider metrics.EntitiesProvider
-
-		nodesProvider = observer
-		entitiesProvider = observer
-
 		err := metrics.InitMetrics(
 			gwClient,
-			nodesProvider,
-			entitiesProvider,
+			observer,
+			observer,
 			kube,
 			args,
 		)

@@ -6,10 +6,7 @@ const (
 	PacketKindHello PacketKind = "hello"
 
 	PacketKindAuthorizationRequest  PacketKind = "authorization/request"
-	PacketKindAuthorizationQuestion PacketKind = "authorization/question"
 	PacketKindAuthorizationAnswer   PacketKind = "authorization/answer"
-	PacketKindAuthorizationFailure  PacketKind = "authorization/failure"
-	PacketKindAuthorizationSuccess  PacketKind = "authorization/success"
 
 	PacketKindLogs PacketKind = "logs"
 
@@ -20,9 +17,8 @@ const (
 
 	PacketKindBye PacketKind = "bye"
 
-	PacketKindDecision         PacketKind = "decision"
-	PacketKindDecisionFeedback PacketKind = "decision/feedback"
-	PacketKindDecisionPull     PacketKind = "decision/pull"
+	PacketKindAutomation         PacketKind = "automation"
+	PacketKindAutomationFeedback PacketKind = "automation/feedback"
 
 	PacketKindRestart PacketKind = "restart"
 
@@ -31,7 +27,6 @@ const (
 
 const (
 	PacketKindPing PacketKind = "ping"
-	PacketKindPong PacketKind = "pong"
 )
 
 func (kind PacketKind) String() string {

@@ -8,14 +8,14 @@ import (
 	"time"
 )
 
-func (executor *Executor) podsStatusHandler(entity_name string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result proto.DecisionExecutionStatus, msg string, targetPods int32, runningPods int32){
+func (executor *Executor) podsStatusHandler(entity_name string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result proto.AutomationStatus, msg string, targetPods int32, runningPods int32){
 
 	// short pooling to trigger pod status with max 15 minutes
 	msg = "pods restarting exceeded timout (15 min)"
 	start := time.Now()
 
 	entitiName := ""
-	result = proto.DecisionExecutionStatusFailed
+	result = proto.AutomationFailed
 	targetPods = 0
 	runningPods = 0
 	flag := false
@@ -70,7 +70,7 @@ func (executor *Executor) podsStatusHandler(entity_name string, namespace string
 
 	if flag {
 		msg = "failed to trigger pod status"
-		result = proto.DecisionExecutionStatusFailed
+		result = proto.AutomationFailed
 
 	}else {
 
@@ -84,7 +84,7 @@ func (executor *Executor) podsStatusHandler(entity_name string, namespace string
 
 			if err != nil {
 				msg = "failed to trigger pod status"
-				result = proto.DecisionExecutionStatusFailed
+				result = proto.AutomationFailed
 				break
 			}
 			// TODO update the execution flow to check pods status across controllers
@@ -103,7 +103,7 @@ func (executor *Executor) podsStatusHandler(entity_name string, namespace string
 
 			if runningPods == targetPods {
 				msg = statusMap[status]
-				result = proto.DecisionExecutionStatusSucceed
+				result = proto.AutomationExecuted
 				break
 			}
 		}

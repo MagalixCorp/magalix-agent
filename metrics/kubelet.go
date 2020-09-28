@@ -420,7 +420,7 @@ func (kubelet *Kubelet) GetMetrics(
 	processedContainersCount := 0
 
 	for _, pod := range pods {
-		controllerName, controllerKind, err := entitiesProvider.FindController(pod.Namespace, pod.Name)
+		controllerName, controllerKind, err := entitiesProvider.FindPodController(pod.Namespace, pod.Name)
 		if err != nil {
 			kubelet.Errorf(
 				karma.Describe("pod_name", pod.Name).
@@ -565,7 +565,7 @@ func (kubelet *Kubelet) GetMetrics(
 			throttleMetrics := make(map[string]*Metric)
 
 			for _, pod := range summary.Pods {
-				controllerName, controllerKind, err := entitiesProvider.FindController(
+				controllerName, controllerKind, err := entitiesProvider.FindPodController(
 					pod.PodRef.Namespace, pod.PodRef.Name,
 				)
 				namespaceName := pod.PodRef.Namespace
@@ -763,7 +763,7 @@ func (kubelet *Kubelet) GetMetrics(
 							Describe("pod_name", podName).
 							Describe("container_name", containerName)
 					if ok {
-						controllerName, controllerKind, err := entitiesProvider.FindController(namespaceName, podName)
+						controllerName, controllerKind, err := entitiesProvider.FindPodController(namespaceName, podName)
 						if err != nil {
 							kubelet.Errorf(
 								ctx.Reason(err),

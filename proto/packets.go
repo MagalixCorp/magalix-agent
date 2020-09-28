@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	satori "github.com/satori/go.uuid"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -87,27 +86,6 @@ type PacketLogItem struct {
 	Data  interface{} `json:"data"`
 }
 
-type PacketRegisterEntityItem struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
-	Kind string    `json:"kind,omitempty"`
-
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-type PacketRegisterApplicationItem struct {
-	PacketRegisterEntityItem
-
-	LimitRanges []corev1.LimitRange         `json:"limit_ranges"`
-	Services    []PacketRegisterServiceItem `json:"services"`
-}
-
-type PacketRegisterServiceItem struct {
-	PacketRegisterEntityItem
-	ReplicasStatus ReplicasStatus                `json:"replicas_status,omitempty"`
-	Containers     []PacketRegisterContainerItem `json:"containers"`
-}
-
 type ReplicasStatus struct {
 	Desired   *int32 `json:"desired,omitempty"`
 	Current   *int32 `json:"current,omitempty"`
@@ -115,35 +93,12 @@ type ReplicasStatus struct {
 	Available *int32 `json:"available,omitempty"`
 }
 
-type PacketRegisterContainerItem struct {
-	PacketRegisterEntityItem
-
-	Image     string          `json:"image"`
-	Resources json.RawMessage `json:"resources"`
-
-	LivenessProbe  json.RawMessage `json:"liveness_probe"`
-	ReadinessProbe json.RawMessage `json:"readiness_probe"`
-}
-
-type ContainerResourceRequirements struct {
-	corev1.ResourceRequirements
-	SpecResourceRequirements corev1.ResourceRequirements `json:"spec_resources_requirements,omitempty"`
-
-	LimitsKinds   ResourcesRequirementsKind `json:"limits_kinds,omitempty"`
-	RequestsKinds ResourcesRequirementsKind `json:"requests_kinds,omitempty"`
-}
-
-type ResourcesRequirementsKind = map[corev1.ResourceName]string
-
 const (
 	ResourceRequirementKindSet                = "set"
 	ResourceRequirementKindDefaultsLimitRange = "defaults-limit-range"
 	ResourceRequirementKindDefaultFromLimits  = "default-from-limits"
 )
 
-type PacketApplicationsStoreRequest []PacketRegisterApplicationItem
-
-type PacketApplicationsStoreResponse struct{}
 
 type PacketMetricsStoreV2Request []MetricStoreV2Request
 
@@ -163,84 +118,6 @@ type MetricStoreV2Request struct {
 	AdditionalTags map[string]interface{} `json:"additional_tags"`
 }
 
-type PacketMetricValueItem struct {
-	Node        *uuid.UUID
-	Application *uuid.UUID
-	Service     *uuid.UUID
-	Container   *uuid.UUID
-
-	Tags  map[string]string
-	Value float64
-}
-
-type PacketMetricFamilyItem struct {
-	Name string
-	Help string
-	Type string
-	Tags []string
-
-	Values []*PacketMetricValueItem
-}
-type PacketMetricsPromStoreRequest struct {
-	Timestamp time.Time
-
-	Metrics []*PacketMetricFamilyItem
-}
-
-type PacketMetricsPromStoreResponse struct {
-}
-
-type PacketRegisterNodeCapacityItem struct {
-	CPU              int `json:"cpu"`
-	Memory           int `json:"memory"`
-	StorageEphemeral int `json:"storage_ephemeral"`
-	Pods             int `json:"pods"`
-}
-
-type PacketRegisterNodeItem struct {
-	ID            uuid.UUID                              `json:"id,omitempty"`
-	Name          string                                 `json:"name"`
-	IP            string                                 `json:"ip"`
-	Roles         string                                 `json:"roles"`
-	Region        string                                 `json:"region,omitempty"`
-	Provider      string                                 `json:"provider,omitempty"`
-	InstanceType  string                                 `json:"instance_type,omitempty"`
-	InstanceSize  string                                 `json:"instance_size,omitempty"`
-	Capacity      PacketRegisterNodeCapacityItem         `json:"capacity"`
-	Allocatable   PacketRegisterNodeCapacityItem         `json:"allocatable"`
-	Containers    int                                    `json:"containers,omitempty"`
-	ContainerList []*PacketRegisterNodeContainerListItem `json:"container_list,omitempty"`
-}
-
-type PacketRegisterNodeContainerListItem struct {
-	// cluster where host of container located in
-	Cluster string `json:"cluster"`
-	// image of container
-	Image string `json:"image"`
-	// limits of container
-	Limits *PacketRegisterNodeContainerListResourcesItem `json:"limits"`
-	// requests of container
-	Requests *PacketRegisterNodeContainerListResourcesItem `json:"requests"`
-	// name of container (not guaranteed to be unique in cluster scope)
-	Name string `json:"name"`
-	// namespace where pod located in
-	Namespace string `json:"namespace"`
-	// node where container located in
-	Node string `json:"node"`
-	// pod where container located in
-	Pod string `json:"pod"`
-}
-
-// PacketRegisterNodeContainerListResourcesItem
-type PacketRegisterNodeContainerListResourcesItem struct {
-	CPU    int `json:"cpu"`
-	Memory int `json:"memory"`
-}
-
-type PacketNodesStoreRequest []PacketRegisterNodeItem
-
-type PacketNodesStoreResponse struct{}
-
 type PacketLogs []PacketLogItem
 
 type RequestLimit struct {
@@ -253,41 +130,39 @@ type ContainerResources struct {
 	Limits   *RequestLimit `json:"limits,omitempty"`
 }
 
-type PacketDecision struct {
+type PacketAutomation struct {
 	ID          uuid.UUID `json:"id"`
-	ServiceId   uuid.UUID `json:"service_id"`
-	ContainerId uuid.UUID `json:"container_id"`
+
+	NamespaceName string `json:"namespace_name"`
+	ControllerName string `json:"controller_name"`
+	ControllerKind string `json:"controller_kind"`
+	ContainerName string `json:"container_name"`
 
 	ContainerResources ContainerResources `json:"container_resources"`
 }
 
-type DecisionExecutionStatus string
-
-const (
-	DecisionExecutionStatusSucceed DecisionExecutionStatus = "executed"
-	DecisionExecutionStatusFailed  DecisionExecutionStatus = "failed"
-	DecisionExecutionStatusSkipped DecisionExecutionStatus = "skipped"
-)
-
-type PacketDecisionFeedbackRequest struct {
+type PacketAutomationFeedbackRequest struct {
 	ID          uuid.UUID `json:"id"`
-	ServiceId   uuid.UUID `json:"service_id"`
-	ContainerId uuid.UUID `json:"container_id"`
 
-	Status  DecisionExecutionStatus `json:"status"`
+	NamespaceName string `json:"namespace_name"`
+	ControllerName string `json:"controller_name"`
+	ControllerKind string `json:"controller_kind"`
+	ContainerName string `json:"container_name"`
+
+	Status  AutomationStatus `json:"status"`
 	Message string                  `json:"message"`
 }
 
-type PacketDecisionFeedbackResponse struct{}
+type AutomationStatus string
 
-type PacketDecisionResponse struct {
+const (
+	AutomationExecuted AutomationStatus = "executed"
+	AutomationFailed   AutomationStatus = "failed"
+	AutomationSkipped  AutomationStatus = "skipped"
+)
+
+type PacketAutomationResponse struct {
 	Error *string `json:"error"`
-}
-
-type PacketDecisionPullRequest struct{}
-
-type PacketDecisionPullResponse struct {
-	Decisions []*PacketDecision `json:"decisions"`
 }
 
 type PacketRestart struct {
