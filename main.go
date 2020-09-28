@@ -68,9 +68,9 @@ Options:
                                               [default: 5]
   --metrics-interval <duration>              Metrics request and send interval.
                                               [default: 1m]
-  --events-buffer-flush-interval <duration>  Events batch writer flush interval.
+  --events-buffer-flush-interval <duration>  Events batch writer flush interval(Deprecated).
                                               [default: 10s]
-  --events-buffer-size <size>                Events batch writer buffer size.
+  --events-buffer-size <size>                Events batch writer buffer size(Deprecated).
                                               [default: 20]
   --executor-workers <number>                 Executor concurrent workers count
                                               [default: 5]
@@ -85,12 +85,12 @@ Options:
   --timeout-proto-backoff <duration>         Timeout of backoff policy.
                                               Timeout will be multiplied from 1 to 10.
                                               [default: 300ms]
-  --opt-in-analysis-data                     Send anonymous data for analysis.
-  --analysis-data-interval <duration>        Analysis data send interval.
+  --opt-in-analysis-data                     Send anonymous data for analysis.(Deprecated)
+  --analysis-data-interval <duration>        Analysis data send interval.(Deprecated)
                                               [default: 5m]
-  --packets-v2                               Enable v2 packets (without ids). This is deprecated and kept for backward compatability.
+  --packets-v2                               Enable v2 packets (without ids). (Deprecated)
   --disable-metrics                          Disable metrics collecting and sending.
-  --disable-events                           Disable events collecting and sending.
+  --disable-events                           Disable events collecting and sending(Deprecated).
   --disable-scalar                           Disable in-agent scalar.
   --port <port>                              Port to start the server on for liveness and readiness probes
                                                [default: 80]
@@ -223,7 +223,6 @@ func initAgent(
 	logger.Infof(nil, "Initializing Agent")
 	var (
 		metricsEnabled = !args["--disable-metrics"].(bool)
-		// eventsEnabled   = !args["--disable-events"].(bool)
 		//scalarEnabled   = !args["--disable-scalar"].(bool)
 		executorWorkers = utils.MustParseInt(args, "--executor-workers")
 		dryRun          = args["--dry-run"].(bool)
@@ -250,12 +249,6 @@ func initAgent(
 		logger.Fatalf(err, "unable to start entities watcher")
 	}
 
-	optInAnalysisData := args["--opt-in-analysis-data"].(bool)
-	analysisDataInterval := utils.MustParseDuration(
-		args,
-		"--analysis-data-interval",
-	)
-
 	k8sMinorVersion, err := kube.GetServerMinorVersion()
 	if err != nil {
 		logger.Warningf(err, "failed to discover server minor version")
@@ -275,8 +268,6 @@ func initAgent(
 		skipNamespaces,
 		accountID,
 		clusterID,
-		optInAnalysisData,
-		analysisDataInterval,
 	)
 
 	e := executor.InitExecutor(
@@ -297,17 +288,6 @@ func initAgent(
 		return nil, nil
 	})
 
-	// @TODO reallow events when we start using them
-	/* if eventsEnabled {
-	 	events.InitEvents(
-	 		gwClient,
-	 		kube,
-	 		skipNamespaces,
-			entityScanner,
-	 		args,
-	 	)
-	 } */
-
 	if metricsEnabled {
 		var nodesProvider metrics.NodesProvider
 		var entitiesProvider metrics.EntitiesProvider
@@ -320,7 +300,6 @@ func initAgent(
 			nodesProvider,
 			entitiesProvider,
 			kube,
-			optInAnalysisData,
 			args,
 		)
 		if err != nil {

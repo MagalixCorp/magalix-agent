@@ -18,11 +18,6 @@ const (
 	PacketKindEntitiesDeltasRequest PacketKind = "entities/deltas"
 	PacketKindEntitiesResyncRequest PacketKind = "entities/resync"
 
-	PacketKindEventLastValueRequest PacketKind = "events/query/last_value"
-	PacketKindEventsStoreRequest    PacketKind = "events/store"
-
-	PacketKindStatusStoreRequest PacketKind = "status/store"
-
 	PacketKindBye PacketKind = "bye"
 
 	PacketKindDecision         PacketKind = "decision"
