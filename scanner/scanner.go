@@ -70,8 +70,6 @@ func InitScanner(
 	skipNamespaces []string,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
-	optInAnalysisData bool,
-	analysisDataInterval time.Duration,
 ) *Scanner {
 	scanner := &Scanner{
 		client:            client,
@@ -82,30 +80,12 @@ func InitScanner(
 		clusterID:         clusterID,
 		history:           NewHistory(),
 
-		optInAnalysisData: optInAnalysisData,
-
 		mutex: &sync.Mutex{},
 		dones: make([]chan struct{}, 0),
 	}
-	if optInAnalysisData {
-		scanner.analysisDataSender = utils.Throttle(
-			"analysis-data",
-			analysisDataInterval,
-			2, // we call analysisDataSender twice in each tick
-			func(args ...interface{}) {
-				if data, ok := args[0].(map[string]interface{}); ok {
-					go scanner.client.SendRaw(data)
-				} else {
-					scanner.logger.Error(
-						"invalid raw data type! Please contact developer",
-					)
-				}
-			},
-		)
-	} else {
-		// noop function
-		scanner.analysisDataSender = func(args ...interface{}) {}
-	}
+
+	scanner.analysisDataSender = func(args ...interface{}) {}
+
 	scanner.Ticker = utils.NewTicker("scanner", intervalScanner, func(_ time.Time) {
 		scanner.scan()
 	})

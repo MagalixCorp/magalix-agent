@@ -15,5 +15,5 @@ type EntitiesProvider interface {
 // in future releases. Consider using Source interface instead.
 // MetricsSource interface for metrics source
 type MetricsSource interface {
-	GetMetrics(entitiesProvider EntitiesProvider, tickTime time.Time) ([]*Metric, map[string]interface{}, error)
+	GetMetrics(entitiesProvider EntitiesProvider, tickTime time.Time) ([]*Metric, error)
 }
