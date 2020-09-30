@@ -284,8 +284,9 @@ func initAgent(
 		if err = proto.DecodeSnappy(in, &restart); err != nil {
 			return
 		}
-		defer gwClient.Done(restart.Status, true)
+		go gwClient.Done(restart.Status, true)
 		return nil, nil
+
 	})
 
 	if metricsEnabled {
