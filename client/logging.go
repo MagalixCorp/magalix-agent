@@ -8,26 +8,32 @@ import (
 )
 
 func (c *Client) Write(p []byte) (n int, err error) {
-	if c.shouldSendLogs {
-		c.logBuffer <- proto.PacketLogItem{
-			Date: time.Now(),
-			Data: string(p),
-		}
-	}
-	return len(p), nil
-}
+	c.blockedM.Lock()
+	defer c.blockedM.Unlock()
 
-func (c *Client) Sync() error {
-	for log := range c.logBuffer {
+	c.logBuffer = append(c.logBuffer, proto.PacketLogItem{
+		Date: time.Now(),
+		Data: p,
+	})
+
+	if len(c.logBuffer) == 5 {
+		payload := make(proto.PacketLogs, len(c.logBuffer))
+		copy(payload, c.logBuffer)
+		c.logBuffer = make(proto.PacketLogs, 0, 5)
 		pkg := Package{
 			Kind:        proto.PacketKindLogs,
 			ExpiryTime:  utils.After(10 * time.Minute),
 			ExpiryCount: 2,
 			Priority:    9,
 			Retries:     4,
-			Data:        log,
+			Data:        payload,
 		}
+
 		c.Pipe(pkg)
 	}
+	return len(c.logBuffer), nil
+}
+
+func (c *Client) Sync() error {
 	return nil
 }

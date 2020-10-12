@@ -78,6 +78,8 @@ func (client *Client) onConnect(connected chan bool) error {
 }
 
 func (client *Client) onDisconnect() {
+	client.blockedM.Lock()
+	defer client.blockedM.Unlock()
 	client.connected = false
 	client.authorized = false
 }

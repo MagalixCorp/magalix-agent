@@ -47,7 +47,7 @@ type Client struct {
 	authorized bool
 
 	shouldSendLogs  bool
-	logBuffer       chan proto.PacketLogItem
+	logBuffer       proto.PacketLogs
 	logsQueueWorker *sync.WaitGroup
 
 	exit chan int
@@ -83,7 +83,7 @@ func newClient(
 	}
 
 	if gwUrl.Scheme == "ws" {
-		gwUrl.Scheme = "wss"
+		gwUrl.Scheme = "ws"
 	}
 
 	address = gwUrl.String()
@@ -105,7 +105,7 @@ func newClient(
 			ProtoReconnect: timeouts.protoReconnect,
 		}),
 		exit:      make(chan int, 1),
-		logBuffer: make(chan proto.PacketLogItem, 50),
+		logBuffer: make(proto.PacketLogs, 0, 10),
 		blocked:   sync.Map{},
 		blockedM:  sync.Mutex{},
 
@@ -239,7 +239,7 @@ func (client *Client) Pipe(pack Package) {
 	}
 	i := client.pipe.Send(pack)
 	if i > 0 {
-		logger.Errorw("discarded packets to agent-gateway", "#packets", i)
+		// logger.Errorw("discarded packets to agent-gateway", "#packets", i)
 	}
 }
 
