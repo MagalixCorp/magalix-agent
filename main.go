@@ -100,6 +100,8 @@ Options:
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file
                                               [default: trace.log]
+  --log-level <string>                       Log level
+                                              [default: info]
   -h --help                                  Show this help.
   --version                                  Show version.
 `
@@ -188,9 +190,10 @@ func main() {
 	defer gwClient.Recover()
 	logger.Infof("waiting for connection and authorization")
 	<-connected
+	logger.Infof("Connected and authorized")
 	go gwClient.Sync()
 
-	switch "info" {
+	switch args["--log-level"].(string) {
 	case "info":
 		logger.ConfigWriterSync(logger.InfoLevel, gwClient)
 	case "debug":

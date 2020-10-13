@@ -106,7 +106,7 @@ func watchMetrics(
 
 	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
 		logger.Info("Retrieving metrics")
-		metrics, raw, err := source.GetMetrics(entitiesProvider, tickTime)
+		metrics, err := source.GetMetrics(entitiesProvider, tickTime)
 
 		if err != nil {
 			logger.Errorw("unable to retrieve metrics from sink", "error", err)
