@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/pkg/errors"
@@ -106,21 +105,4 @@ func (client *Client) ping() error {
 	)
 
 	return nil
-}
-
-// SendRaw sends arbitrary raw data to be stored in magalix BE
-func (client *Client) SendRaw(rawResources map[string]interface{}) {
-	packet := proto.PacketRawRequest{PacketRaw: rawResources, Timestamp: time.Now()}
-	logger.Infow(
-		"sending raw data",
-		"timestamp", packet.Timestamp,
-	)
-	client.Pipe(Package{
-		Kind:        proto.PacketKindRawStoreRequest,
-		ExpiryTime:  utils.After(time.Hour),
-		ExpiryCount: 10,
-		Priority:    8,
-		Retries:     4,
-		Data:        &packet,
-	})
 }

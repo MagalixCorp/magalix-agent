@@ -118,12 +118,6 @@ func watchMetrics(
 			for i := 0; i < len(metrics); i += limit {
 				metricsPipe <- metrics[i:min(i+limit, len(metrics))]
 			}
-
-			if raw != nil {
-				client.SendRaw(map[string]interface{}{
-					"metrics": raw,
-				})
-			}
 		}
 	})
 	ticker.Start(false, true, true)
@@ -200,7 +194,6 @@ func InitMetrics(
 	nodesProvider NodesProvider,
 	entitiesProvider EntitiesProvider,
 	kube *kuber.Kube,
-	optInAnalysisData bool,
 	args map[string]interface{},
 ) error {
 	var (
@@ -235,7 +228,6 @@ func InitMetrics(
 						maxRetries: utils.MustParseInt(args, "--kubelet-backoff-max-retries"),
 					},
 				},
-				optInAnalysisData,
 			)
 			if err != nil {
 				foundErrors = append(foundErrors, karma.Format(

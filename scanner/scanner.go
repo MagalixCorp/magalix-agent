@@ -69,8 +69,6 @@ func InitScanner(
 	skipNamespaces []string,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
-	optInAnalysisData bool,
-	analysisDataInterval time.Duration,
 ) *Scanner {
 	scanner := &Scanner{
 		client:            client,
@@ -79,8 +77,6 @@ func InitScanner(
 		accountID:         accountID,
 		clusterID:         clusterID,
 		history:           NewHistory(),
-
-		optInAnalysisData: optInAnalysisData,
 
 		mutex: &sync.Mutex{},
 		dones: make([]chan struct{}, 0),
