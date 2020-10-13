@@ -239,7 +239,7 @@ func (client *Client) Pipe(pack Package) {
 	}
 	i := client.pipe.Send(pack)
 	if i > 0 {
-		// logger.Errorw("discarded packets to agent-gateway", "#packets", i)
+		logger.Errorw("discarded packets to agent-gateway", "#packets", i)
 	}
 }
 

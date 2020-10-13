@@ -13,7 +13,7 @@ func (c *Client) Write(p []byte) (n int, err error) {
 
 	c.logBuffer = append(c.logBuffer, proto.PacketLogItem{
 		Date: time.Now(),
-		Data: p,
+		Data: string(p),
 	})
 
 	if len(c.logBuffer) == 5 {
