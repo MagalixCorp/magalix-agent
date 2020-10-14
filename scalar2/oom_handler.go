@@ -163,7 +163,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 
 	if p.dryRun {
 		//	log info about dryRun
-		logger.Infow("dry-run enabled, skipping OOMKill handler",
+		logger.Debugw("dry-run enabled, skipping OOMKill handler",
 			"name", strings.Join([]string{namespace, controllerKind, controllerName}, "/"),
 			"containers", strings.Join(containersDebugData, " | "),
 			"dry run", p.dryRun,

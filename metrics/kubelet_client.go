@@ -127,11 +127,11 @@ func (client *KubeletClient) discoverNodesAddress() (
 	setResult := func(fn NodePathGetter, isApiServer *bool) {
 		if isApiServer != nil {
 			if *isApiServer {
-				logger.Info(
+				logger.Debug(
 					"using api-server node proxy to access kubelet metrics",
 				)
 			} else {
-				logger.Infow(
+				logger.Debugw(
 					"using direct kubelet api through http port",
 					"port", client.httpPort,
 				)

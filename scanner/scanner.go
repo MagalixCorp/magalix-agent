@@ -133,7 +133,7 @@ func (scanner *Scanner) scanNodes() {
 			"nodes": nodeList,
 		})
 
-		logger.Info("nodes information is sent")
+		logger.Debug("nodes information is sent")
 		break
 	}
 }
@@ -175,7 +175,7 @@ func (scanner *Scanner) getNodes() ([]kuber.Node, *corev1.NodeList, error) {
 
 func (scanner *Scanner) scanApplications() {
 	for {
-		logger.Info("scanning kubernetes applications")
+		logger.Debug("scanning kubernetes applications")
 
 		apps, rawResources, err := scanner.getApplications()
 		if err != nil {
@@ -184,7 +184,7 @@ func (scanner *Scanner) scanApplications() {
 			continue
 		}
 
-		logger.Infof(
+		logger.Debugf(
 			"found %d kubernetes applications, sending to the gateway",
 			len(apps),
 		)
@@ -199,7 +199,7 @@ func (scanner *Scanner) scanApplications() {
 
 		scanner.SendAnalysisData(rawResources)
 
-		logger.Info(
+		logger.Debug(
 			"applications sent",
 		)
 		break

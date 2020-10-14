@@ -383,8 +383,8 @@ func (proc *Proc) updateAllStatuses() {
 		}
 	})
 
-	logger.Infof("after full sync updated %d statuses", updated)
-	logger.Info(nil, "statues for all entities updated after full sync")
+	logger.Debugf("after full sync updated %d statuses", updated)
+	logger.Debug(nil, "statues for all entities updated after full sync")
 }
 
 func (proc *Proc) writeEvent(event watcher.Event) bool {

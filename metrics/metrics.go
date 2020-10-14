@@ -105,7 +105,7 @@ func watchMetrics(
 	defer close(metricsPipe)
 
 	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
-		logger.Info("Retrieving metrics")
+		logger.Debug("Retrieving metrics")
 		metrics, err := source.GetMetrics(entitiesProvider, tickTime)
 
 		if err != nil {
@@ -113,7 +113,7 @@ func watchMetrics(
 		}
 
 		if len(metrics) > 0 {
-			logger.Infow("finished retrieving metrics", "timestamp", metrics[0].Timestamp)
+			logger.Debugw("finished retrieving metrics", "timestamp", metrics[0].Timestamp)
 
 			for i := 0; i < len(metrics); i += limit {
 				metricsPipe <- metrics[i:min(i+limit, len(metrics))]
@@ -137,9 +137,9 @@ func sendMetrics(client *client.Client, pipe chan []*Metric) {
 	go func() {
 		for metrics := range queue {
 			if len(metrics) > 0 {
-				logger.Infow("sending metrics", "timestamp", metrics[0].Timestamp)
+				logger.Debugw("sending metrics", "timestamp", metrics[0].Timestamp)
 				sendMetricsBatch(client, metrics)
-				logger.Infow("metrics sent", "timestamp", metrics[0].Timestamp)
+				logger.Debugw("metrics sent", "timestamp", metrics[0].Timestamp)
 			}
 		}
 	}()

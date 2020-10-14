@@ -277,7 +277,7 @@ func InitClient(
 			return true
 		}
 
-		logger.Info("got SIGHUP signal, sending ping-pong")
+		logger.Debug("got SIGHUP signal, sending ping-pong")
 		client.WithBackoff(func() error {
 			err := client.ping()
 			if err != nil {

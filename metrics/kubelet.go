@@ -328,7 +328,7 @@ func (kubelet *Kubelet) GetMetrics(
 		return nil, karma.Format(err, "{kubelet} Can't get nodes")
 	}
 
-	logger.Info("===============================")
+	logger.Debug("===============================")
 	addMetricValue(
 		TypeCluster,
 		"nodes/count",
@@ -343,7 +343,7 @@ func (kubelet *Kubelet) GetMetrics(
 		int64(len(nodes)),
 	)
 
-	logger.Info("===============================")
+	logger.Debug("===============================")
 
 	instanceGroups := map[string]int64{}
 	for _, node := range nodes {
@@ -423,7 +423,7 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 
 		processedPodsCount++
-		logger.Infof("Processing %d containers in pod %s", len(pod.Spec.Containers), pod.Name)
+		logger.Debugf("Processing %d containers in pod %s", len(pod.Spec.Containers), pod.Name)
 
 		for _, container := range pod.Spec.Containers {
 			for _, measurement := range []struct {
@@ -455,15 +455,15 @@ func (kubelet *Kubelet) GetMetrics(
 		processedContainersCount += len(pod.Spec.Containers)
 	}
 
-	logger.Infof("Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
+	logger.Debugf("Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
 
-	logger.Info("Fetching nodes metrics")
+	logger.Debug("Fetching nodes metrics")
 
 	pr, err := alltogether.NewConcurrentProcessor(
 		nodes,
 		func(node corev1.Node) error {
 			nodeIP := GetNodeIP(&node)
-			logger.Infof(
+			logger.Debugf(
 				"requesting metrics from node %s",
 				node.Name,
 			)
@@ -845,13 +845,13 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	if len(metrics) > 0 {
-		logger.Infof(
+		logger.Debugf(
 			"collected %d measurements with timestamp %s",
 			len(metrics),
 			metrics[0].Timestamp,
 		)
 	} else {
-		logger.Infof(
+		logger.Debugf(
 			"collected %d measurements",
 			len(metrics),
 		)

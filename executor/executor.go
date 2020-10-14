@@ -106,7 +106,7 @@ func (executor *Executor) startWorkers() {
 func (executor *Executor) handleExecutionError(
 	decision *proto.PacketDecision, err error, containerId *uuid.UUID,
 ) *proto.PacketDecisionFeedbackRequest {
-	logger.Errorw("unable to execute decision", "error", err)
+	logger.Errorw("unable to execute decision", "error", err, "decisionId", decision.ID)
 
 	return &proto.PacketDecisionFeedbackRequest{
 		ID:          decision.ID,
@@ -120,7 +120,7 @@ func (executor *Executor) handleExecutionSkipping(
 	decision *proto.PacketDecision, msg string,
 ) *proto.PacketDecisionFeedbackRequest {
 
-	logger.Infow("skipping execution", "msg", msg)
+	logger.Debugw("skipping decision execution", "msg", msg, "decisionId", decision.ID)
 
 	return &proto.PacketDecisionFeedbackRequest{
 		ID:        decision.ID,
@@ -185,6 +185,7 @@ func (executor *Executor) executorWorker() {
 			logger.Errorw(
 				"unable to execute decision",
 				"error", err,
+				"decisionId", decision.ID,
 			)
 		}
 
@@ -333,11 +334,11 @@ func (executor *Executor) execute(
 			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
 
 			if err != nil {
-				logger.Warn("can't rollback decision")
+				lg.Warn("can't rollback decision")
 			}
 		}
 
-		lg.Info(msg)
+		lg.Debug(msg)
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,

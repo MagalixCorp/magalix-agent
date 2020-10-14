@@ -1155,7 +1155,7 @@ func (observer *Observer) newInformer(
 			if res, err := lister.List(kmeta.ListOptions{}); err == nil {
 				if podList, ok := res.(*kapi.PodList); ok {
 					pods := podList.Items
-					logger.Info(fmt.Sprintf("listing: found %d pods", len(pods)))
+					logger.Debug(fmt.Sprintf("listing: found %d pods", len(pods)))
 					for _, pod := range pods {
 						// obj := pod.GetObjectMeta()
 						if err := clientState.Add(&pod); err != nil {

@@ -188,9 +188,9 @@ func main() {
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
-	logger.Infof("waiting for connection and authorization")
+	logger.Info("waiting for connection and authorization")
 	<-connected
-	logger.Infof("Connected and authorized")
+	logger.Info("Connected and authorized")
 	go gwClient.Sync()
 
 	switch args["--log-level"].(string) {
