@@ -193,19 +193,9 @@ func main() {
 	logger.Info("Connected and authorized")
 	go gwClient.Sync()
 
-	switch args["--log-level"].(string) {
-	case "info":
-		logger.ConfigWriterSync(logger.InfoLevel, gwClient)
-	case "debug":
-		logger.ConfigWriterSync(logger.DebugLevel, gwClient)
-	case "warn":
-		logger.ConfigWriterSync(logger.WarnLevel, gwClient)
-	case "error":
-		logger.ConfigWriterSync(logger.ErrorLevel, gwClient)
-	default:
+	if ok := gwClient.SetLogLevel(args["--log-level"].(string)); !ok {
 		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
 	}
-	logger.WithGlobal("accountID", accountID, "clusterID", clusterID)
 	defer logger.Sync()
 
 	if err != nil {
@@ -289,6 +279,21 @@ func initAgent(
 			return
 		}
 		go gwClient.Done(restart.Status, true)
+		return nil, nil
+
+	})
+
+	gwClient.AddListener(proto.PacketKindLogLevel, func(in []byte) (out []byte, err error) {
+		var logLevel proto.PacketLogLevel
+		if err = proto.DecodeSnappy(in, &logLevel); err != nil {
+			logger.Error("Failed to decode log level packet")
+			return nil, err
+		}
+		if ok := gwClient.SetLogLevel(logLevel.Level); !ok {
+			msg := fmt.Sprintf("Got an unsupported log level: %s", logLevel.Level)
+			logger.Warnw(msg)
+			return nil, errors.New(msg)
+		}
 		return nil, nil
 
 	})

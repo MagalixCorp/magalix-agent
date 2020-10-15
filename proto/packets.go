@@ -292,6 +292,11 @@ type PacketRestart struct {
 	Status int `json:"status"`
 }
 
+// PacketLogLevel used to change current log level
+type PacketLogLevel struct {
+	Level string `json:"level"`
+}
+
 type EntityDeltaKind string
 
 const (
