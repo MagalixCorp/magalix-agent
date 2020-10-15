@@ -118,7 +118,7 @@ func (ew *entitiesWatcher) Start() {
 	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
 	err := ew.observer.WaitForCacheSync()
 	if err != nil {
-		logger.Warn(err)
+		logger.Warnf("timeout due to missing permissions with error %s ", err.Error())
 	}
 
 	go ew.deltasWorker()
@@ -395,6 +395,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	if len(deltas) == 0 {
 		return
 	}
+	logger.Info("Sending deltas")
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
@@ -413,7 +414,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 		Retries:     deltasPacketRetries,
 		Data:        packet,
 	})
-	logger.Debug("deltas sent")
+	logger.Info("%d deltas sent", len(deltas))
 }
 
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {

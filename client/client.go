@@ -161,14 +161,12 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 		// 300ms -> 600ms -> [...] -> 3000ms -> 300ms
 		timeout := client.timeouts.protoBackoff * time.Duration(try%10+1)
 
-		logger.Errorw("unhandled error occurred, retires limit is exceeded", "limit", limit, "error", err)
-
 		if try+1 < limit {
 			time.Sleep(timeout)
 		}
 	}
 	if err != nil {
-		logger.Errorw("unhandled error occurred, retires limit is exceeded", "limit", limit, "error", err)
+		logger.Errorw("unhandled error occurred, retries limit is exceeded", "limit", limit, "error", err)
 	}
 	return err
 }
@@ -277,7 +275,7 @@ func InitClient(
 			return true
 		}
 
-		logger.Debug("got SIGHUP signal, sending ping-pong")
+		logger.Info("got SIGHUP signal and not connected, pinging the agent gateway")
 		client.WithBackoff(func() error {
 			err := client.ping()
 			if err != nil {

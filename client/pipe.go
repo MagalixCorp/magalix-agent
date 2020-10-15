@@ -64,7 +64,7 @@ func (p *Pipe) start() {
 				"diff", time.Now().Sub(pack.time),
 				"remaining", p.storage.Len(),
 			)
-			logFields.Debug("sending packet....")
+			logFields.Debugf("sending packet %s ....", pack.Kind.String())
 
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
 			if err != nil {

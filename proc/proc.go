@@ -383,7 +383,7 @@ func (proc *Proc) updateAllStatuses() {
 		}
 	})
 
-	logger.Debugf("after full sync updated %d statuses", updated)
+	logger.Infof("after full sync updated %d statuses", updated)
 	logger.Debug(nil, "statues for all entities updated after full sync")
 }
 

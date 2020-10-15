@@ -320,7 +320,7 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	logger.Debug("{kubelet} Fetching nodes")
+	logger.Info("{kubelet} Fetching nodes")
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes, err := entitiesProvider.GetNodes()
@@ -412,6 +412,7 @@ func (kubelet *Kubelet) GetMetrics(
 	processedPodsCount := 0
 	processedContainersCount := 0
 
+	logger.Info("Start processing containers and pods")
 	for _, pod := range pods {
 		controllerName, controllerKind, err := entitiesProvider.FindController(pod.Namespace, pod.Name)
 		if err != nil {
@@ -455,9 +456,9 @@ func (kubelet *Kubelet) GetMetrics(
 		processedContainersCount += len(pod.Spec.Containers)
 	}
 
-	logger.Debugf("Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
+	logger.Infof("Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
 
-	logger.Debug("Fetching nodes metrics")
+	logger.Info("Fetching nodes metrics")
 
 	pr, err := alltogether.NewConcurrentProcessor(
 		nodes,
@@ -845,13 +846,13 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	if len(metrics) > 0 {
-		logger.Debugf(
+		logger.Info(
 			"collected %d measurements with timestamp %s",
 			len(metrics),
 			metrics[0].Timestamp,
 		)
 	} else {
-		logger.Debugf(
+		logger.Info(
 			"collected %d measurements",
 			len(metrics),
 		)
