@@ -103,7 +103,7 @@ jobs:
             fi
 
             if [[ "$CIRCLE_BRANCH" == "DEV-1019-logging" ]]; then
-              export VERSION=dev
+              export VERSION=dev-1019
             fi
 
             make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
