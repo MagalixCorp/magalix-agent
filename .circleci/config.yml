@@ -101,6 +101,7 @@ jobs:
             if [[ "$CIRCLE_BRANCH" == "dev" ]]; then
               export VERSION=dev
             fi
+
             make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
       - deploy:
           name: Build image & Push to GCR Registry
