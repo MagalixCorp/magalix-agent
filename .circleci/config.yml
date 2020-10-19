@@ -52,7 +52,7 @@ jobs:
       - run:
           name: Should push?
           command: |
-            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" || "$CIRCLE_BRANCH" == "DEV-1019-logging"  ]]
+            if [[ "$CIRCLE_BRANCH" == "dev" || "$CIRCLE_BRANCH" == "master" ]]
             then
               echo 'export SHOULD_PUSH=true' >> $BASH_ENV
             else
@@ -101,11 +101,6 @@ jobs:
             if [[ "$CIRCLE_BRANCH" == "dev" ]]; then
               export VERSION=dev
             fi
-
-            if [[ "$CIRCLE_BRANCH" == "DEV-1019-logging" ]]; then
-              export VERSION=dev-1019
-            fi
-
             make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
       - deploy:
           name: Build image & Push to GCR Registry
@@ -132,8 +127,8 @@ jobs:
               gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
               gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
               gcloud auth configure-docker
-              docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:khaled-test -f Dockerfile .
-              docker push gcr.io/${GOOGLE_PROJECT_ID}/agent:khaled-test
+              docker build -t gcr.io/${GOOGLE_PROJECT_ID}/agent:${TAG} -f Dockerfile .
+              docker push gcr.io/${GOOGLE_PROJECT_ID}/agent:${TAG}
             }
 
             if [[ "$CIRCLE_BRANCH" == "master" ]]; then
