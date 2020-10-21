@@ -846,13 +846,13 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	if len(metrics) > 0 {
-		logger.Info(
+		logger.Infof(
 			"collected %d measurements with timestamp %s",
 			len(metrics),
 			metrics[0].Timestamp,
 		)
 	} else {
-		logger.Info(
+		logger.Infof(
 			"collected %d measurements",
 			len(metrics),
 		)

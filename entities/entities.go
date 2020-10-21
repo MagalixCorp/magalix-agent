@@ -414,7 +414,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 		Retries:     deltasPacketRetries,
 		Data:        packet,
 	})
-	logger.Info("%d deltas sent", len(deltas))
+	logger.Infof("%d deltas sent", len(deltas))
 }
 
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {

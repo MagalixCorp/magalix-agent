@@ -118,6 +118,26 @@ func getVersion() string {
 	}, "\n")
 }
 
+// SetLogLevel sets log level for the agent
+func SetLogLevel(c *client.Client, level string) bool {
+
+	ok := true
+	switch level {
+	case "info":
+		logger.ConfigWriterSync(logger.InfoLevel, c)
+	case "debug":
+		logger.ConfigWriterSync(logger.DebugLevel, c)
+	case "warn":
+		logger.ConfigWriterSync(logger.WarnLevel, c)
+	case "error":
+		logger.ConfigWriterSync(logger.ErrorLevel, c)
+	default:
+		ok = false
+	}
+	logger.WithGlobal("accountID", c.AccountID, "clusterID", c.ClusterID)
+	return ok
+}
+
 func main() {
 	startID = uuid.NewV4().String()
 	args, err := docopt.ParseArgs(usage, nil, getVersion())
@@ -193,7 +213,7 @@ func main() {
 	logger.Info("Connected and authorized")
 	go gwClient.Sync()
 
-	if ok := gwClient.SetLogLevel(args["--log-level"].(string)); !ok {
+	if ok := SetLogLevel(gwClient, args["--log-level"].(string)); !ok {
 		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
 	}
 	defer logger.Sync()
@@ -289,7 +309,7 @@ func initAgent(
 			logger.Error("Failed to decode log level packet")
 			return nil, err
 		}
-		if ok := gwClient.SetLogLevel(logLevel.Level); !ok {
+		if ok := SetLogLevel(gwClient, logLevel.Level); !ok {
 			msg := fmt.Sprintf("Got an unsupported log level: %s", logLevel.Level)
 			logger.Warnw(msg)
 			return nil, errors.New(msg)

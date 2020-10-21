@@ -69,9 +69,9 @@ func (p *Pipe) start() {
 			err := p.sender.Send(pack.Kind, pack.Data, nil)
 			if err != nil {
 				p.storage.Add(pack)
-				logger.Errorw("error sending packet", "error", err, "remaining", p.storage.Len())
+				logFields.Errorw("error sending packet", "error", err, "remaining", p.storage.Len())
 			} else {
-				logger.Debugw("completed sending packet", "remaining", p.storage.Len())
+				logFields.Debugw("completed sending packet", "remaining", p.storage.Len())
 			}
 		}
 	}()
