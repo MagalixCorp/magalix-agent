@@ -235,10 +235,11 @@ func (client *Client) Pipe(pack Package) {
 	if client.pipe == nil {
 		panic("client pipe not defined")
 	}
-	i := client.pipe.Send(pack)
-	if i > 0 {
-		logger.Errorw("discarded packets to agent-gateway", "#packets", i)
-	}
+	client.pipe.Send(pack)
+	// i := client.pipe.Send(pack)  Uncomment after piping logs logic is implemented/revisited
+	// if i > 0 {
+	// 	logger.Errorw("discarded packets to agent-gateway", "#packets", i)
+	// }
 }
 
 // AddListener adds a listener for a specific packet kind
