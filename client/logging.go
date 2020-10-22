@@ -31,7 +31,7 @@ func (c *Client) Write(p []byte) (n int, err error) {
 			Data:        payload,
 		}
 
-		c.Pipe(pkg)
+		c.pipe.Send(pkg) // bypasses c.Pipe to prevent a deadlock from occuring since Pipe uses logging
 	}
 	return len(c.logBuffer), nil
 }
