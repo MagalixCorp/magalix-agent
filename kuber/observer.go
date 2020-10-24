@@ -216,10 +216,11 @@ func (observer *Observer) FindContainer(
 		return nil, karma.Format(ctx.Reason(fmt.Errorf("unable to find containers spec")), "unable to find container")
 	}
 
-	for _, c := range  containersList {
-		container, ok := c.(corev1.Container)
-		if !ok {
-			return nil, karma.Format(ctx.Reason(fmt.Errorf("unable to cast containers spec")), "unable to find container")
+	for _, c := range containersList {
+		var container corev1.Container
+		err := utils.Transcode(c, &container)
+		if err != nil {
+			return nil, karma.Format(ctx.Reason(fmt.Errorf("unable to transcode unstructured to container")), "unable to find container")
 		}
 
 		if container.Name == containerName {

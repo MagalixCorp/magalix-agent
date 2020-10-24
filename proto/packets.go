@@ -99,7 +99,6 @@ const (
 	ResourceRequirementKindDefaultFromLimits  = "default-from-limits"
 )
 
-
 type PacketMetricsStoreV2Request []MetricStoreV2Request
 
 type MetricStoreV2Request struct {
@@ -131,26 +130,26 @@ type ContainerResources struct {
 }
 
 type PacketAutomation struct {
-	ID          uuid.UUID `json:"id"`
+	ID string `json:"id"`
 
-	NamespaceName string `json:"namespace_name"`
+	NamespaceName  string `json:"namespace_name"`
 	ControllerName string `json:"controller_name"`
 	ControllerKind string `json:"controller_kind"`
-	ContainerName string `json:"container_name"`
+	ContainerName  string `json:"container_name"`
 
 	ContainerResources ContainerResources `json:"container_resources"`
 }
 
 type PacketAutomationFeedbackRequest struct {
-	ID          uuid.UUID `json:"id"`
+	ID string `json:"id"`
 
-	NamespaceName string `json:"namespace_name"`
+	NamespaceName  string `json:"namespace_name"`
 	ControllerName string `json:"controller_name"`
 	ControllerKind string `json:"controller_kind"`
-	ContainerName string `json:"container_name"`
+	ContainerName  string `json:"container_name"`
 
 	Status  AutomationStatus `json:"status"`
-	Message string                  `json:"message"`
+	Message string           `json:"message"`
 }
 
 type AutomationStatus string
@@ -162,6 +161,7 @@ const (
 )
 
 type PacketAutomationResponse struct {
+	ID    string  `json:"id"`
 	Error *string `json:"error"`
 }
 

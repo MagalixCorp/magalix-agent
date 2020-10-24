@@ -17,15 +17,15 @@ import (
 )
 
 const (
-	decisionsBufferLength  = 1000
-	decisionsBufferTimeout = 10 * time.Second
+	automationsBufferLength  = 1000
+	automationsBufferTimeout = 10 * time.Second
 
-	decisionsFeedbackExpiryTime     = 30 * time.Minute
-	decisionsFeedbackExpiryCount    = 0
-	decisionsFeedbackExpiryPriority = 10
-	decisionsFeedbackExpiryRetries  = 5
-	decisionsExecutionTimeout       = 15 * time.Minute
-	podStatusSleep                  = 15 * time.Second
+	automationsFeedbackExpiryTime     = 30 * time.Minute
+	automationsFeedbackExpiryCount    = 0
+	automationsFeedbackExpiryPriority = 10
+	automationsFeedbackExpiryRetries  = 5
+	automationsExecutionTimeout = 15 * time.Minute
+	podStatusSleep              = 15 * time.Second
 )
 
 type EntitiesFinder interface {
@@ -81,7 +81,7 @@ func NewExecutor(
 
 		workersCount:    workersCount,
 		inProgressJobs:  map[string]bool{},
-		automationsChan: make(chan *proto.PacketAutomation, decisionsBufferLength),
+		automationsChan: make(chan *proto.PacketAutomation, automationsBufferLength),
 	}
 
 	return executor
@@ -129,15 +129,16 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	if err = proto.DecodeSnappy(in, &automation); err != nil {
 		return
 	}
-	_, exist := executor.inProgressJobs[automation.ID.String()]
-	if !exist {
-		executor.inProgressJobs[automation.ID.String()] = true
-		convertDecisionMemoryFromKiloByteToMegabyte(&automation)
+	_, found := executor.inProgressJobs[automation.ID]
+	if !found {
+		executor.inProgressJobs[automation.ID] = true
+		convertAutomationMemoryFromKiloByteToMegabyte(&automation)
 
-		err = executor.submitAutomation(&automation, decisionsBufferTimeout)
+		err = executor.submitAutomation(&automation, automationsBufferTimeout)
 		if err != nil {
 			errMessage := err.Error()
 			return proto.EncodeSnappy(proto.PacketAutomationResponse{
+				ID:    automation.ID,
 				Error: &errMessage,
 			})
 		}
@@ -146,7 +147,7 @@ func (executor *Executor) Listener(in []byte) (out []byte, err error) {
 	return proto.EncodeSnappy(proto.PacketAutomationResponse{})
 }
 
-func convertDecisionMemoryFromKiloByteToMegabyte(automation *proto.PacketAutomation) {
+func convertAutomationMemoryFromKiloByteToMegabyte(automation *proto.PacketAutomation) {
 	if automation.ContainerResources.Requests != nil && automation.ContainerResources.Requests.Memory != nil {
 		*automation.ContainerResources.Requests.Memory = *automation.ContainerResources.Requests.Memory / 1024
 	}
@@ -163,8 +164,8 @@ func (executor *Executor) submitAutomation(
 	case executor.automationsChan <- automation:
 	case <-time.After(timeout):
 		return fmt.Errorf(
-			"timeout (after %s) waiting to push decision into buffer chan",
-			decisionsBufferTimeout,
+			"timeout (after %s) waiting to push automation into buffer chan",
+			automationsBufferTimeout,
 		)
 	}
 	return nil
@@ -181,15 +182,15 @@ func (executor *Executor) executorWorker() {
 			)
 		}
 
-		delete(executor.inProgressJobs, automation.ID.String())
+		delete(executor.inProgressJobs, automation.ID)
 
 		executor.client.Pipe(
 			client.Package{
 				Kind:        proto.PacketKindAutomationFeedback,
-				ExpiryTime:  utils.After(decisionsFeedbackExpiryTime),
-				ExpiryCount: decisionsFeedbackExpiryCount,
-				Priority:    decisionsFeedbackExpiryPriority,
-				Retries:     decisionsFeedbackExpiryRetries,
+				ExpiryTime:  utils.After(automationsFeedbackExpiryTime),
+				ExpiryCount: automationsFeedbackExpiryCount,
+				Priority:    automationsFeedbackExpiryPriority,
+				Retries:     automationsFeedbackExpiryRetries,
 				Data:        response,
 			},
 		)
@@ -219,39 +220,16 @@ func (executor *Executor) execute(
 	}
 
 	var container kv1.Container
-	err = utils.Transcode(c, container)
+	err = utils.Transcode(c, &container)
 	if err != nil {
 		return makeAutomationFailedResponse(automation, fmt.Sprintf("unable to get container details %s", err.Error())),
 			karma.Format(err, "unable to get container details")
 	}
 
-	totalResources := kuber.TotalResources{
-		Containers: []kuber.ContainerResourcesRequirements{
-			{
-				Name:     container.Name,
-				Limits:   new(kuber.RequestLimit),
-				Requests: new(kuber.RequestLimit),
-			},
-		},
-	}
-	if automation.ContainerResources.Requests != nil {
-		if automation.ContainerResources.Requests.CPU != nil {
-			totalResources.Containers[0].Requests.CPU = automation.ContainerResources.Requests.CPU
-		}
-		if automation.ContainerResources.Requests.Memory != nil {
-			totalResources.Containers[0].Requests.Memory = automation.ContainerResources.Requests.Memory
-		}
-	}
-	if automation.ContainerResources.Limits != nil {
-		if automation.ContainerResources.Limits.CPU != nil {
-			totalResources.Containers[0].Limits.CPU = automation.ContainerResources.Limits.CPU
-		}
-		if automation.ContainerResources.Limits.Memory != nil {
-			totalResources.Containers[0].Limits.Memory = automation.ContainerResources.Limits.Memory
-		}
-	}
+	originalResources := buildOriginalResourcesFromContainer(container)
+	recommendedResources := buildRecommendedResourcesFromAutomation(originalResources, automation)
 
-	trace, _ := json.Marshal(totalResources)
+	trace, _ := json.Marshal(recommendedResources)
 	executor.logger.Infof(
 		ctx.
 			Describe("ClusterID", executor.client.ClusterID).
@@ -271,7 +249,7 @@ func (executor *Executor) execute(
 			automation.ControllerKind,
 			automation.ControllerName,
 			automation.NamespaceName,
-			totalResources,
+			recommendedResources,
 		)
 		if err != nil {
 			// TODO: do we need to retry execution before fail?
@@ -302,40 +280,17 @@ func (executor *Executor) execute(
 
 			msg = statusMap[kv1.PodFailed]
 			result = proto.AutomationFailed
-			memoryLimit := container.Resources.Limits.Memory().Value()
-			memoryRequest := container.Resources.Requests.Memory().Value()
-			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
-			cpuRequest := container.Resources.Requests.Cpu().MilliValue()
-
-			// handle if requests and limits is null in rollback DEV-2056"
-			if container.Resources.Limits != nil {
-				if container.Resources.Limits.Cpu() != nil && cpuLimit != 0 {
-					*totalResources.Containers[0].Limits.CPU = cpuLimit
-				}
-				if container.Resources.Limits.Memory() != nil && memoryLimit != 0 {
-					*totalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
-				}
-			}
-
-			if container.Resources.Requests != nil {
-				if container.Resources.Requests.Cpu() != nil && cpuRequest != 0 {
-					*totalResources.Containers[0].Requests.CPU = cpuRequest
-				}
-				if container.Resources.Requests.Memory() != nil && memoryRequest != 0 {
-					*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
-				}
-			}
 
 			// execute the decision with old values to rollback
 			_, err := executor.kube.SetResources(
 				automation.ControllerKind,
 				automation.ControllerName,
 				automation.NamespaceName,
-				totalResources,
+				originalResources,
 			)
 
 			if err != nil {
-				executor.logger.Warning(ctx, "can't rollback decision")
+				executor.logger.Error(ctx, "can't rollback decision")
 			}
 		}
 
@@ -351,7 +306,6 @@ func (executor *Executor) execute(
 			Message:        msg,
 		}, nil
 	}
-
 }
 
 func makeAutomationFailedResponse(automation *proto.PacketAutomation, msg string) *proto.PacketAutomationFeedbackRequest {
@@ -364,4 +318,82 @@ func makeAutomationFailedResponse(automation *proto.PacketAutomation, msg string
 		Status:         proto.AutomationFailed,
 		Message:        msg,
 	}
+}
+
+func buildRecommendedResourcesFromAutomation(originalResources kuber.TotalResources, automation *proto.PacketAutomation) kuber.TotalResources {
+	recommendedResources := kuber.TotalResources{
+		Containers: []kuber.ContainerResourcesRequirements{
+			{
+				Name:     originalResources.Containers[0].Name,
+				Requests: new(kuber.RequestLimit),
+				Limits:   new(kuber.RequestLimit),
+			},
+		},
+	}
+
+	// Copy original values
+	if originalResources.Containers[0].Requests.CPU != nil {
+		*recommendedResources.Containers[0].Requests.CPU = *originalResources.Containers[0].Requests.CPU
+	}
+	if originalResources.Containers[0].Requests.Memory != nil {
+		*recommendedResources.Containers[0].Requests.Memory = *originalResources.Containers[0].Requests.Memory
+	}
+	if originalResources.Containers[0].Limits.CPU != nil {
+		*recommendedResources.Containers[0].Limits.CPU = *originalResources.Containers[0].Limits.CPU
+	}
+	if originalResources.Containers[0].Limits.Memory != nil {
+		*recommendedResources.Containers[0].Limits.Memory = *originalResources.Containers[0].Limits.Memory
+	}
+
+	// Override with values from automation
+	if automation.ContainerResources.Requests != nil {
+		if automation.ContainerResources.Requests.CPU != nil {
+			recommendedResources.Containers[0].Requests.CPU = automation.ContainerResources.Requests.CPU
+		}
+		if automation.ContainerResources.Requests.Memory != nil {
+			recommendedResources.Containers[0].Requests.Memory = automation.ContainerResources.Requests.Memory
+		}
+	}
+	if automation.ContainerResources.Limits != nil {
+		if automation.ContainerResources.Limits.CPU != nil {
+			recommendedResources.Containers[0].Limits.CPU = automation.ContainerResources.Limits.CPU
+		}
+		if automation.ContainerResources.Limits.Memory != nil {
+			recommendedResources.Containers[0].Limits.Memory = automation.ContainerResources.Limits.Memory
+		}
+	}
+
+	return recommendedResources
+}
+
+func buildOriginalResourcesFromContainer(container kv1.Container) kuber.TotalResources {
+	memoryLimit := container.Resources.Limits.Memory().Value()
+	memoryRequest := container.Resources.Requests.Memory().Value()
+	cpuLimit := container.Resources.Limits.Cpu().MilliValue()
+	cpuRequest := container.Resources.Requests.Cpu().MilliValue()
+
+	originalResources := kuber.TotalResources{
+		Containers: []kuber.ContainerResourcesRequirements{
+			{
+				Name:     container.Name,
+				Requests: new(kuber.RequestLimit),
+				Limits:   new(kuber.RequestLimit),
+			},
+		},
+	}
+
+	if memoryLimit != 0 {
+		*originalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
+	}
+	if memoryRequest != 0 {
+		*originalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
+	}
+	if cpuLimit != 0 {
+		*originalResources.Containers[0].Limits.CPU = cpuLimit
+	}
+	if cpuRequest != 0 {
+		*originalResources.Containers[0].Requests.CPU = cpuRequest
+	}
+
+	return originalResources
 }
