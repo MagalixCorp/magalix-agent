@@ -1,11 +1,12 @@
 package proc
 
 import (
-	"github.com/MagalixCorp/magalix-agent/v2/watcher"
-	"github.com/MagalixTechnologies/uuid-go"
-	"github.com/reconquest/karma-go"
-	kapi "k8s.io/api/core/v1"
 	"sync"
+
+	"github.com/MagalixCorp/magalix-agent/v2/watcher"
+	"github.com/MagalixTechnologies/core/logger"
+	"github.com/MagalixTechnologies/uuid-go"
+	kapi "k8s.io/api/core/v1"
 )
 
 // PodName pod name
@@ -169,16 +170,15 @@ func GetServiceStateStatus(id watcher.Identity, pods []watcher.Status, replicas 
 		status = watcher.StatusPending
 	}
 
-	debugf(
-		karma.
-			Describe("application_id", id.ApplicationID).
-			Describe("service_id", id.ServiceID).
-			Describe("pods/running", running).
-			Describe("pods/pending", pending).
-			Describe("pods/completed", completed).
-			Describe("pods/errors", errors).
-			Describe("pods/replicas", replicas),
-		"service status: %s", status.String(),
+	logger.Debugw(
+		"service status: "+status.String(),
+		"application_id", id.ApplicationID,
+		"service_id", id.ServiceID,
+		"pods/running", running,
+		"pods/pending", pending,
+		"pods/completed", completed,
+		"pods/errors", errors,
+		"pods/replicas", replicas,
 	)
 
 	return status

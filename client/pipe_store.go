@@ -87,7 +87,8 @@ func (s *DefaultPipeStore) Add(pack *Package) int {
 	now := time.Now()
 	i := 0
 	for i < len(kind) {
-		if (kind[i].ExpiryCount > 0 && kind[i].ExpiryCount < len(kind)) || (kind[i].ExpiryTime != nil && now.After(*kind[i].ExpiryTime)) {
+		if (kind[i].ExpiryCount > 0 && kind[i].ExpiryCount < len(kind)) ||
+			(kind[i].ExpiryTime != nil && now.After(*kind[i].ExpiryTime)) {
 			s.removed++
 			s.removeKind(kind[i], i)
 			kind, _ = s.kinds[pack.Kind]

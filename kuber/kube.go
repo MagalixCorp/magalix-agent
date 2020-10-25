@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/discovery"
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/reconquest/karma-go"
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/apps/v1"
@@ -46,7 +46,6 @@ type Kube struct {
 	apps   kapps.AppsV1Interface
 	batch  batch.BatchV1beta1Interface
 	config *krest.Config
-	logger *log.Logger
 }
 
 // RequestLimit request limit
@@ -91,14 +90,12 @@ type RawResources struct {
 
 func InitKubernetes(
 	config *krest.Config,
-	logger *log.Logger,
 ) (*Kube, error) {
-	logger.Debugf(
-		karma.
-			Describe("url", config.Host).
-			Describe("token", config.BearerToken).
-			Describe("insecure", config.Insecure),
+	logger.Debugw(
 		"initializing kubernetes Clientset",
+		"url", config.Host,
+		"token", config.BearerToken,
+		"insecure", config.Insecure,
 	)
 
 	clientset, err := kubernetes.NewForConfig(config)
@@ -132,7 +129,6 @@ func InitKubernetes(
 		apps:      clientset.AppsV1(),
 		batch:     clientV1Beta1,
 		config:    config,
-		logger:    logger,
 	}
 
 	return kube, nil
@@ -140,7 +136,7 @@ func InitKubernetes(
 
 // GetNodes get kubernetes nodes
 func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of nodes")
+	logger.Debugw("retrieving list of nodes")
 	nodes, err := kube.core.Nodes().List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
@@ -491,7 +487,7 @@ func newInt32Pointer(val int32) *int32 {
 
 // GetPods get kubernetes pods
 func (kube *Kube) GetPods() (*kv1.PodList, error) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of pods")
+	logger.Debugw("retrieving list of pods")
 	podList, err := kube.core.Pods("").List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
@@ -505,7 +501,7 @@ func (kube *Kube) GetPods() (*kv1.PodList, error) {
 
 // GetPods get kubernetes pods for namespace
 func (kube *Kube) GetNameSpacePods(namespace string) (*kv1.PodList, error) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of pods")
+	logger.Debug("retrieving list of pods")
 	podList, err := kube.core.Pods(namespace).List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
@@ -521,7 +517,7 @@ func (kube *Kube) GetNameSpacePods(namespace string) (*kv1.PodList, error) {
 func (kube *Kube) GetReplicationControllers() (
 	*kv1.ReplicationControllerList, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replication controllers")
+	logger.Debug("retrieving list of replication controllers")
 	controllers, err := kube.core.ReplicationControllers("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
@@ -542,7 +538,7 @@ func (kube *Kube) GetReplicationControllers() (
 
 // GetDeployments get deployments
 func (kube *Kube) GetDeployments() (*appsV1.DeploymentList, error) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of deployments")
+	logger.Debug("retrieving list of deployments")
 	deployments, err := kube.apps.Deployments("").List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
 		return nil, karma.Format(
@@ -564,7 +560,7 @@ func (kube *Kube) GetDeployments() (*appsV1.DeploymentList, error) {
 func (kube *Kube) GetStatefulSets() (
 	*appsV1.StatefulSetList, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of stateful sets")
+	logger.Debug("retrieving list of stateful sets")
 	statefulSets, err := kube.apps.
 		StatefulSets("").
 		List(context.Background(), kmeta.ListOptions{})
@@ -588,7 +584,7 @@ func (kube *Kube) GetStatefulSets() (
 func (kube *Kube) GetDaemonSets() (
 	*appsV1.DaemonSetList, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of daemon sets")
+	logger.Debug("retrieving list of daemon sets")
 	daemonSets, err := kube.apps.
 		DaemonSets("").
 		List(context.Background(), kmeta.ListOptions{})
@@ -612,7 +608,7 @@ func (kube *Kube) GetDaemonSets() (
 func (kube *Kube) GetReplicaSets() (
 	*appsV1.ReplicaSetList, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
+	logger.Debug("retrieving list of replica sets")
 	replicaSets, err := kube.apps.
 		ReplicaSets("").
 		List(context.Background(), kmeta.ListOptions{})
@@ -636,7 +632,7 @@ func (kube *Kube) GetReplicaSets() (
 func (kube *Kube) GetNamespaceReplicaSets(namespace string) (
 	*appsV1.ReplicaSetList, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of replica sets")
+	logger.Debug("retrieving list of replica sets")
 	replicaSets, err := kube.apps.
 		ReplicaSets(namespace).
 		List(context.Background(), kmeta.ListOptions{})
@@ -660,7 +656,7 @@ func (kube *Kube) GetNamespaceReplicaSets(namespace string) (
 func (kube *Kube) GetCronJobs() (
 	*kbeta1.CronJobList, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
+	logger.Debug("retrieving list of cron jobs")
 	cronJobs, err := kube.batch.
 		CronJobs("").
 		List(context.Background(), kmeta.ListOptions{})
@@ -684,7 +680,7 @@ func (kube *Kube) GetCronJobs() (
 func (kube *Kube) GetCronJob(namespace, name string) (
 	*kbeta1.CronJob, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of cron jobs")
+	logger.Debug("retrieving list of cron jobs")
 	cronJob, err := kube.batch.
 		CronJobs(namespace).
 		Get(context.Background(), name, kmeta.GetOptions{})
@@ -708,7 +704,7 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 func (kube *Kube) GetLimitRanges() (
 	*kv1.LimitRangeList, error,
 ) {
-	kube.logger.Debugf(nil, "{kubernetes} retrieving list of limitRanges from all namespaces")
+	logger.Debug("retrieving list of limitRanges from all namespaces")
 	limitRanges, err := kube.core.LimitRanges("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
@@ -954,7 +950,7 @@ func (kube *Kube) GetServerMinorVersion() (int, error) {
 }
 
 func (kube *Kube) GetAgentPermissions() (string, error) {
-	kube.logger.Debugf(nil, "{kubernetes} getting agent permissions")
+	logger.Debug("getting agent permissions")
 	spec := authv1.SelfSubjectRulesReviewSpec{Namespace: "kube-system"}
 	status := authv1.SubjectRulesReviewStatus{Incomplete: false}
 	rulesSpec := authv1.SelfSubjectRulesReview{Spec: spec, Status: status}

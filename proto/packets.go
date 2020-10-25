@@ -15,7 +15,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
-	"github.com/kovetskiy/lorg"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -82,9 +81,8 @@ type PacketPong struct {
 }
 
 type PacketLogItem struct {
-	Level lorg.Level  `json:"level"`
-	Date  time.Time   `json:"date"`
-	Data  interface{} `json:"data"`
+	Date time.Time `json:"date"`
+	Data string    `json:"data"`
 }
 
 type PacketRegisterEntityItem struct {
@@ -292,6 +290,11 @@ type PacketDecisionPullResponse struct {
 
 type PacketRestart struct {
 	Status int `json:"status"`
+}
+
+// PacketLogLevel used to change current log level
+type PacketLogLevel struct {
+	Level string `json:"level"`
 }
 
 type EntityDeltaKind string

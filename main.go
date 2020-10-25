@@ -18,10 +18,10 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
-	"github.com/reconquest/karma-go"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -100,6 +100,8 @@ Options:
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file
                                               [default: trace.log]
+  --log-level <string>                       Log level
+                                              [default: info]
   -h --help                                  Show this help.
   --version                                  Show version.
 `
@@ -116,6 +118,26 @@ func getVersion() string {
 	}, "\n")
 }
 
+// SetLogLevel sets log level for the agent
+func SetLogLevel(c *client.Client, level string) bool {
+
+	ok := true
+	switch level {
+	case "info":
+		logger.ConfigWriterSync(logger.InfoLevel, c)
+	case "debug":
+		logger.ConfigWriterSync(logger.DebugLevel, c)
+	case "warn":
+		logger.ConfigWriterSync(logger.WarnLevel, c)
+	case "error":
+		logger.ConfigWriterSync(logger.ErrorLevel, c)
+	default:
+		ok = false
+	}
+	logger.WithGlobal("accountID", c.AccountID, "clusterID", c.ClusterID)
+	return ok
+}
+
 func main() {
 	startID = uuid.NewV4().String()
 	args, err := docopt.ParseArgs(usage, nil, getVersion())
@@ -123,31 +145,24 @@ func main() {
 		panic(err)
 	}
 
-	logger := log.New(
-		args["--debug"].(bool),
-		args["--trace"].(bool),
-		args["--trace-log"].(string),
+	var (
+		accountID = utils.ExpandEnvUUID(args, "--account-id")
+		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
 	)
-	// we need to disable default exit 1 for FATAL messages because we also
-	// need to send fatal messages on the remote server and send bye packet
-	// after fatal message (if we can), therefore all exits will be controlled
-	// manually
-	logger.SetExiter(func(int) {})
-	utils.SetLogger(logger)
 
-	logger.Infof(
-		karma.Describe("version", version).
-			Describe("args", fmt.Sprintf("%q", utils.GetSanitizedArgs())),
+	logger.Infow(
 		"magalix agent started.....",
+		"version", version,
+		"args", fmt.Sprintf("%q", utils.GetSanitizedArgs()),
 	)
 
 	secret, err := base64.StdEncoding.DecodeString(
 		utils.ExpandEnv(args, "--client-secret", false),
 	)
 	if err != nil {
-		logger.Fatalf(
-			err,
+		logger.Fatalw(
 			"unable to decode base64 secret specified as --client-secret flag",
+			"error", err,
 		)
 		os.Exit(1)
 	}
@@ -157,58 +172,59 @@ func main() {
 		Timeout: 20 * time.Second,
 	}
 
-	var (
-		accountID = utils.ExpandEnvUUID(args, "--account-id")
-		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
-	)
-
 	port := args["--port"].(string)
-	probes := NewProbesServer(":"+port, logger)
+	probes := NewProbesServer(":" + port)
 	go func() {
 		err = probes.Start()
 		if err != nil {
-			logger.Fatalf(err, "unable to start probes server")
+			logger.Fatalw("unable to start probes server", "error", err)
 			os.Exit(1)
 		}
 	}()
 
-	kRestConfig, err := getKRestConfig(logger, args)
+	kRestConfig, err := getKRestConfig(args)
 
-	kube, err := kuber.InitKubernetes(kRestConfig, logger)
+	kube, err := kuber.InitKubernetes(kRestConfig)
 	if err != nil {
-		logger.Fatalf(err, "unable to initialize Kubernetes")
+		logger.Fatalw("unable to initialize Kubernetes", "error", err)
 		os.Exit(1)
 	}
 
 	k8sServerVersion, err := kube.GetServerVersion()
 	if err != nil {
-		logger.Warningf(err, "failed to discover server version")
+		logger.Warnw("failed to discover server version", "error", err)
 	}
 
 	agentPermissions, err := kube.GetAgentPermissions()
 	if err != nil {
 		agentPermissions = err.Error()
-		logger.Warningf(err, "Failed to get agent permissions")
+		logger.Warnw("Failed to get agent permissions", "error", err)
 	}
 
 	connected := make(chan bool)
 	gwClient, err := client.InitClient(
-		args, version, startID, accountID, clusterID, secret, k8sServerVersion, agentPermissions, logger, connected,
+		args, version, startID, accountID, clusterID, secret, k8sServerVersion, agentPermissions, connected,
 	)
 
 	defer gwClient.WaitExit()
 	defer gwClient.Recover()
+	logger.Info("waiting for connection and authorization")
+	<-connected
+	logger.Info("Connected and authorized")
+	go gwClient.Sync()
+
+	if ok := SetLogLevel(gwClient, args["--log-level"].(string)); !ok {
+		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
+	}
+	defer logger.Sync()
 
 	if err != nil {
-		logger.Fatalf(err, "unable to connect to gateway")
+		logger.Fatalw("unable to connect to gateway")
 		os.Exit(1)
 	}
 
-	logger.Infof(nil, "Waiting for connection and authorization")
-	<-connected
-	logger.Infof(nil, "Connected and authorized")
 	probes.Authorized = true
-	initAgent(args, gwClient, kRestConfig, kube, logger, accountID, clusterID)
+	initAgent(args, gwClient, kRestConfig, kube, accountID, clusterID)
 }
 
 func initAgent(
@@ -216,11 +232,10 @@ func initAgent(
 	gwClient *client.Client,
 	kRestConfig *rest.Config,
 	kube *kuber.Kube,
-	logger *log.Logger,
 	accountID uuid.UUID,
 	clusterID uuid.UUID,
 ) {
-	logger.Infof(nil, "Initializing Agent")
+	logger.Info("Initializing Agent")
 	var (
 		metricsEnabled = !args["--disable-metrics"].(bool)
 		//scalarEnabled   = !args["--disable-scalar"].(bool)
@@ -237,7 +252,6 @@ func initAgent(
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
 	observer := kuber.NewObserver(
-		logger,
 		dynamicClient,
 		parentsStore,
 		make(chan struct{}, 0),
@@ -246,15 +260,15 @@ func initAgent(
 
 	err = observer.WaitForCacheSync()
 	if err != nil {
-		logger.Fatalf(err, "unable to start entities watcher")
+		logger.Fatalw("unable to start entities watcher", "error", err)
 	}
 
 	k8sMinorVersion, err := kube.GetServerMinorVersion()
 	if err != nil {
-		logger.Warningf(err, "failed to discover server minor version")
+		logger.Warnw("failed to discover server minor version", "error", err)
 	}
 
-	ew := entities.NewEntitiesWatcher(logger, observer, gwClient, k8sMinorVersion)
+	ew := entities.NewEntitiesWatcher(observer, gwClient, k8sMinorVersion)
 
 	ew.Start()
 
@@ -289,6 +303,21 @@ func initAgent(
 
 	})
 
+	gwClient.AddListener(proto.PacketKindLogLevel, func(in []byte) (out []byte, err error) {
+		var logLevel proto.PacketLogLevel
+		if err = proto.DecodeSnappy(in, &logLevel); err != nil {
+			logger.Error("Failed to decode log level packet")
+			return nil, err
+		}
+		if ok := SetLogLevel(gwClient, logLevel.Level); !ok {
+			msg := fmt.Sprintf("Got an unsupported log level: %s", logLevel.Level)
+			logger.Warnw(msg)
+			return nil, errors.New(msg)
+		}
+		return nil, nil
+
+	})
+
 	if metricsEnabled {
 		var nodesProvider metrics.NodesProvider
 		var entitiesProvider metrics.EntitiesProvider
@@ -304,32 +333,25 @@ func initAgent(
 			args,
 		)
 		if err != nil {
-			gwClient.Fatalf(err, "unable to initialize metrics sources")
+			logger.Fatalw("unable to initialize metrics sources", "error", err)
 			os.Exit(1)
 		}
 	}
 }
 
 func getKRestConfig(
-	logger *log.Logger,
 	args map[string]interface{},
 ) (config *rest.Config, err error) {
 	if args["--kube-incluster"].(bool) {
-		logger.Infof(nil, "initializing kubernetes incluster config")
+		logger.Info("initializing kubernetes incluster config")
 
 		config, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, karma.Format(
-				err,
-				"unable to get incluster config",
-			)
+			return nil, errors.Wrap(err, "unable to get incluster config")
 		}
 
 	} else {
-		logger.Infof(
-			nil,
-			"initializing kubernetes user-defined config",
-		)
+		logger.Info("initializing kubernetes user-defined config")
 
 		token, _ := args["--kube-token"].(string)
 		if token == "" {

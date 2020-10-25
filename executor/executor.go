@@ -10,7 +10,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/scanner"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 	kv1 "k8s.io/api/core/v1"
@@ -35,7 +35,6 @@ const (
 // Executor decision executor
 type Executor struct {
 	client         *client.Client
-	logger         *log.Logger
 	kube           *kuber.Kube
 	scanner        *scanner.Scanner
 	dryRun         bool
@@ -73,7 +72,6 @@ func NewExecutor(
 ) *Executor {
 	executor := &Executor{
 		client:  client,
-		logger:  client.Logger,
 		kube:    kube,
 		scanner: scanner,
 		dryRun:  dryRun,
@@ -95,7 +93,6 @@ func (executor *Executor) backoff(
 			Sleep:      sleep,
 			MaxRetries: maxRetries,
 		},
-		executor.logger,
 	)
 }
 
@@ -107,9 +104,9 @@ func (executor *Executor) startWorkers() {
 }
 
 func (executor *Executor) handleExecutionError(
-	ctx *karma.Context, decision *proto.PacketDecision, err error, containerId *uuid.UUID,
+	decision *proto.PacketDecision, err error, containerId *uuid.UUID,
 ) *proto.PacketDecisionFeedbackRequest {
-	executor.logger.Errorf(ctx.Reason(err), "unable to execute decision")
+	logger.Errorw("unable to execute decision", "error", err, "decisionId", decision.ID)
 
 	return &proto.PacketDecisionFeedbackRequest{
 		ID:          decision.ID,
@@ -120,10 +117,10 @@ func (executor *Executor) handleExecutionError(
 	}
 }
 func (executor *Executor) handleExecutionSkipping(
-	ctx *karma.Context, decision *proto.PacketDecision, msg string,
+	decision *proto.PacketDecision, msg string,
 ) *proto.PacketDecisionFeedbackRequest {
 
-	executor.logger.Infof(ctx, "skipping execution: %s", msg)
+	logger.Debugw("skipping decision execution", "msg", msg, "decisionId", decision.ID)
 
 	return &proto.PacketDecisionFeedbackRequest{
 		ID:        decision.ID,
@@ -185,9 +182,10 @@ func (executor *Executor) executorWorker() {
 		// TODO: execute decisions in batches
 		response, err := executor.execute(decision)
 		if err != nil {
-			executor.logger.Errorf(
-				err,
+			logger.Errorw(
 				"unable to execute decision",
+				"error", err,
+				"decisionId", decision.ID,
 			)
 		}
 
@@ -210,11 +208,6 @@ func (executor *Executor) execute(
 	decision *proto.PacketDecision,
 ) (*proto.PacketDecisionFeedbackRequest, error) {
 
-	ctx := karma.
-		Describe("decision-id", decision.ID).
-		Describe("service-id", decision.ServiceId).
-		Describe("container-id", decision.ContainerId)
-
 	namespace, name, kind, err := executor.getServiceDetails(decision.ServiceId)
 	if err != nil {
 		return &proto.PacketDecisionFeedbackRequest{
@@ -228,9 +221,13 @@ func (executor *Executor) execute(
 			)
 	}
 
-	ctx = ctx.Describe("namespace", namespace).
-		Describe("service-name", name).
-		Describe("kind", kind)
+	lg := logger.With(
+		"decision-id", decision.ID,
+		"service-id", decision.ServiceId,
+		"container-id", decision.ContainerId,
+		"service-name", name,
+		"kind", kind,
+	)
 
 	container, err := executor.getContainerDetails(decision.ContainerId)
 	if err != nil {
@@ -272,19 +269,16 @@ func (executor *Executor) execute(
 	}
 
 	trace, _ := json.Marshal(totalResources)
-	executor.logger.Infof(
-		ctx.
-			Describe("ClusterID", executor.client.ClusterID).
-			Describe("AccountID", executor.client.AccountID).
-			Describe("dry run", executor.dryRun).
-			Describe("cpu unit", "milliCore").
-			Describe("memory unit", "mibiByte").
-			Describe("trace", string(trace)),
+	lg.Debugw(
 		"executing decision",
+		"dry run", executor.dryRun,
+		"cpu unit", "milliCore",
+		"memory unit", "mibiByte",
+		"trace", string(trace),
 	)
 
 	if executor.dryRun {
-		response := executor.handleExecutionSkipping(ctx, decision, "dry run enabled")
+		response := executor.handleExecutionSkipping(decision, "dry run enabled")
 		return response, nil
 	} else {
 		skipped, err := executor.kube.SetResources(kind, name, namespace, totalResources)
@@ -292,9 +286,9 @@ func (executor *Executor) execute(
 			// TODO: do we need to retry execution before fail?
 			var response *proto.PacketDecisionFeedbackRequest
 			if skipped {
-				response = executor.handleExecutionSkipping(ctx, decision, err.Error())
+				response = executor.handleExecutionSkipping(decision, err.Error())
 			} else {
-				response = executor.handleExecutionError(ctx, decision, err, nil)
+				response = executor.handleExecutionError(decision, err, nil)
 			}
 			return response, nil
 		}
@@ -319,7 +313,7 @@ func (executor *Executor) execute(
 
 			// handle if requests and limits is null in rollback DEV-2056"
 			if container.Resources.Limits != nil {
-				if container.Resources.Limits.Cpu() != nil && cpuLimit != 0{
+				if container.Resources.Limits.Cpu() != nil && cpuLimit != 0 {
 					*totalResources.Containers[0].Limits.CPU = cpuLimit
 				}
 				if container.Resources.Limits.Memory() != nil && memoryLimit != 0 {
@@ -331,7 +325,7 @@ func (executor *Executor) execute(
 				if container.Resources.Requests.Cpu() != nil && cpuRequest != 0 {
 					*totalResources.Containers[0].Requests.CPU = cpuRequest
 				}
-				if container.Resources.Requests.Memory() != nil &&  memoryRequest != 0 {
+				if container.Resources.Requests.Memory() != nil && memoryRequest != 0 {
 					*totalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
 				}
 			}
@@ -340,11 +334,11 @@ func (executor *Executor) execute(
 			_, err := executor.kube.SetResources(kind, name, namespace, totalResources)
 
 			if err != nil {
-				executor.logger.Warning(ctx, "can't rollback decision")
+				lg.Warn("can't rollback decision")
 			}
 		}
 
-		executor.logger.Infof(ctx, msg)
+		lg.Debug(msg)
 
 		return &proto.PacketDecisionFeedbackRequest{
 			ID:          decision.ID,

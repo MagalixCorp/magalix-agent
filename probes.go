@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/MagalixTechnologies/log-go"
 	"net/http"
+
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 const (
@@ -12,15 +13,13 @@ const (
 
 type ProbesServer struct {
 	address string
-	logger  *log.Logger
 
 	Authorized bool
 }
 
-func NewProbesServer(address string, logger *log.Logger) *ProbesServer {
+func NewProbesServer(address string) *ProbesServer {
 	return &ProbesServer{
 		address:    address,
-		logger:     logger,
 		Authorized: false,
 	}
 }
@@ -29,9 +28,9 @@ func (p *ProbesServer) Start() error {
 	http.HandleFunc(liveness, p.livenessProbeHandler)
 	http.HandleFunc(readiness, p.readinessProbeHandler)
 
-	p.logger.Infof(nil, "Starting server at address %s. Liveness probe is %s, Readiness probe is %s", p.address, liveness, readiness)
+	logger.Infow("Starting server....", "address", p.address)
 	defer func() {
-		p.logger.Info("Probes server started")
+		logger.Info("Probes server started")
 	}()
 
 	return http.ListenAndServe(p.address, nil)

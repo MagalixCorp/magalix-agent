@@ -10,9 +10,8 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/channel"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
-	"github.com/reconquest/karma-go"
 	"github.com/reconquest/sign-go"
 )
 
@@ -32,11 +31,8 @@ type timeouts struct {
 }
 
 // Client agent gateway client
+// Client agent gateway client
 type Client struct {
-	*log.Logger
-
-	parentLogger *log.Logger
-
 	address          string
 	version          string
 	startID          string
@@ -46,13 +42,12 @@ type Client struct {
 	ServerVersion    string
 	AgentPermissions string
 
-	channel *channel.Client
-
+	channel    *channel.Client
 	connected  bool
 	authorized bool
 
 	shouldSendLogs  bool
-	logsQueue       chan proto.PacketLogItem
+	logBuffer       proto.PacketLogs
 	logsQueueWorker *sync.WaitGroup
 
 	exit chan int
@@ -80,7 +75,6 @@ func newClient(
 	serverVersion string,
 	agentPermissions string,
 	timeouts timeouts,
-	parentLogger *log.Logger,
 	shouldSendLogs bool,
 ) *Client {
 	gwUrl, err := url.Parse(address)
@@ -95,8 +89,6 @@ func newClient(
 	address = gwUrl.String()
 
 	client := &Client{
-		parentLogger: parentLogger,
-
 		address:          address,
 		version:          version,
 		startID:          startID,
@@ -106,25 +98,22 @@ func newClient(
 		ServerVersion:    serverVersion,
 		shouldSendLogs:   shouldSendLogs,
 		AgentPermissions: agentPermissions,
-
 		channel: channel.NewClient(*gwUrl, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
 			ProtoWrite:     timeouts.protoWrite,
 			ProtoRead:      timeouts.protoRead,
 			ProtoReconnect: timeouts.protoReconnect,
 		}),
-		exit: make(chan int, 1),
-
-		blocked:  sync.Map{},
-		blockedM: sync.Mutex{},
+		exit:      make(chan int, 1),
+		logBuffer: make(proto.PacketLogs, 0, 10),
+		blocked:   sync.Map{},
+		blockedM:  sync.Mutex{},
 
 		timeouts: timeouts,
 	}
 
-	client.pipe = NewPipe(client, client.parentLogger)
-	client.pipeStatus = NewPipe(client, client.parentLogger)
-
-	client.initLogger()
+	client.pipe = NewPipe(client)
+	client.pipeStatus = NewPipe(client)
 
 	return client
 }
@@ -172,22 +161,12 @@ func (client *Client) WithBackoffLimit(fn func() error, limit int) error {
 		// 300ms -> 600ms -> [...] -> 3000ms -> 300ms
 		timeout := client.timeouts.protoBackoff * time.Duration(try%10+1)
 
-		client.Errorf(
-			karma.Describe("retry", try).Reason(err),
-			"unhandled error occurred, retrying after %s",
-			timeout,
-		)
-
 		if try+1 < limit {
 			time.Sleep(timeout)
 		}
 	}
 	if err != nil {
-		client.Errorf(
-			karma.Describe("limit", limit).Reason(err),
-			"unhandled error occurred, retires limit %v is exceeded",
-			limit,
-		)
+		logger.Errorw("unhandled error occurred, retries limit is exceeded", "limit", limit, "error", err)
 	}
 	return err
 }
@@ -210,6 +189,7 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 			return err
 		}
 	}
+
 	res, err := client.channel.Send(kind.String(), req)
 	if err != nil {
 		return err
@@ -231,8 +211,9 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 
 // Send sends a packet to the agent-gateway if there is an established connection it internally uses client.send
 func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
-	client.parentLogger.Debugf(karma.Describe("kind", kind), "sending package")
-	defer client.parentLogger.Debugf(karma.Describe("kind", kind), "package sent")
+	logger.Debugw("sending package", "kind", kind)
+
+	defer logger.Debugw("package sent", "kind", kind)
 	client.WaitForConnection(time.Minute)
 	return client.send(kind, in, out)
 }
@@ -245,7 +226,7 @@ func (client *Client) PipeStatus(pack Package) {
 	}
 	i := client.pipeStatus.Send(pack)
 	if i > 0 {
-		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
+		logger.Errorw("discarded packets to agent-gateway", "#packets", i)
 	}
 }
 
@@ -254,10 +235,11 @@ func (client *Client) Pipe(pack Package) {
 	if client.pipe == nil {
 		panic("client pipe not defined")
 	}
-	i := client.pipe.Send(pack)
-	if i > 0 {
-		client.Logger.Errorf(nil, "discarded %d packets to agent-gateway", i)
-	}
+	client.pipe.Send(pack)
+	// i := client.pipe.Send(pack)  Uncomment after piping logs logic is implemented/revisited
+	// if i > 0 {
+	// 	logger.Errorw("discarded packets to agent-gateway", "#packets", i)
+	// }
 }
 
 // AddListener adds a listener for a specific packet kind
@@ -276,7 +258,6 @@ func InitClient(
 	secret []byte,
 	serverVersion string,
 	agentPermissions string,
-	parentLogger *log.Logger,
 	connected chan bool,
 ) (*Client, error) {
 	client := newClient(
@@ -288,7 +269,6 @@ func InitClient(
 			protoReconnect: utils.MustParseDuration(args, "--timeout-proto-reconnect"),
 			protoBackoff:   utils.MustParseDuration(args, "--timeout-proto-backoff"),
 		},
-		parentLogger,
 		!args["--no-send-logs"].(bool),
 	)
 	go sign.Notify(func(os.Signal) bool {
@@ -296,11 +276,11 @@ func InitClient(
 			return true
 		}
 
-		client.Infof(nil, "got SIGHUP signal, sending ping-pong")
+		logger.Info("got SIGHUP signal and not connected, pinging the agent gateway")
 		client.WithBackoff(func() error {
 			err := client.ping()
 			if err != nil {
-				client.Errorf(err, "unable to send ping-pong request to gateway")
+				logger.Errorw("unable to send ping-pong request to gateway", "error", err)
 				return err
 			}
 

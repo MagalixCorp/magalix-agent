@@ -14,7 +14,7 @@ type Ticker struct {
 	mutex *sync.Mutex
 
 	waitChannels map[int64][]chan struct{}
-	lastTick time.Time
+	lastTick     time.Time
 }
 
 func NewTicker(name string, interval time.Duration, fn func(time.Time)) *Ticker {
@@ -23,7 +23,7 @@ func NewTicker(name string, interval time.Duration, fn func(time.Time)) *Ticker 
 		interval: interval,
 		fn:       fn,
 
-		mutex: &sync.Mutex{},
+		mutex:        &sync.Mutex{},
 		waitChannels: map[int64][]chan struct{}{},
 	}
 }
@@ -38,7 +38,6 @@ func (ticker *Ticker) nextTick() <-chan time.Time {
 	//	stderr.Infof(nil, "{%s ticker} next tick after %v", ticker.name, next)
 	//	return time.After(next)
 	//}
-	stderr.Infof(nil, "{%s ticker} next tick after interval %v at %v", ticker.name, interval, time.Now().Add(interval))
 	return time.After(interval)
 }
 

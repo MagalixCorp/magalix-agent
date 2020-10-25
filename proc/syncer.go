@@ -4,6 +4,8 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 // Syncer keeps track of synced entities
@@ -83,14 +85,8 @@ func (syncer *Syncer) syncResource(resource string, version string) {
 func (syncer *Syncer) sync() {
 	syncer.mutex.Lock()
 	ready := true
-	for resource, value := range syncer.synced {
+	for _, value := range syncer.synced {
 		if !value {
-			tracef(
-				nil,
-				"resource %s is not synced yet",
-				resource,
-			)
-
 			ready = false
 			break
 		}
@@ -108,7 +104,7 @@ func (syncer *Syncer) sync() {
 	// TODO: remove
 
 	if *syncer.lockedResources > 0 {
-		logger.Errorf(nil, "possible leak, there are %d resources that are still locked after sync", syncer.lockedResources)
+		logger.Errorf("possible leak, there are %d resources that are still locked after sync", syncer.lockedResources)
 	}
 	// for _, mutex := range syncer.locks {
 	// 	mutex.Unlock()
@@ -122,8 +118,6 @@ func (syncer *Syncer) sync() {
 func (syncer *Syncer) setSynced(resource string) {
 	syncer.mutex.Lock()
 	defer syncer.mutex.Unlock()
-
-	tracef(nil, "resource %s synced", resource)
 
 	syncer.synced[resource] = true
 }
@@ -174,7 +168,6 @@ func (syncer *Syncer) addProcessed(resource string, version string) {
 		syncer.processed[resource] = []string{}
 	}
 
-	tracef(nil, "syncer: processed %s %s", resource, version)
 	// cover the last 10 mins as watcher loop every 100 miliseconds  ->  see Observer.watch
 	l := int(math.Max(float64(len(syncer.processed[resource])-6000), 0))
 	syncer.processed[resource] = append(syncer.processed[resource][l:], version)
@@ -213,8 +206,6 @@ func (syncer *Syncer) InformResource(resource string, version string) {
 func (syncer *Syncer) setVersion(resource, version string) {
 	syncer.mutex.Lock()
 	defer syncer.mutex.Unlock()
-
-	tracef(nil, "syncer: resource %s informed about %s", resource, version)
 
 	syncer.versions[resource] = version
 }
