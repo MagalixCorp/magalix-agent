@@ -810,35 +810,32 @@ func (kube *Kube) SetResources(
 	for i := range totalResources.Containers {
 
 		container := totalResources.Containers[i]
-		resources := map[string]map[string]interface{}{}
+		resources := map[string]map[string]interface{}{
+			"limits": {
+				"memory": nil,
+				"cpu": nil,
+			},
+			"requests": {
+				"memory": nil,
+				"cpu": nil,
+			},
+		}
 
 		if container.Limits.Memory != nil {
 			memoryLimits := fmt.Sprintf("%dMi", *container.Limits.Memory)
-			if _, ok := resources["limits"]; !ok {
-				resources["limits"] = map[string]interface{}{}
-			}
 			resources["limits"]["memory"] = memoryLimits
 		}
 		if container.Limits.CPU != nil {
 			cpuLimits := float64(*container.Limits.CPU) / milliCore
-			if _, ok := resources["limits"]; !ok {
-				resources["limits"] = map[string]interface{}{}
-			}
 			resources["limits"]["cpu"] = cpuLimits
 		}
 
 		if container.Requests.Memory != nil {
 			memoryRequests := fmt.Sprintf("%dMi", *container.Requests.Memory)
-			if _, ok := resources["requests"]; !ok {
-				resources["requests"] = map[string]interface{}{}
-			}
 			resources["requests"]["memory"] = memoryRequests
 		}
 		if container.Requests.CPU != nil {
 			cpuRequests := float64(*container.Requests.CPU) / milliCore
-			if _, ok := resources["requests"]; !ok {
-				resources["requests"] = map[string]interface{}{}
-			}
 			resources["requests"]["cpu"] = cpuRequests
 		}
 

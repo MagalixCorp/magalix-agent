@@ -414,7 +414,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 	logger.Info("Start processing containers and pods")
 	for _, pod := range pods {
-		controllerName, controllerKind, err := entitiesProvider.FindController(pod.Namespace, pod.Name)
+		controllerName, controllerKind, err := entitiesProvider.FindPodController(pod.Namespace, pod.Name)
 		if err != nil {
 			logger.Errorw("unable to find pod controller",
 				"pod_name", pod.Name,
@@ -557,7 +557,7 @@ func (kubelet *Kubelet) GetMetrics(
 			throttleMetrics := make(map[string]*Metric)
 
 			for _, pod := range summary.Pods {
-				controllerName, controllerKind, err := entitiesProvider.FindController(
+				controllerName, controllerKind, err := entitiesProvider.FindPodController(
 					pod.PodRef.Namespace, pod.PodRef.Name,
 				)
 				namespaceName := pod.PodRef.Namespace
@@ -750,7 +750,7 @@ func (kubelet *Kubelet) GetMetrics(
 				for _, val := range cadvisor[metric.Ref] {
 					namespaceName, podName, containerName, value, ok := getCAdvisorContainerValue(val)
 					if ok {
-						controllerName, controllerKind, err := entitiesProvider.FindController(namespaceName, podName)
+						controllerName, controllerKind, err := entitiesProvider.FindPodController(namespaceName, podName)
 						if err != nil {
 							logger.Errorw(
 								"unable to find controller for pod",

@@ -152,7 +152,73 @@ func (observer *Observer) GetPods() ([]corev1.Pod, error) {
 	return pods, nil
 }
 
-func (observer *Observer) FindController(namespaceName string, podName string) (string, string, error) {
+func (observer *Observer) FindController(
+	namespaceName string,
+	controllerKind string,
+	controllerName string,
+) (*unstructured.Unstructured, error) {
+	ctx := karma.Describe("namespace-name", namespaceName).
+		Describe("controller-kind", controllerKind).
+		Describe("controller-name", controllerName)
+
+	gvrk, err := KindToGvrk(controllerKind)
+	if err != nil {
+		return nil, karma.Format(ctx.Reason(err), "unable to get GVRK")
+	}
+	watcher, err := observer.WatchAndWaitForSync(*gvrk)
+	if err != nil {
+		return nil, err
+	}
+
+	controller, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(controllerName)
+	if err != nil {
+		return nil, karma.Format(ctx.Reason(err), "unable to find controller")
+	}
+
+	return controller.(*unstructured.Unstructured), err
+}
+
+func (observer *Observer) FindContainer(
+	namespaceName string,
+	controllerKind string,
+	controllerName string,
+	containerName string,
+) (*corev1.Container, error) {
+	ctx := karma.Describe("namespace-name", namespaceName).
+		Describe("controller-kind", controllerKind).
+		Describe("controller-name", controllerName).
+		Describe("container-name", containerName)
+
+	controller, err := observer.FindController(namespaceName, controllerKind, controllerName)
+	if err != nil {
+		return nil, karma.Format(ctx.Reason(err), "unable to find controller")
+	}
+
+	containersList, found, err := unstructured.NestedSlice(controller.Object, "spec", "template", "spec", "containers")
+	if err != nil {
+		return nil, karma.Format(ctx.Reason(err), "unable to find container")
+	}
+
+	if !found {
+		return nil, karma.Format(ctx.Reason(fmt.Errorf("unable to find containers spec")), "unable to find container")
+	}
+
+	for _, c := range containersList {
+		var container corev1.Container
+		err := utils.Transcode(c, &container)
+		if err != nil {
+			return nil, karma.Format(ctx.Reason(fmt.Errorf("unable to transcode unstructured to container")), "unable to find container")
+		}
+
+		if container.Name == containerName {
+			return &container, nil
+		}
+	}
+
+	return nil, karma.Format(nil, "unable to find container")
+}
+
+func (observer *Observer) FindPodController(namespaceName string, podName string) (string, string, error) {
 	lg := logger.With("pod", podName, "namespace", namespaceName)
 
 	watcher, err := observer.WatchAndWaitForSync(Pods)
