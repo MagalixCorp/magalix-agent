@@ -1,68 +1,58 @@
 package executor
 
 import (
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	kv1 "k8s.io/api/core/v1"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixTechnologies/core/logger"
+
+	kv1 "k8s.io/api/core/v1"
 )
 
-func (executor *Executor) podsStatusHandler(entity_name string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result proto.AutomationStatus, msg string, targetPods int32, runningPods int32) {
-
+func (executor *Executor) podsStatusHandler(entityName string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result proto.AutomationStatus, msg string, targetPods int32, runningPods int32) {
 	// short pooling to trigger pod status with max 15 minutes
 	msg = "pods restarting exceeded timout (15 min)"
 	start := time.Now()
 
-	entityName := ""
+	objectName := ""
 	result = proto.AutomationFailed
 	targetPods = 0
 	runningPods = 0
+	var err error = nil
 	flag := false
 
 	if strings.ToLower(kind) == "deployment" {
-
-		eName, pods, err := executor.deployemntsHandler(entity_name, namespace)
-		entityName = eName
-		targetPods = pods
-
+		objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
 		if err != nil {
 			flag = true
 
 		}
 
 	} else if strings.ToLower(kind) == "statefulset" {
-
-		eName, pods, err := executor.statefulsetsHandler(entity_name, namespace)
-		entityName = eName
-		targetPods = pods
-
+		objectName, targetPods, err = executor.statefulsetsHandler(entityName, namespace)
 		if err != nil {
 			flag = true
 
 		}
 
 	} else if strings.ToLower(kind) == "daemonset" {
-
-		eName, pods, err := executor.daemonsetsHandler(entity_name, namespace)
-		entityName = eName
-		targetPods = pods
-
+		objectName, targetPods, err = executor.daemonsetsHandler(entityName, namespace)
 		if err != nil {
 			flag = true
 
 		}
 
 	} else if strings.ToLower(kind) == "job" || strings.ToLower(kind) == "cronjob" {
-
-		job, err := executor.kube.GetCronJob(namespace, entity_name)
+		job, err := executor.kube.GetCronJob(namespace, entityName)
 
 		if err != nil {
 			flag = true
 
 		} else {
 			// get the new job
-			entityName = job.Name
+			objectName = job.Name
 			targetPods = 1
 
 		}
@@ -90,8 +80,8 @@ func (executor *Executor) podsStatusHandler(entity_name string, namespace string
 			// TODO update the execution flow to check pods status across controllers
 			for _, pod := range pods.Items {
 				//handle the bug of naming convention for pods in kubernetes DEV-2046
-				if strings.Contains(pod.GenerateName, entityName) {
-					executor.logger.Info(pod.Name, ", status: ", pod.Status.Phase)
+				if strings.Contains(pod.GenerateName, objectName) {
+					logger.Debugw("get pod status", "pod", pod.Name, "status", pod.Status.Phase)
 					status = pod.Status.Phase
 					if status == kv1.PodRunning {
 						runningPods++
@@ -112,8 +102,7 @@ func (executor *Executor) podsStatusHandler(entity_name string, namespace string
 	return result, msg, targetPods, runningPods
 }
 
-func (executor *Executor) deployemntsHandler(entityName string, namespace string) (deploymentName string, targetPods int32, err error) {
-
+func (executor *Executor) deploymentsHandler(entityName string, namespace string) (deploymentName string, targetPods int32, err error) {
 	replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
 
 	if err != nil {
@@ -140,7 +129,6 @@ func (executor *Executor) deployemntsHandler(entityName string, namespace string
 }
 
 func (executor *Executor) statefulsetsHandler(entityName string, namespace string) (statefulsetName string, targetPods int32, err error) {
-
 	statefulset, err := executor.kube.GetStatefulSet(namespace, entityName)
 
 	if err != nil {

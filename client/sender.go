@@ -5,7 +5,8 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/channel"
-	"github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
+	"github.com/pkg/errors"
 )
 
 // hello Sends hello package
@@ -26,13 +27,11 @@ func (client *Client) hello() error {
 		return err
 	}
 
-	client.Infof(
-		karma.
-			Describe("client/protocol/major", ProtocolMajorVersion).
-			Describe("client/protocol/minor", ProtocolMinorVersion).
-			Describe("server/protocol/major", hello.Major).
-			Describe("server/protocol/minor", hello.Minor),
-		"hello phase has been finished",
+	logger.Infow("hello phase has been finished",
+		"client/protocol/major", ProtocolMajorVersion,
+		"client/protocol/minor", ProtocolMinorVersion,
+		"server/protocol/major", hello.Major,
+		"server/protocol/minor", hello.Minor,
 	)
 
 	return nil
@@ -50,13 +49,12 @@ func (client *Client) authorize() error {
 	}
 
 	if len(question.Token) < 1024 {
-		return karma.
-			Describe("token_length", len(question.Token)).
-			Describe("token", string(question.Token)).
-			Format(
-				err,
-				"server asks authorization/answer with unsecured token",
-			)
+		return errors.Wrapf(
+			err,
+			"server asks authorization/answer with unsecured token; token length: %d, token: %s",
+			len(question.Token),
+			string(question.Token),
+		)
 	}
 
 	token, err := client.getAuthorizationToken(question.Token)
@@ -77,16 +75,13 @@ func (client *Client) authorize() error {
 		return err
 	}
 
-	client.Infof(
-		nil,
-		"client %s has been authorized in cluster %s",
-		client.AccountID,
-		client.ClusterID,
+	logger.Infow(
+		"client is authorized",
+		"accountID", client.AccountID,
+		"clusterID", client.ClusterID,
 	)
-	client.Infof(nil, "authorization stage has been finished")
 
 	return nil
-
 }
 
 // ping pings the client
@@ -103,11 +98,11 @@ func (client *Client) ping() error {
 
 	now := time.Now().UTC()
 
-	context := karma.
-		Describe("latency/client-server", pong.Started.Sub(started).String()).
-		Describe("latency/server-client", now.Sub(pong.Started).String())
-
-	client.Infof(context, "ping-pong has been finished")
+	logger.Infow(
+		"ping-pong has been finished",
+		"latency/client-server", pong.Started.Sub(started).String(),
+		"latency/server-client", now.Sub(pong.Started).String(),
+	)
 
 	return nil
 }

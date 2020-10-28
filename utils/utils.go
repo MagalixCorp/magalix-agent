@@ -9,17 +9,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 	"github.com/ryanuber/go-glob"
 )
-
-var stderr *log.Logger
-
-func SetLogger(logger *log.Logger) {
-	stderr = logger
-}
 
 func ExpandEnv(
 	args map[string]interface{},
@@ -39,7 +33,7 @@ func ExpandEnv(
 			return ""
 		}
 
-		stderr.Fatalf(nil, "no flag value %s specified", flag)
+		logger.Fatalw("no flag value specified", "flag", flag)
 		os.Exit(1)
 	}
 
@@ -49,10 +43,10 @@ func ExpandEnv(
 
 	value := os.Getenv(key[1:])
 	if len(value) == 0 {
-		stderr.Fatalf(
-			nil,
-			"no such environment variable: %s (specified as %s flag)",
-			key, flag,
+		logger.Fatalf(
+			"no such environment variable", "no such environment variable: %s (specified as %s flag)",
+			key,
+			flag,
 		)
 		os.Exit(1)
 	}
@@ -73,14 +67,15 @@ func ExpandEnvUUID(
 
 	key, ok := args[flag].(string)
 	if !ok || len(key) == 0 {
-		stderr.Fatalf(nil, "no flag value %s specified", flag)
+		logger.Fatalw("no flag value specified", "flag", flag)
+
 		os.Exit(1)
 	}
 
 	if key[0] != '$' {
 		id, err := uuid.FromString(key)
 		if err != nil {
-			stderr.Fatalf(err, "invalid UUID specified as %s flag", flag)
+			logger.Fatalf("invalid UUID specified as %s flag", flag)
 			os.Exit(1)
 		}
 
@@ -89,21 +84,21 @@ func ExpandEnvUUID(
 
 	value := os.Getenv(key[1:])
 	if len(value) == 0 {
-		stderr.Fatalf(
-			nil,
+		logger.Fatalf(
 			"no such environment variable: %s (specified as %s flag)",
-			key, flag,
+			key,
+			flag,
 		)
 		os.Exit(1)
 	}
 
 	id, err := uuid.FromString(value)
 	if err != nil {
-		stderr.Fatalf(
-			err,
-			"invalid UUID specified as %s environment variable (obtained using %s flag)",
-			key,
-			flag,
+		logger.Fatalw(
+			"invalid UUID specified",
+			"envar", key,
+			"flag", flag,
+			"error", err,
 		)
 		os.Exit(1)
 	}
@@ -121,7 +116,7 @@ func MustParseDuration(args map[string]interface{}, flag string) time.Duration {
 
 	duration, err := time.ParseDuration(args[flag].(string))
 	if err != nil {
-		stderr.Fatalf(err, "unable to parse %s value as duration", flag)
+		logger.Fatalw("unable to parse value as duration", "flag", flag, "error", err)
 		os.Exit(1)
 	}
 
@@ -138,7 +133,8 @@ func MustParseInt(args map[string]interface{}, flag string) int {
 
 	number, err := strconv.Atoi(args[flag].(string))
 	if err != nil {
-		stderr.Fatalf(err, "unable to parse %s value as integer", flag)
+		logger.Fatalw("unable to parse value as integer", "flag", flag, "error", err)
+
 		os.Exit(1)
 	}
 
@@ -213,14 +209,14 @@ func Throttle(
 
 	nextTick := getNextTick()
 
-	stderr.Info("{%s throttler} next tick at %s", name, nextTick.Format(time.RFC3339))
+	logger.Info("{%s throttler} next tick at %s", name, nextTick.Format(time.RFC3339))
 
 	var tickFires int32 = 0
 
 	return func(args ...interface{}) {
 		now := time.Now()
 		if now.After(nextTick) || now.Equal(nextTick) {
-			stderr.Infof(nil, "{%s throttler} ticking", name)
+			logger.Debugw("throttler ticking", "throttler", name)
 			fn(args...)
 
 			atomic.AddInt32(&tickFires, 1)
@@ -228,14 +224,9 @@ func Throttle(
 				atomic.StoreInt32(&tickFires, 0)
 				nextTick = getNextTick()
 			}
-
-			stderr.Infof(nil,
-				"{%s throttler} next tick at %s",
-				name,
-				nextTick.Format(time.RFC3339),
-			)
+			logger.Debugw("throttler next tick", "throttler", name, "duration", nextTick.Format(time.RFC3339))
 		} else {
-			stderr.Infof(nil, "{%s throttler} throttled", name)
+			logger.Debugw("throttled", "throttler", name)
 		}
 	}
 }

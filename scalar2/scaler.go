@@ -4,19 +4,16 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixTechnologies/log-go"
 )
 
 func InitScalars(
-	logger *log.Logger,
 	kube *kuber.Kube,
 	observer_ *kuber.Observer,
 	dryRun bool,
 ) {
 
-	sl := NewScannerListener(logger, observer_)
+	sl := NewScannerListener(observer_)
 	oomKilledProcessor := NewOOMKillsProcessor(
-		logger,
 		kube,
 		observer_,
 		time.Second,

@@ -1,12 +1,14 @@
 package metrics
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/karma-go"
 )
@@ -104,15 +106,15 @@ func watchMetrics(
 	defer close(metricsPipe)
 
 	ticker := utils.NewTicker("metrics", interval, func(tickTime time.Time) {
-		client.Info("Retrieving metrics")
+		logger.Info("Retrieving metrics")
 		metrics, err := source.GetMetrics(entitiesProvider, tickTime)
 
 		if err != nil {
-			client.Errorf(err, "unable to retrieve metrics from sink")
+			logger.Errorw("unable to retrieve metrics from sink", "error", err)
 		}
 
 		if len(metrics) > 0 {
-			client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "finished retrieving metrics")
+			logger.Infow("finished retrieving metrics", "timestamp", metrics[0].Timestamp)
 
 			for i := 0; i < len(metrics); i += limit {
 				metricsPipe <- metrics[i:min(i+limit, len(metrics))]
@@ -136,9 +138,9 @@ func sendMetrics(client *client.Client, pipe chan []*Metric) {
 	go func() {
 		for metrics := range queue {
 			if len(metrics) > 0 {
-				client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "sending metrics")
+				logger.Debugw("sending metrics", "timestamp", metrics[0].Timestamp)
 				sendMetricsBatch(client, metrics)
-				client.Infof(karma.Describe("timestamp", metrics[0].Timestamp), "metrics sent")
+				logger.Infow(fmt.Sprintf("%d metrics sent", len(metrics)), "timestamp", metrics[0].Timestamp)
 			}
 		}
 	}()
@@ -209,7 +211,7 @@ func InitMetrics(
 		failOnError = true
 	}
 
-	kubeletClient, err := NewKubeletClient(client.Logger, nodesProvider, kube, args)
+	kubeletClient, err := NewKubeletClient(nodesProvider, kube, args)
 	if err != nil {
 		foundErrors = append(foundErrors, err)
 		failOnError = true
@@ -218,11 +220,8 @@ func InitMetrics(
 	for _, metricsSource := range metricsSourcesNames {
 		switch metricsSource {
 		case "kubelet":
-			client.Info("using kubelet as metrics source")
-
 			kubelet, err := NewKubelet(
 				kubeletClient,
-				client.Logger,
 				metricsInterval,
 				kubeletTimeouts{
 					backoff: backOff{

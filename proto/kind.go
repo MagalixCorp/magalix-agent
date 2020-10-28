@@ -23,6 +23,8 @@ const (
 	PacketKindRestart PacketKind = "restart"
 
 	PacketKindRawStoreRequest PacketKind = "raw/store"
+
+	PacketKindLogLevel PacketKind = "loglevel"
 )
 
 const (

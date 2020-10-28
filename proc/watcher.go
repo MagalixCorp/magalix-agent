@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
 	"github.com/reconquest/karma-go"
@@ -86,9 +87,9 @@ func (observer *Observer) Start() {
 	kutilruntime.ErrorHandlers = append(
 		kutilruntime.ErrorHandlers,
 		func(err error) {
-			errorf(
-				err,
-				"{kubernetes} handled unhandlable kubernetes/util/runtime error",
+			logger.Errorw(
+				"handled unhandlable kubernetes/util/runtime error",
+				"error", err,
 			)
 
 			mutex.Lock()
@@ -149,7 +150,7 @@ func (observer *Observer) watchPods(
 		func(obj interface{}) {
 			err := observer.handlePod(obj.(*kapi.Pod))
 			if err != nil {
-				errorf(err, "{kubernetes} unable to handle pod")
+				logger.Errorw("unable to handle pod", "error", err)
 
 				observer.health.Alert(
 					karma.Format(
@@ -174,7 +175,7 @@ func (observer *Observer) watchReplicationControllers(
 	stopCh chan struct{},
 ) {
 
-	infof(nil, "{kubernetes} starting observer of replicationControllers")
+	logger.Info("starting observer of replicationControllers")
 
 	observer.watch(
 		watchers,
@@ -188,7 +189,7 @@ func (observer *Observer) watchReplicationControllers(
 				obj.(*kapi.ReplicationController),
 			)
 			if err != nil {
-				errorf(err, "{kubernetes} unable to handle replication controller")
+				logger.Errorw("unable to handle replication controller", "error", err)
 
 				observer.health.Alert(
 					karma.Format(
@@ -213,7 +214,7 @@ func (observer *Observer) watchDeployments(
 	client rest.Interface,
 	stopCh chan struct{},
 ) {
-	infof(nil, "{kubernetes} starting observer of deployments")
+	logger.Info("starting observer of deployments")
 	if client.APIVersion().Version == "v1" {
 		observer.watch(
 			watchers,
@@ -227,7 +228,7 @@ func (observer *Observer) watchDeployments(
 					obj.(*kv1.Deployment),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle deployment")
+					logger.Errorw("unable to handle deployment", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -258,7 +259,7 @@ func (observer *Observer) watchDeployments(
 					obj.(*kv1.Deployment),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle deployment")
+					logger.Errorw("unable to handle deployment", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -285,7 +286,7 @@ func (observer *Observer) watchStatefulSets(
 	stopCh chan struct{},
 ) {
 
-	infof(nil, "{kubernetes} starting observer of statefulSets")
+	logger.Info("starting observer of statefulSets")
 	if client.APIVersion().Version == "v1" {
 		observer.watch(
 			watchers,
@@ -299,7 +300,7 @@ func (observer *Observer) watchStatefulSets(
 					obj.(*kv1.StatefulSet),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle statefulSet")
+					logger.Errorw("unable to handle statefulSet", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -330,7 +331,7 @@ func (observer *Observer) watchStatefulSets(
 					obj.(*kv1.StatefulSet),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle statefulSet")
+					logger.Errorw("unable to handle statefulSet", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -364,11 +365,6 @@ func (observer *Observer) handleStatefulSet(
 	if observer.identificator.IsIgnored(statefulset) {
 		return nil
 	}
-
-	tracef(
-		karma.Describe("statefulset", logger.TraceJSON(statefulset)),
-		"{kubernetes} handling statefulset",
-	)
 
 	context := karma.
 		Describe("namespace", statefulset.Namespace).
@@ -412,11 +408,6 @@ func (observer *Observer) handleStatefulSetV1(
 		return nil
 	}
 
-	tracef(
-		karma.Describe("statefulset", logger.TraceJSON(statefulset)),
-		"{kubernetes} handling statefulset",
-	)
-
 	context := karma.
 		Describe("namespace", statefulset.Namespace).
 		Describe("statefulset", statefulset.Name)
@@ -452,7 +443,7 @@ func (observer *Observer) watchDaemonSets(
 	stopCh chan struct{},
 ) {
 
-	infof(nil, "{kubernetes} starting observer of daemonSets")
+	logger.Info("starting observer of daemonSets")
 
 	if client.APIVersion().Version == "v1" {
 		observer.watch(
@@ -467,7 +458,7 @@ func (observer *Observer) watchDaemonSets(
 					obj.(*kv1.DaemonSet),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle daemonSet")
+					logger.Errorw("unable to handle daemonSet", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -498,7 +489,7 @@ func (observer *Observer) watchDaemonSets(
 					obj.(*kv1.DaemonSet),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle daemonSet")
+					logger.Errorw("unable to handle daemonSet", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -531,11 +522,6 @@ func (observer *Observer) handleDaemonSet(
 	if observer.identificator.IsIgnored(daemonset) {
 		return nil
 	}
-
-	tracef(
-		karma.Describe("daemonset", logger.TraceJSON(daemonset)),
-		"{kubernetes} handling daemonset",
-	)
 
 	context := karma.
 		Describe("namespace", daemonset.Namespace).
@@ -573,11 +559,6 @@ func (observer *Observer) handleDaemonSetV1(
 	if observer.identificator.IsIgnored(daemonset) {
 		return nil
 	}
-
-	tracef(
-		karma.Describe("daemonset", logger.TraceJSON(daemonset)),
-		"{kubernetes} handling daemonset",
-	)
 
 	context := karma.
 		Describe("namespace", daemonset.Namespace).
@@ -631,7 +612,7 @@ func (observer *Observer) watch(
 		)
 	}
 
-	infof(nil, "{kubernetes} subscribed on notifications about resource: %s", resource)
+	logger.Infow("subscribed on notifications about resource", "resource", resource)
 
 	informer := observer.newInformer(
 		client,
@@ -655,12 +636,6 @@ func (observer *Observer) watch(
 				observer.syncer.InformResource(resource, version)
 
 				break
-			} else {
-				tracef(
-					nil,
-					"{kubernetes} informer of %s still not synced",
-					resource,
-				)
 			}
 
 			time.Sleep(time.Millisecond * 100)
@@ -684,15 +659,6 @@ func (observer *Observer) handlePod(pod *kapi.Pod) error {
 		return nil
 	}
 
-	tracef(
-		karma.Describe("pod", logger.TraceJSON(pod)),
-		"{kubernetes} handling pod",
-	)
-
-	context := karma.
-		Describe("namespace", fmt.Sprintf("%q", pod.Namespace)).
-		Describe("pod_name", pod.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(pod)
 	if err != nil {
 		return karma.Format(
@@ -705,11 +671,10 @@ func (observer *Observer) handlePod(pod *kapi.Pod) error {
 	for _, container := range pod.Status.ContainerStatuses {
 		id, err := observer.identificator.GetContainerID(pod, container.Name)
 		if err != nil {
-			errorf(
-				context.
-					Describe("container_name", container.Name).
-					Reason(err),
+			logger.Errorw(
 				"unable to obtain container ID",
+				"container_name", container.Name,
+				"error", err,
 			)
 		} else {
 			containers[id] = ContainerState{container.State, container.LastTerminationState}
@@ -741,11 +706,6 @@ func (observer *Observer) handleReplicationController(
 	if observer.identificator.IsIgnored(ctl) {
 		return nil
 	}
-
-	tracef(
-		karma.Describe("ctl", logger.TraceJSON(ctl)),
-		"{kubernetes} handling replication controller",
-	)
 
 	context := karma.
 		Describe("namespace", ctl.Namespace).
@@ -789,11 +749,6 @@ func (observer *Observer) handleDeployment(
 		return nil
 	}
 
-	tracef(
-		karma.Describe("deployment", logger.TraceJSON(deployment)),
-		"{kubernetes} handling deployment",
-	)
-
 	context := karma.
 		Describe("namespace", deployment.Namespace).
 		Describe("deployment", deployment.Name)
@@ -836,11 +791,6 @@ func (observer *Observer) handleDeploymentV1(
 		return nil
 	}
 
-	tracef(
-		karma.Describe("deployment", logger.TraceJSON(deployment)),
-		"{kubernetes} handling deployment",
-	)
-
 	context := karma.
 		Describe("namespace", deployment.Namespace).
 		Describe("deployment", deployment.Name)
@@ -875,7 +825,7 @@ func (observer *Observer) watchCronJobs(
 	stopCh chan struct{},
 ) {
 
-	infof(nil, "{kubernetes} starting observer of cronJobs")
+	logger.Info("starting observer of cronJobs")
 
 	observer.watch(
 		watchers,
@@ -889,7 +839,7 @@ func (observer *Observer) watchCronJobs(
 				obj.(*kbeta1.CronJob),
 			)
 			if err != nil {
-				errorf(err, "{kubernetes} unable to handle cronJob")
+				logger.Errorw("unable to handle cronJob", "error", err)
 
 				observer.health.Alert(
 					karma.Format(
@@ -921,11 +871,6 @@ func (observer *Observer) handleCronJob(
 	if observer.identificator.IsIgnored(cronjob) {
 		return nil
 	}
-
-	tracef(
-		karma.Describe("cronjob", logger.TraceJSON(cronjob)),
-		"{kubernetes} handling cronjob",
-	)
 
 	context := karma.
 		Describe("namespace", cronjob.Namespace).
@@ -967,7 +912,7 @@ func (observer *Observer) watchReplicaSets(
 	stopCh chan struct{},
 ) {
 
-	infof(nil, "{kubernetes} starting observer of replicaSets")
+	logger.Infow("starting observer of replicaSets")
 	if client.APIVersion().Version == "v1" {
 		observer.watch(
 			watchers,
@@ -985,7 +930,7 @@ func (observer *Observer) watchReplicaSets(
 					obj.(*kv1.ReplicaSet),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle replicaSet")
+					logger.Errorw("unable to handle replicaSet", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -1020,7 +965,7 @@ func (observer *Observer) watchReplicaSets(
 					obj.(*kv1.ReplicaSet),
 				)
 				if err != nil {
-					errorf(err, "{kubernetes} unable to handle replicaSet")
+					logger.Errorw("unable to handle replicaSet", "error", err)
 
 					observer.health.Alert(
 						karma.Format(
@@ -1053,11 +998,6 @@ func (observer *Observer) handleReplicaSetV1(
 	if observer.identificator.IsIgnored(replicaset) {
 		return nil
 	}
-
-	tracef(
-		karma.Describe("replicaset", logger.TraceJSON(replicaset)),
-		"{kubernetes} handling replicaset",
-	)
 
 	context := karma.
 		Describe("namespace", replicaset.Namespace).
@@ -1100,11 +1040,6 @@ func (observer *Observer) handleReplicaSet(
 	if observer.identificator.IsIgnored(replicaset) {
 		return nil
 	}
-
-	tracef(
-		karma.Describe("replicaset", logger.TraceJSON(replicaset)),
-		"{kubernetes} handling replicaset",
-	)
 
 	context := karma.
 		Describe("namespace", replicaset.Namespace).
@@ -1224,7 +1159,7 @@ func (observer *Observer) newInformer(
 					for _, pod := range pods {
 						// obj := pod.GetObjectMeta()
 						if err := clientState.Add(&pod); err != nil {
-							logger.Errorf(err, "cannot add pod to client state")
+							logger.Errorw("cannot add pod to client state", "error", err)
 						}
 						handlers.OnAdd(&pod)
 					}

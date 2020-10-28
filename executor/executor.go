@@ -9,7 +9,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
-	"github.com/MagalixTechnologies/log-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -24,8 +24,8 @@ const (
 	automationsFeedbackExpiryCount    = 0
 	automationsFeedbackExpiryPriority = 10
 	automationsFeedbackExpiryRetries  = 5
-	automationsExecutionTimeout = 15 * time.Minute
-	podStatusSleep              = 15 * time.Second
+	automationsExecutionTimeout       = 15 * time.Minute
+	podStatusSleep                    = 15 * time.Second
 )
 
 type EntitiesFinder interface {
@@ -33,10 +33,9 @@ type EntitiesFinder interface {
 	FindContainer(namespaceName string, controllerKind string, controllerName string, containerName string) (*kv1.Container, error)
 }
 
-// Executor decision executor
+// Executor Automation executor
 type Executor struct {
 	client          *client.Client
-	logger          *log.Logger
 	kube            *kuber.Kube
 	entitiesFinder  EntitiesFinder
 	dryRun          bool
@@ -74,7 +73,6 @@ func NewExecutor(
 ) *Executor {
 	executor := &Executor{
 		client:         client,
-		logger:         client.Logger,
 		kube:           kube,
 		entitiesFinder: entitiesFinder,
 		dryRun:         dryRun,
@@ -96,7 +94,6 @@ func (executor *Executor) backoff(
 			Sleep:      sleep,
 			MaxRetries: maxRetries,
 		},
-		executor.logger,
 	)
 }
 
@@ -108,23 +105,21 @@ func (executor *Executor) startWorkers() {
 }
 
 func (executor *Executor) handleExecutionError(
-	ctx *karma.Context, automation *proto.PacketAutomation, err error,
+	automation *proto.PacketAutomation, err error,
 ) *proto.PacketAutomationFeedbackRequest {
-	executor.logger.Errorf(ctx.Reason(err), "unable to execute decision")
+	logger.Errorw("unable to execute automation", "error", err, "automation-id", automation.ID)
 
 	return makeAutomationFailedResponse(automation, err.Error())
 }
 func (executor *Executor) handleExecutionSkipping(
-	ctx *karma.Context, aut *proto.PacketAutomation, msg string,
+	aut *proto.PacketAutomation, msg string,
 ) *proto.PacketAutomationFeedbackRequest {
-
-	executor.logger.Infof(ctx, "skipping execution: %s", msg)
+	logger.Debugw("skipping automation execution", "msg", msg, "automation-id", aut.ID)
 
 	return makeAutomationFailedResponse(aut, msg)
 }
 
 func (executor *Executor) Listener(in []byte) (out []byte, err error) {
-
 	var automation proto.PacketAutomation
 	if err = proto.DecodeSnappy(in, &automation); err != nil {
 		return
@@ -173,12 +168,13 @@ func (executor *Executor) submitAutomation(
 
 func (executor *Executor) executorWorker() {
 	for automation := range executor.automationsChan {
-		// TODO: execute decisions in batches
+		// TODO: execute automations in batches
 		response, err := executor.execute(automation)
 		if err != nil {
-			executor.logger.Errorf(
-				err,
-				"unable to execute decision",
+			logger.Errorw(
+				"unable to execute automation",
+				"error", err,
+				"automation-id", automation.ID,
 			)
 		}
 
@@ -200,20 +196,13 @@ func (executor *Executor) executorWorker() {
 func (executor *Executor) execute(
 	automation *proto.PacketAutomation,
 ) (*proto.PacketAutomationFeedbackRequest, error) {
-
-	ctx := karma.
-		Describe("decision-id", automation.ID).
-		Describe("namespace-name", automation.NamespaceName).
-		Describe("controller-name", automation.ControllerName).
-		Describe("controller-kind", automation.ControllerKind).
-		Describe("container-name", automation.ContainerName)
-
 	c, err := executor.entitiesFinder.FindContainer(
 		automation.NamespaceName,
 		automation.ControllerKind,
 		automation.ControllerName,
 		automation.ContainerName,
 	)
+
 	if err != nil {
 		return makeAutomationFailedResponse(automation, fmt.Sprintf("unable to get container details %s", err.Error())),
 			karma.Format(err, "unable to get container details")
@@ -221,6 +210,14 @@ func (executor *Executor) execute(
 
 	var container kv1.Container
 	err = utils.Transcode(c, &container)
+	lg := logger.With(
+		"automation-id", automation.ID,
+		"namespace-name", automation.NamespaceName,
+		"controller-name", automation.ControllerName,
+		"controller-kind", automation.ControllerKind,
+		"container-name", automation.ContainerName,
+	)
+
 	if err != nil {
 		return makeAutomationFailedResponse(automation, fmt.Sprintf("unable to get container details %s", err.Error())),
 			karma.Format(err, "unable to get container details")
@@ -230,19 +227,16 @@ func (executor *Executor) execute(
 	recommendedResources := buildRecommendedResourcesFromAutomation(originalResources, automation)
 
 	trace, _ := json.Marshal(recommendedResources)
-	executor.logger.Infof(
-		ctx.
-			Describe("ClusterID", executor.client.ClusterID).
-			Describe("AccountID", executor.client.AccountID).
-			Describe("dry run", executor.dryRun).
-			Describe("cpu unit", "milliCore").
-			Describe("memory unit", "mibiByte").
-			Describe("trace", string(trace)),
-		"executing decision",
+	lg.Debugw(
+		"executing automation",
+		"dry run", executor.dryRun,
+		"cpu unit", "milliCore",
+		"memory unit", "mibiByte",
+		"trace", string(trace),
 	)
 
 	if executor.dryRun {
-		response := executor.handleExecutionSkipping(ctx, automation, "dry run enabled")
+		response := executor.handleExecutionSkipping(automation, "dry run enabled")
 		return response, nil
 	} else {
 		skipped, err := executor.kube.SetResources(
@@ -255,9 +249,9 @@ func (executor *Executor) execute(
 			// TODO: do we need to retry execution before fail?
 			var response *proto.PacketAutomationFeedbackRequest
 			if skipped {
-				response = executor.handleExecutionSkipping(ctx, automation, err.Error())
+				response = executor.handleExecutionSkipping(automation, err.Error())
 			} else {
-				response = executor.handleExecutionError(ctx, automation, err)
+				response = executor.handleExecutionError(automation, err)
 			}
 			return response, nil
 		}
@@ -281,7 +275,7 @@ func (executor *Executor) execute(
 			msg = statusMap[kv1.PodFailed]
 			result = proto.AutomationFailed
 
-			// execute the decision with old values to rollback
+			// execute the automation with old values to rollback
 			_, err := executor.kube.SetResources(
 				automation.ControllerKind,
 				automation.ControllerName,
@@ -290,11 +284,11 @@ func (executor *Executor) execute(
 			)
 
 			if err != nil {
-				executor.logger.Error(ctx, "can't rollback decision")
+				lg.Warn("can't rollback automation")
 			}
 		}
 
-		executor.logger.Infof(ctx, msg)
+		lg.Debug(msg)
 
 		return &proto.PacketAutomationFeedbackRequest{
 			ID:             automation.ID,
