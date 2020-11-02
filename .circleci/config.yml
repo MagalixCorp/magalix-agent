@@ -152,16 +152,7 @@ jobs:
     - run:
         name: Update running agents
         command: |
-          pods=$(kubectl get pods -n magalix-glb --no-headers -o custom-columns=":metadata.name" | grep agent-gateway)
-          I=1
-          for pod in $pods
-          do
-            port="808$I"
-            kubectl port-forward -n magalix-glb pod/$pod $port:8080 &
-            while ! netstat -tna | grep 'LISTEN\>' | grep $port; do sleep 3 ; done
-            curl -X "POST" http://localhost:$port/api/v1/clusters/restart
-            I=$(expr $I + 1)
-          done
+          curl -X "POST" http://agent-gateway-aggregator.magalix-glb.svc/api/v1/agents/restart
 
 workflows:
   version: 2
