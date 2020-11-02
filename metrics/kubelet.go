@@ -563,7 +563,7 @@ func (kubelet *Kubelet) GetMetrics(
 				namespaceName := pod.PodRef.Namespace
 
 				if err != nil {
-					logger.Warnf(
+					logger.Warnw(
 						"unable to find controller for pod",
 						"namespace", pod.PodRef.Namespace,
 						"pod_name", pod.PodRef.Name,
