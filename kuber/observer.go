@@ -11,7 +11,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/pkg/errors"
-	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
@@ -103,8 +102,7 @@ func (observer *Observer) WaitForCacheSync() error {
 		case <-finished:
 			return nil
 		case <-ctx.Done():
-			return karma.Format(
-				nil,
+			return fmt.Errorf(
 				"timeout waiting for cache sync",
 			)
 		}
@@ -119,14 +117,14 @@ func (observer *Observer) GetNodes() ([]corev1.Node, error) {
 	}
 	_nodes, err := watcher.Lister().List(labels.Everything())
 	if err != nil {
-		return nil, karma.Format(err, "unable to list nodes")
+		return nil, fmt.Errorf("unable to list nodes, error: %w", err)
 	}
 	nodes := make([]corev1.Node, len(_nodes))
 	for i, n := range _nodes {
 		u := n.(*unstructured.Unstructured)
 		err = utils.Transcode(u, &nodes[i])
 		if err != nil {
-			return nil, karma.Format(err, "unable to transcode unstructured to corev1.Node")
+			return nil, fmt.Errorf("unable to transcode unstructured to corev1.Node, error: %w", err)
 		}
 	}
 	return nodes, nil
@@ -139,14 +137,14 @@ func (observer *Observer) GetPods() ([]corev1.Pod, error) {
 	}
 	_pods, err := watcher.Lister().List(labels.Everything())
 	if err != nil {
-		return nil, karma.Format(err, "unable to list pods")
+		return nil, fmt.Errorf("unable to list pods, error: %w", err)
 	}
 	pods := make([]corev1.Pod, len(_pods))
 	for i, n := range _pods {
 		u := n.(*unstructured.Unstructured)
 		err = utils.Transcode(u, &pods[i])
 		if err != nil {
-			return nil, karma.Format(err, "unable to transcode unstructured to corev1.Pod")
+			return nil, fmt.Errorf("unable to transcode unstructured to corev1.Pod, error: %w", err)
 		}
 	}
 	return pods, nil
@@ -157,13 +155,15 @@ func (observer *Observer) FindController(
 	controllerKind string,
 	controllerName string,
 ) (*unstructured.Unstructured, error) {
-	ctx := karma.Describe("namespace-name", namespaceName).
-		Describe("controller-kind", controllerKind).
-		Describe("controller-name", controllerName)
+	errMap := map[string]interface{}{
+		"namespace-name":  namespaceName,
+		"controller-kind": controllerKind,
+		"controller-name": controllerName,
+	}
 
 	gvrk, err := KindToGvrk(controllerKind)
 	if err != nil {
-		return nil, karma.Format(ctx.Reason(err), "unable to get GVRK")
+		return nil, fmt.Errorf("unable to get GVRK, error: %w with data %+v", err, errMap)
 	}
 	watcher, err := observer.WatchAndWaitForSync(*gvrk)
 	if err != nil {
@@ -172,7 +172,7 @@ func (observer *Observer) FindController(
 
 	controller, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(controllerName)
 	if err != nil {
-		return nil, karma.Format(ctx.Reason(err), "unable to find controller")
+		return nil, fmt.Errorf("unable to find controller, error: %w with data %+v", err, errMap)
 	}
 
 	return controller.(*unstructured.Unstructured), err
@@ -184,30 +184,32 @@ func (observer *Observer) FindContainer(
 	controllerName string,
 	containerName string,
 ) (*corev1.Container, error) {
-	ctx := karma.Describe("namespace-name", namespaceName).
-		Describe("controller-kind", controllerKind).
-		Describe("controller-name", controllerName).
-		Describe("container-name", containerName)
+	errMap := map[string]interface{}{
+		"namespace-name":  namespaceName,
+		"controller-kind": controllerKind,
+		"controller-name": controllerName,
+		"container-name":  containerName,
+	}
 
 	controller, err := observer.FindController(namespaceName, controllerKind, controllerName)
 	if err != nil {
-		return nil, karma.Format(ctx.Reason(err), "unable to find controller")
+		return nil, fmt.Errorf("unable to find controller, error: %w with data %+v", err, errMap)
 	}
 
 	containersList, found, err := unstructured.NestedSlice(controller.Object, "spec", "template", "spec", "containers")
 	if err != nil {
-		return nil, karma.Format(ctx.Reason(err), "unable to find container")
+		return nil, fmt.Errorf("unable to find container, error: %w with data %+v", err, errMap)
 	}
 
 	if !found {
-		return nil, karma.Format(ctx.Reason(fmt.Errorf("unable to find containers spec")), "unable to find container")
+		return nil, fmt.Errorf("unable to find containers spec with data %+v", errMap)
 	}
 
 	for _, c := range containersList {
 		var container corev1.Container
 		err := utils.Transcode(c, &container)
 		if err != nil {
-			return nil, karma.Format(ctx.Reason(fmt.Errorf("unable to transcode unstructured to container")), "unable to find container")
+			return nil, fmt.Errorf("unable to transcode unstructured to container with data %+v", errMap)
 		}
 
 		if container.Name == containerName {
@@ -215,7 +217,7 @@ func (observer *Observer) FindContainer(
 		}
 	}
 
-	return nil, karma.Format(nil, "unable to find container")
+	return nil, fmt.Errorf("unable to find container")
 }
 
 func (observer *Observer) FindPodController(namespaceName string, podName string) (string, string, error) {
@@ -411,7 +413,9 @@ func maskUnstructured(
 	obj *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {
 	kind := obj.GetKind()
-	ctx := karma.Describe("kind", kind)
+	errMap := map[string]interface{}{
+		"kind": kind,
+	}
 	podSpecPath, ok := podSpecMap[kind]
 	if !ok {
 		// not maskable kind
@@ -420,19 +424,19 @@ func maskUnstructured(
 
 	podSpecU, ok, err := unstructured.NestedFieldNoCopy(obj.Object, podSpecPath...)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to get pod spec")
+		return nil, fmt.
+			Errorf("unable to get pod spec, error: %w with data %+v", err, errMap)
 	}
 	if !ok {
-		return nil, ctx.
-			Format(nil, "unable to find pod spec in specified path")
+		return nil, fmt.
+			Errorf("unable to find pod spec in specified path with data %+v", errMap)
 	}
 
 	var podSpec corev1.PodSpec
 	err = utils.Transcode(podSpecU, &podSpec)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to transcode pod spec")
+		return nil, fmt.
+			Errorf("unable to transcode pod spec, error: %w with data %+v", err, errMap)
 	}
 
 	podSpec.Containers = maskContainers(podSpec.Containers)
@@ -441,16 +445,16 @@ func maskUnstructured(
 	var podSpecJson map[string]interface{}
 	err = utils.Transcode(podSpec, &podSpecJson)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to transcode pod spec")
+		return nil, fmt.
+			Errorf("unable to transcode pod spec, error: %w with data %+v", err, errMap)
 	}
 
 	// deep copy to not mutate the data from cash store
 	obj = obj.DeepCopy()
 	err = unstructured.SetNestedField(obj.Object, podSpecJson, podSpecPath...)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to set pod spec")
+		return nil, fmt.
+			Errorf("unable to set pod spec, error: %w, with data %+v", err, errMap)
 	}
 
 	return obj, nil

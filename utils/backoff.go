@@ -1,10 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/reconquest/karma-go"
 )
 
 type Backoff struct {
@@ -23,10 +23,12 @@ func WithBackoff(fn func() error, backoff Backoff) error {
 		}
 
 		if try > backoff.MaxRetries {
-			return karma.
-				Describe("retry", try).
-				Describe("maxRetry", backoff.MaxRetries).
-				Format(err, "max retries exceeded")
+			return fmt.Errorf(
+				"max retries exceeded, retry: %d, maxRetry: %d, error: %w",
+				try,
+				backoff.MaxRetries,
+				err,
+			)
 		}
 
 		// NOTE max multiplier = 10

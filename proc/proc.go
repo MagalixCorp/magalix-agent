@@ -10,7 +10,6 @@ import (
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
-	"github.com/reconquest/karma-go"
 	"github.com/reconquest/stats-go"
 )
 
@@ -396,7 +395,7 @@ func (proc *Proc) writeEvent(event watcher.Event) bool {
 		logger.Errorw("unable to write event to database", "error", err)
 
 		proc.health.Alert(
-			karma.Format(err, "problems with writing events to database"),
+			fmt.Errorf("problems with writing events to database, error: %w", err),
 			"write", "event",
 		)
 
@@ -433,10 +432,10 @@ func (proc *Proc) getState(
 				appID, serviceID,
 			)
 			if apiError != nil {
-				err = karma.Format(
-					apiError,
-					"unable to get desired services for application: %s",
+				err = fmt.Errorf(
+					"unable to get desired services for application: %s, error: %w",
 					appID,
+					apiError,
 				)
 				err = apiError
 				return
@@ -510,12 +509,4 @@ func (proc *Proc) isSynced() bool {
 // SetSynced sync all entities
 func (proc *Proc) SetSynced() {
 	proc.updateAllStatuses()
-}
-
-func getContext(identity watcher.Identity) *karma.Context {
-	context := karma.
-		Describe("application_id", identity.ApplicationID).
-		Describe("service_id", identity.ServiceID)
-
-	return context
 }

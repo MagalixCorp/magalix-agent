@@ -2,12 +2,12 @@ package scalar2
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	corev1 "k8s.io/api/core/v1"
@@ -97,18 +97,17 @@ func transcodeUnstructured(
 ) error {
 	b, err := u.MarshalJSON()
 	if err != nil {
-		return karma.Format(
-			err,
-			"unable to marshal Unstructured to json",
+		return fmt.Errorf(
+			"unable to marshal Unstructured to json, error: %w", err,
 		)
 	}
 
 	err = json.Unmarshal(b, v)
 	if err != nil {
-		return karma.Format(
-			err,
-			"unable to unmarshal json into %T",
+		return fmt.Errorf(
+			"unable to unmarshal json into %T, error: %w",
 			v,
+			err,
 		)
 	}
 

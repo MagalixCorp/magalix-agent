@@ -13,7 +13,6 @@ import (
 	"github.com/MagalixTechnologies/alltogether-go"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/pkg/errors"
-	"github.com/reconquest/karma-go"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -325,7 +324,7 @@ func (kubelet *Kubelet) GetMetrics(
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes, err := entitiesProvider.GetNodes()
 	if err != nil {
-		return nil, karma.Format(err, "{kubelet} Can't get nodes")
+		return nil, fmt.Errorf("{kubelet} Can't get nodes, error: %w", err)
 	}
 
 	logger.Debug("===============================")
@@ -405,7 +404,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 	pods, err := entitiesProvider.GetPods()
 	if err != nil {
-		return nil, karma.Format(err, "{kubelet} unable to get pods")
+		return nil, fmt.Errorf("{kubelet} unable to get pods, error: %w", err)
 	}
 
 	logger.Debugf("Fetched %d pods", len(pods))

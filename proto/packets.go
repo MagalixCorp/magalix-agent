@@ -10,8 +10,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/reconquest/karma-go"
-
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
@@ -235,13 +233,13 @@ func EncodeSnappy(in interface{}) (out []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			stack := string(debug.Stack())
-			err = karma.Format(stack, fmt.Sprintf("panic: %v", r))
+			err = fmt.Errorf("%s panic: %v", stack, r)
 		}
 	}()
 
 	jsonIn, err := json.Marshal(in)
 	if err != nil {
-		return nil, karma.Format(err, "unable to encode to snappy")
+		return nil, fmt.Errorf("unable to encode to snappy, error: %w", err)
 	}
 	out = snappy.Encode(nil, jsonIn)
 	return out, err
@@ -250,7 +248,7 @@ func EncodeSnappy(in interface{}) (out []byte, err error) {
 func DecodeSnappy(in []byte, out interface{}) error {
 	jsonIn, err := snappy.Decode(nil, in)
 	if err != nil {
-		return karma.Format(err, "unable to decode to snappy")
+		return fmt.Errorf("unable to decode to snappy, error: %w", err)
 	}
 	return json.Unmarshal(jsonIn, out)
 }

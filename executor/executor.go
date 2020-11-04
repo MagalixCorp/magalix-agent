@@ -10,7 +10,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	kv1 "k8s.io/api/core/v1"
@@ -205,7 +204,7 @@ func (executor *Executor) execute(
 
 	if err != nil {
 		return makeAutomationFailedResponse(automation, fmt.Sprintf("unable to get container details %s", err.Error())),
-			karma.Format(err, "unable to get container details")
+			fmt.Errorf("unable to get container details, error: %w", err)
 	}
 
 	var container kv1.Container
@@ -220,7 +219,7 @@ func (executor *Executor) execute(
 
 	if err != nil {
 		return makeAutomationFailedResponse(automation, fmt.Sprintf("unable to get container details %s", err.Error())),
-			karma.Format(err, "unable to get container details")
+			fmt.Errorf("unable to get container details, error: %w", err)
 	}
 
 	originalResources := buildOriginalResourcesFromContainer(container)

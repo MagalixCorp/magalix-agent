@@ -7,7 +7,6 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/reconquest/karma-go"
 	"golang.org/x/net/context"
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -76,9 +75,9 @@ func (p *OOMKillsProcessor) Submit(pod corev1.Pod) error {
 	case p.pipe <- pod:
 		cancel()
 	case <-ctx.Done():
-		return karma.Format(
-			karma.Describe("timeout", p.timeout).Reason(nil),
-			"timeout submitting pod",
+		return fmt.Errorf(
+			"timeout submitting pod, job took %s",
+			p.timeout,
 		)
 	}
 	return nil
@@ -116,8 +115,7 @@ func (p *OOMKillsProcessor) handlePod(pod corev1.Pod) error {
 				}
 			}
 			if container == nil {
-				return karma.Format(
-					nil,
+				return fmt.Errorf(
 					"unable to find container in pod spec",
 				)
 			}

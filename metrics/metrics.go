@@ -10,7 +10,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
-	"github.com/reconquest/karma-go"
 )
 
 const limit = 1000
@@ -202,9 +201,8 @@ func InitMetrics(
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
 		metricsSources = []MetricsSource{}
-		foundErrors    = make([]error, 0)
 	)
-
+	var foundErrors error
 	metricsSourcesNames := []string{"kubelet"}
 	if names, ok := args["--source"].([]string); ok && len(names) > 0 {
 		metricsSourcesNames = names
@@ -213,7 +211,7 @@ func InitMetrics(
 
 	kubeletClient, err := NewKubeletClient(nodesProvider, kube, args)
 	if err != nil {
-		foundErrors = append(foundErrors, err)
+		foundErrors = fmt.Errorf("Error getting new Kube client for metrics: %w", err)
 		failOnError = true
 	}
 
@@ -231,10 +229,7 @@ func InitMetrics(
 				},
 			)
 			if err != nil {
-				foundErrors = append(foundErrors, karma.Format(
-					err,
-					"unable to initialize kubelet source",
-				))
+				foundErrors = fmt.Errorf("%s; unable to initialize kubelet source, error: %w", foundErrors, err)
 				continue
 			}
 
@@ -242,8 +237,8 @@ func InitMetrics(
 		}
 	}
 
-	if len(foundErrors) > 0 && (failOnError || len(metricsSources) == 0) {
-		return karma.Format(foundErrors, "unable to init metric sources")
+	if foundErrors != nil && (failOnError || len(metricsSources) == 0) {
+		return fmt.Errorf("unable to init metric sources, for the following errors: %w", foundErrors)
 	}
 
 	for _, source := range metricsSources {

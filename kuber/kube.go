@@ -14,7 +14,6 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/reconquest/karma-go"
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -100,25 +99,25 @@ func InitKubernetes(
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to create Clientset, error: %w",
 			err,
-			"unable to create Clientset",
 		)
 	}
 
 	clientV1, err := kapps.NewForConfig(config)
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to create ClientV1 error: %w",
 			err,
-			"unable to create ClientV1",
 		)
 	}
 
 	clientV1Beta1, err := batch.NewForConfig(config)
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to create batch` clientV1Beta1, error : %w",
 			err,
-			"unable to create batch clientV1Beta1",
 		)
 	}
 
@@ -139,9 +138,9 @@ func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
 	logger.Debugw("retrieving list of nodes")
 	nodes, err := kube.core.Nodes().List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve nodes from all namespaces, error: %w",
 			err,
-			"unable to retrieve nodes from all namespaces",
 		)
 	}
 
@@ -163,9 +162,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		controllers, err := kube.GetReplicationControllers()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get replication controllers, error: %w",
 				err,
-				"unable to get replication controllers",
 			)
 		}
 
@@ -203,9 +202,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		podList, err := kube.GetPods()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get pods, error: %w",
 				err,
-				"unable to get pods",
 			)
 		}
 
@@ -249,9 +248,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		deployments, err := kube.GetDeployments()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get deployments, error: %w",
 				err,
-				"unable to get deployments",
 			)
 		}
 
@@ -290,9 +289,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		statefulSets, err := kube.GetStatefulSets()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get statefulSets, error: %w",
 				err,
-				"unable to get statefulSets",
 			)
 		}
 
@@ -331,9 +330,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		daemonSets, err := kube.GetDaemonSets()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get daemonSets, error: %w",
 				err,
-				"unable to get daemonSets",
 			)
 		}
 
@@ -372,9 +371,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		replicaSets, err := kube.GetReplicaSets()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get replicasets, error : %w",
 				err,
-				"unable to get replicasets",
 			)
 		}
 
@@ -417,9 +416,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		cronJobs, err := kube.GetCronJobs()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get cron jobs, error: %w",
 				err,
-				"unable to get cron jobs",
 			)
 		}
 
@@ -456,9 +455,9 @@ func (kube *Kube) GetResources() (
 	group.Go(func() error {
 		limitRangeList, err := kube.GetLimitRanges()
 		if err != nil {
-			return karma.Format(
+			return fmt.Errorf(
+				"unable to get limitRanges, error: %w",
 				err,
-				"unable to get limitRanges",
 			)
 		}
 
@@ -490,9 +489,9 @@ func (kube *Kube) GetPods() (*kv1.PodList, error) {
 	logger.Debugw("retrieving list of pods")
 	podList, err := kube.core.Pods("").List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve pods from all namespaces, error: %w",
 			err,
-			"unable to retrieve pods from all namespaces",
 		)
 	}
 
@@ -504,9 +503,9 @@ func (kube *Kube) GetNameSpacePods(namespace string) (*kv1.PodList, error) {
 	logger.Debug("retrieving list of pods")
 	podList, err := kube.core.Pods(namespace).List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve pods from all namespaces, error: %w",
 			err,
-			"unable to retrieve pods from all namespaces",
 		)
 	}
 
@@ -521,9 +520,9 @@ func (kube *Kube) GetReplicationControllers() (
 	controllers, err := kube.core.ReplicationControllers("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve replication controllers from all namespaces, error: %w",
 			err,
-			"unable to retrieve replication controllers from all namespaces",
 		)
 	}
 
@@ -541,9 +540,9 @@ func (kube *Kube) GetDeployments() (*appsV1.DeploymentList, error) {
 	logger.Debug("retrieving list of deployments")
 	deployments, err := kube.apps.Deployments("").List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve deployments from all namespaces, error: %w",
 			err,
-			"unable to retrieve deployments from all namespaces",
 		)
 	}
 
@@ -565,9 +564,9 @@ func (kube *Kube) GetStatefulSets() (
 		StatefulSets("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve stateful sets from all namespaces, error: %w",
 			err,
-			"unable to retrieve stateful sets from all namespaces",
 		)
 	}
 
@@ -589,9 +588,9 @@ func (kube *Kube) GetDaemonSets() (
 		DaemonSets("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve daemon sets from all namespaces, error: %w",
 			err,
-			"unable to retrieve daemon sets from all namespaces",
 		)
 	}
 
@@ -613,9 +612,9 @@ func (kube *Kube) GetReplicaSets() (
 		ReplicaSets("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve replica sets from all namespaces, error: %w",
 			err,
-			"unable to retrieve replica sets from all namespaces",
 		)
 	}
 
@@ -637,9 +636,9 @@ func (kube *Kube) GetNamespaceReplicaSets(namespace string) (
 		ReplicaSets(namespace).
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve replica sets from all namespaces, error: %w",
 			err,
-			"unable to retrieve replica sets from all namespaces",
 		)
 	}
 
@@ -661,9 +660,9 @@ func (kube *Kube) GetCronJobs() (
 		CronJobs("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve cron jobs from all namespaces, error: %w",
 			err,
-			"unable to retrieve cron jobs from all namespaces",
 		)
 	}
 
@@ -685,9 +684,9 @@ func (kube *Kube) GetCronJob(namespace, name string) (
 		CronJobs(namespace).
 		Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve cron jobs from all namespaces, error: %w",
 			err,
-			"unable to retrieve cron jobs from all namespaces",
 		)
 	}
 
@@ -708,9 +707,9 @@ func (kube *Kube) GetLimitRanges() (
 	limitRanges, err := kube.core.LimitRanges("").
 		List(context.Background(), kmeta.ListOptions{})
 	if err != nil {
-		return nil, karma.Format(
+		return nil, fmt.Errorf(
+			"unable to retrieve list of limitRanges from all namespaces, error: %w",
 			err,
-			"unable to retrieve list of limitRanges from all namespaces",
 		)
 	}
 
@@ -724,10 +723,10 @@ func (kube *Kube) GetStatefulSet(namespace, name string) (
 		StatefulSets(namespace).
 		Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
-		return nil, karma.Format(
-			err,
-			"unable to retrieve statefulset %s/%s",
+		return nil, fmt.Errorf(
+			"unable to retrieve statefulset %s/%s, error: %w",
 			namespace, name,
+			err,
 		)
 	}
 
@@ -745,10 +744,10 @@ func (kube *Kube) GetDaemonSet(namespace, name string) (
 		DaemonSets(namespace).
 		Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
-		return nil, karma.Format(
-			err,
-			"unable to retrieve daemonSet %s/%s",
+		return nil, fmt.Errorf(
+			"unable to retrieve daemonSet %s/%s, error: %w",
 			namespace, name,
+			err,
 		)
 	}
 
@@ -773,35 +772,34 @@ func (kube *Kube) SetResources(
 	if strings.ToLower(kind) == "statefulset" {
 		statefulSet, err := kube.GetStatefulSet(namespace, name)
 		if err != nil {
-			return false, karma.Format(err, "unable to get sts definition")
+			return false, fmt.Errorf("unable to get sts definition, error: %w", err)
 		}
 
 		updateStrategy := statefulSet.Spec.UpdateStrategy.Type
 
-		ctx := karma.
-			Describe("replicas", statefulSet.Spec.Replicas).
-			Describe("update-strategy", updateStrategy)
+		errMap := map[string]interface{}{
+			"replicas":        statefulSet.Spec.Replicas,
+			"update-strategy": updateStrategy,
+		}
 
 		if updateStrategy == v1.RollingUpdateStatefulSetStrategyType {
 
 			// no rollingUpdate spec, then Partition = 0
 			if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil {
 				partition := statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
-				ctx = ctx.
-					Describe("rolling-update-partition", partition)
+				errMap["rolling-update-partition"] = partition
 
 				if partition != nil && *partition != 0 {
-					return true, karma.Format(
-						ctx.Reason(nil),
-						"Spec.UpdateStrategy.RollingUpdate.Partition not equal 0",
+					return true, fmt.Errorf(
+						"Spec.UpdateStrategy.RollingUpdate.Partition not equal 0 with data: %+v",
+						errMap,
 					)
 				}
 			}
 
 		} else {
-			return true, karma.Format(
-				ctx.Reason(nil),
-				"Spec.UpdateStrategy not equal 'RollingUpdate'",
+			return true, fmt.Errorf(
+				"Spec.UpdateStrategy not equal 'RollingUpdate' with data: %+v", errMap,
 			)
 		}
 	}
@@ -813,11 +811,11 @@ func (kube *Kube) SetResources(
 		resources := map[string]map[string]interface{}{
 			"limits": {
 				"memory": nil,
-				"cpu": nil,
+				"cpu":    nil,
 			},
 			"requests": {
 				"memory": nil,
-				"cpu": nil,
+				"cpu":    nil,
 			},
 		}
 
@@ -953,9 +951,9 @@ func (kube *Kube) GetAgentPermissions() (string, error) {
 	rulesSpec := authv1.SelfSubjectRulesReview{Spec: spec, Status: status}
 	subjectRules, err := kube.Clientset.AuthorizationV1().SelfSubjectRulesReviews().Create(context.Background(), &rulesSpec, kmeta.CreateOptions{})
 	if err != nil {
-		return "", karma.Format(
+		return "", fmt.Errorf(
+			"unable to get agent permissions, error: %w",
 			err,
-			"unable to get agent permissions",
 		)
 	}
 

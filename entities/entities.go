@@ -9,7 +9,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -136,9 +135,10 @@ func (ew *entitiesWatcher) WatcherFor(
 ) (kuber.Watcher, error) {
 	w, ok := ew.watchers[gvrk]
 	if !ok {
-		return nil, karma.
-			Describe("gvrk", gvrk).
-			Format(nil, "non watched resource")
+		return nil, fmt.Errorf(
+			"non watched resource, gvrk: %+v",
+			gvrk,
+		)
 	}
 	return w, nil
 }
@@ -280,9 +280,9 @@ func (ew *entitiesWatcher) deltaWrapper(
 	if gvrk == kuber.Pods {
 		parents, err := ew.getParents(&delta.Data)
 		if err != nil {
-			return delta, karma.Format(
+			return delta, fmt.Errorf(
+				"unable to get pod parents, error: %w",
 				err,
-				"unable to get pod parents",
 			)
 		}
 		delta.Parent = parents
@@ -442,7 +442,7 @@ func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionReso
 	case kuber.Nodes:
 		ip, found, err := getNodeInternalIP(obj)
 		if !found || err != nil {
-			return nil, karma.Format(err, "unable to find node internal ip")
+			return nil, fmt.Errorf("unable to find node internal ip, error: %w", err)
 		}
 
 		return map[string]interface{}{
@@ -466,16 +466,16 @@ func getNodeInternalIP(node *unstructured.Unstructured) (string, bool, error) {
 	for _, address := range addresses {
 		addressMap, ok := address.(map[string]interface{})
 		if !ok {
-			return "", false, karma.Format(nil, "%v of type %T is not map[string]interface{}", address, address)
+			return "", false, fmt.Errorf("%v of type %T is not map[string]interface{}", address, address)
 		}
 		addressType, ok := addressMap["type"].(string)
 		if !ok {
-			return "", false, karma.Format(nil, "%v of type %T is not string", addressMap["type"], addressMap["type"])
+			return "", false, fmt.Errorf("%v of type %T is not string", addressMap["type"], addressMap["type"])
 		}
 		if addressType == string(corev1.NodeInternalIP) {
 			internalIP, ok := addressMap["address"].(string)
 			if !ok {
-				return "", false, karma.Format(nil, "%v of type %T is not string", addressMap["address"], addressMap["address"])
+				return "", false, fmt.Errorf("%v of type %T is not string", addressMap["address"], addressMap["address"])
 			}
 			return internalIP, true, nil
 		}

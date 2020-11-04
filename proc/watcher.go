@@ -9,7 +9,6 @@ import (
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
-	"github.com/reconquest/karma-go"
 	"github.com/reconquest/stats-go"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
@@ -153,9 +152,8 @@ func (observer *Observer) watchPods(
 				logger.Errorw("unable to handle pod", "error", err)
 
 				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling pods",
+					fmt.Errorf(
+						"kubernetes: problems with handling pods, error: %w", err,
 					),
 					"watch", "pods",
 				)
@@ -192,9 +190,8 @@ func (observer *Observer) watchReplicationControllers(
 				logger.Errorw("unable to handle replication controller", "error", err)
 
 				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling replication controllers",
+					fmt.Errorf(
+						"kubernetes: problems with handling replication controllers, error: %w", err,
 					),
 					"watch", "replicationcontrollers",
 				)
@@ -231,9 +228,8 @@ func (observer *Observer) watchDeployments(
 					logger.Errorw("unable to handle deployment", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling deployments",
+						fmt.Errorf(
+							"kubernetes: problems with handling deployments, error: %w", err,
 						),
 						"watch", "deployments",
 					)
@@ -262,9 +258,8 @@ func (observer *Observer) watchDeployments(
 					logger.Errorw("unable to handle deployment", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling deployments",
+						fmt.Errorf(
+							"kubernetes: problems with handling deployments, error: %w", err,
 						),
 						"watch", "deployments",
 					)
@@ -303,9 +298,8 @@ func (observer *Observer) watchStatefulSets(
 					logger.Errorw("unable to handle statefulSet", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling statefulSets",
+						fmt.Errorf(
+							"kubernetes: problems with handling statefulSets, error: %w", err,
 						),
 						"watch", "statefulsets",
 					)
@@ -334,9 +328,8 @@ func (observer *Observer) watchStatefulSets(
 					logger.Errorw("unable to handle statefulSet", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling statefulSets",
+						fmt.Errorf(
+							"kubernetes: problems with handling statefulSets, error: %w", err,
 						),
 						"watch", "statefulsets",
 					)
@@ -366,15 +359,13 @@ func (observer *Observer) handleStatefulSet(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", statefulset.Namespace).
-		Describe("statefulset", statefulset.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(statefulset)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify statefulset with namespace: %s and name: %s, error: %w",
+			statefulset.Namespace,
+			statefulset.Name,
 			err,
-			"unable to identify statefulset",
 		)
 	}
 
@@ -408,15 +399,13 @@ func (observer *Observer) handleStatefulSetV1(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", statefulset.Namespace).
-		Describe("statefulset", statefulset.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(statefulset)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify statefulset with namespace: %s and name: %s, error: %w",
+			statefulset.Namespace,
+			statefulset.Name,
 			err,
-			"unable to identify statefulset",
 		)
 	}
 
@@ -461,9 +450,8 @@ func (observer *Observer) watchDaemonSets(
 					logger.Errorw("unable to handle daemonSet", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling daemonSets",
+						fmt.Errorf(
+							"kubernetes: problems with handling daemonSets, error: %w", err,
 						),
 						"watch", "daemonsets",
 					)
@@ -492,9 +480,8 @@ func (observer *Observer) watchDaemonSets(
 					logger.Errorw("unable to handle daemonSet", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling daemonSets",
+						fmt.Errorf(
+							"kubernetes: problems with handling daemonSets, error: %w", err,
 						),
 						"watch", "daemonsets",
 					)
@@ -523,15 +510,13 @@ func (observer *Observer) handleDaemonSet(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", daemonset.Namespace).
-		Describe("daemonset", daemonset.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(daemonset)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify daemonset with namespace: %s and name: %s, error: %w",
+			daemonset.Namespace,
+			daemonset.Name,
 			err,
-			"unable to identify daemonset",
 		)
 	}
 
@@ -560,15 +545,13 @@ func (observer *Observer) handleDaemonSetV1(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", daemonset.Namespace).
-		Describe("daemonset", daemonset.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(daemonset)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify daemonset with namespace: %s and name: %s, error: %w",
+			daemonset.Namespace,
+			daemonset.Name,
 			err,
-			"unable to identify daemonset",
 		)
 	}
 
@@ -661,9 +644,8 @@ func (observer *Observer) handlePod(pod *kapi.Pod) error {
 
 	id, accountID, applicationID, serviceID, err := observer.identify(pod)
 	if err != nil {
-		return karma.Format(
-			err,
-			"unable to identify pod",
+		return fmt.Errorf(
+			"unable to identify pod, error: %w", err,
 		)
 	}
 
@@ -707,15 +689,13 @@ func (observer *Observer) handleReplicationController(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", ctl.Namespace).
-		Describe("controller", ctl.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(ctl)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify replication controller with namespace: %s and name: %s, error : %w",
+			ctl.Namespace,
+			ctl.Name,
 			err,
-			"unable to identify replication controller",
 		)
 	}
 
@@ -749,15 +729,13 @@ func (observer *Observer) handleDeployment(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", deployment.Namespace).
-		Describe("deployment", deployment.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(deployment)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify deployment with namespace: %s and name: %s, error: %w",
+			deployment.Namespace,
+			deployment.Name,
 			err,
-			"unable to identify deployment",
 		)
 	}
 
@@ -791,15 +769,13 @@ func (observer *Observer) handleDeploymentV1(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", deployment.Namespace).
-		Describe("deployment", deployment.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(deployment)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify deployment with namespace: %s and name: %s, error: %w",
+			deployment.Namespace,
+			deployment.Name,
 			err,
-			"unable to identify deployment",
 		)
 	}
 
@@ -842,9 +818,8 @@ func (observer *Observer) watchCronJobs(
 				logger.Errorw("unable to handle cronJob", "error", err)
 
 				observer.health.Alert(
-					karma.Format(
-						err,
-						"kubernetes: problems with handling cronJobs",
+					fmt.Errorf(
+						"kubernetes: problems with handling cronJobs, error: %w", err,
 					),
 					"watch", "cronjobs",
 				)
@@ -872,15 +847,13 @@ func (observer *Observer) handleCronJob(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", cronjob.Namespace).
-		Describe("cronjob", cronjob.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(cronjob)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify cronjob with namespace: %s and name: %s, error: %w",
+			cronjob.Namespace,
+			cronjob.Name,
 			err,
-			"unable to identify cronjob",
 		)
 	}
 
@@ -933,9 +906,8 @@ func (observer *Observer) watchReplicaSets(
 					logger.Errorw("unable to handle replicaSet", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling replicaSets",
+						fmt.Errorf(
+							"kubernetes: problems with handling replicaSets, error: %w", err,
 						),
 						"watch", "replicasets",
 					)
@@ -968,9 +940,8 @@ func (observer *Observer) watchReplicaSets(
 					logger.Errorw("unable to handle replicaSet", "error", err)
 
 					observer.health.Alert(
-						karma.Format(
-							err,
-							"kubernetes: problems with handling replicaSets",
+						fmt.Errorf(
+							"kubernetes: problems with handling replicaSets, error: %w", err,
 						),
 						"watch", "replicasets",
 					)
@@ -999,15 +970,13 @@ func (observer *Observer) handleReplicaSetV1(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", replicaset.Namespace).
-		Describe("replicaset", replicaset.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(replicaset)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify replicaset with namespace: %s and name: %s, error: %w",
+			replicaset.Namespace,
+			replicaset.Name,
 			err,
-			"unable to identify replicaset",
 		)
 	}
 
@@ -1041,15 +1010,13 @@ func (observer *Observer) handleReplicaSet(
 		return nil
 	}
 
-	context := karma.
-		Describe("namespace", replicaset.Namespace).
-		Describe("replicaset", replicaset.Name)
-
 	id, accountID, applicationID, serviceID, err := observer.identify(replicaset)
 	if err != nil {
-		return context.Format(
+		return fmt.Errorf(
+			"unable to identify replicaset with namespace: %s and name: %s, error: %w",
+			replicaset.Namespace,
+			replicaset.Name,
 			err,
-			"unable to identify replicaset",
 		)
 	}
 
@@ -1084,33 +1051,29 @@ func (observer *Observer) identify(
 
 	id, err = observer.identificator.GetID(resource)
 	if err != nil {
-		return id, accountID, applicationID, serviceID, karma.Format(
-			err,
-			"unable to get identifier for resource",
+		return id, accountID, applicationID, serviceID, fmt.Errorf(
+			"unable to get identifier for resource, error: %w", err,
 		)
 	}
 
 	accountID, err = observer.identificator.GetAccountID(resource)
 	if err != nil {
-		return id, accountID, applicationID, serviceID, karma.Format(
-			err,
-			"unable to get account id",
+		return id, accountID, applicationID, serviceID, fmt.Errorf(
+			"unable to get account id, error: %w", err,
 		)
 	}
 
 	applicationID, err = observer.identificator.GetApplicationID(resource)
 	if err != nil {
-		return id, accountID, applicationID, serviceID, karma.Format(
-			err,
-			"unable to get application id",
+		return id, accountID, applicationID, serviceID, fmt.Errorf(
+			"unable to get application id, error: %w", err,
 		)
 	}
 
 	serviceID, err = observer.identificator.GetServiceID(resource)
 	if err != nil {
-		return id, accountID, applicationID, serviceID, karma.Format(
-			err,
-			"unable to get service id",
+		return id, accountID, applicationID, serviceID, fmt.Errorf(
+			"unable to get service id, error: %w", err,
 		)
 	}
 
