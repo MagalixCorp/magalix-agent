@@ -201,8 +201,8 @@ func InitMetrics(
 		failOnError     = false // whether the agent will fail to start if an error happened during init metric source
 
 		metricsSources = []MetricsSource{}
+		foundErrors    = make([]error, 0)
 	)
-	var foundErrors error
 	metricsSourcesNames := []string{"kubelet"}
 	if names, ok := args["--source"].([]string); ok && len(names) > 0 {
 		metricsSourcesNames = names
@@ -211,7 +211,7 @@ func InitMetrics(
 
 	kubeletClient, err := NewKubeletClient(nodesProvider, kube, args)
 	if err != nil {
-		foundErrors = fmt.Errorf("Error getting new Kube client for metrics: %w", err)
+		foundErrors = append(foundErrors, fmt.Errorf("Error getting new Kube client for metrics: %w", err))
 		failOnError = true
 	}
 
@@ -229,7 +229,7 @@ func InitMetrics(
 				},
 			)
 			if err != nil {
-				foundErrors = fmt.Errorf("%s; unable to initialize kubelet source, error: %w", foundErrors, err)
+				foundErrors = append(foundErrors, fmt.Errorf("unable to initialize kubelet source, error: %w", err))
 				continue
 			}
 
@@ -237,8 +237,8 @@ func InitMetrics(
 		}
 	}
 
-	if foundErrors != nil && (failOnError || len(metricsSources) == 0) {
-		return fmt.Errorf("unable to init metric sources, for the following errors: %w", foundErrors)
+	if len(foundErrors) > 0 && (failOnError || len(metricsSources) == 0) {
+		return fmt.Errorf(fmt.Sprintf("unable to init metric sources, for the following errors: %s", foundErrors))
 	}
 
 	for _, source := range metricsSources {
