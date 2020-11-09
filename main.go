@@ -100,7 +100,7 @@ Options:
   --trace-log <path>                         Write log messages to specified file
                                               [default: trace.log]
   --log-level <string>                       Log level
-                                              [default: info]
+                                              [default: warn]
   -h --help                                  Show this help.
   --version                                  Show version.
 `

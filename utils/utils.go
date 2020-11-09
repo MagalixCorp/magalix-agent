@@ -11,7 +11,6 @@ import (
 
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
-	"github.com/reconquest/karma-go"
 	"github.com/ryanuber/go-glob"
 )
 
@@ -254,19 +253,19 @@ func Transcode(
 ) error {
 	b, err := json.Marshal(u)
 	if err != nil {
-		return karma.Format(
-			err,
-			"unable to marshal %T to json",
+		return fmt.Errorf(
+			"unable to marshal %T to json, error: %w",
 			u,
+			err,
 		)
 	}
 
 	err = json.Unmarshal(b, v)
 	if err != nil {
-		return karma.Format(
-			err,
-			"unable to unmarshal json into %T",
+		return fmt.Errorf(
+			"unable to unmarshal json into %T, error: %w",
 			v,
+			err,
 		)
 	}
 

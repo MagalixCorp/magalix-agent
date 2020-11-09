@@ -18,7 +18,6 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/pkg/errors"
-	"github.com/reconquest/karma-go"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -263,10 +262,9 @@ func (client *KubeletClient) testNodeAccess(
 }
 
 func (client *KubeletClient) get(url_ string) (*http.Response, error) {
-	ctx := karma.Describe("url", url_)
 	resp, err := client.restClient.Client.Get(url_)
 	if err != nil {
-		return nil, ctx.Reason(err)
+		return nil, fmt.Errorf("Get request to %s failed with error: %w", url_, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf(
@@ -322,8 +320,7 @@ func NewKubeletClient(
 
 	restClient, ok := kube.Clientset.RESTClient().(*rest.RESTClient)
 	if !ok {
-		return nil, karma.Format(
-			nil,
+		return nil, fmt.Errorf(
 			"invalid cast, please contact developers",
 		)
 	}

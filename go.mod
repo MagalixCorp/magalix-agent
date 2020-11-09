@@ -12,7 +12,6 @@ require (
 	github.com/golang/snappy v0.0.1
 	github.com/pkg/errors v0.8.1
 	github.com/reconquest/health-go v0.0.0-20181113092653-ea90ecace101
-	github.com/reconquest/karma-go v0.0.0-20190930125156-7b5c19ad6eab
 	github.com/reconquest/sign-go v0.0.0-20181113092801-8d4f8c5854ae
 	github.com/reconquest/stats-go v0.0.0-20180307085907-df9f297af353
 	github.com/ryanuber/go-glob v1.0.0
