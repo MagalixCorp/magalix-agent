@@ -148,7 +148,7 @@ jobs:
     - run:
         name: Auth to cluster
         command: |
-          export VERSION=dev && /bin/auth_to_cluster
+          export CIRCLE_BRANCH=dev && /bin/auth_to_cluster
     - run:
         name: Update running agents
         command: |
