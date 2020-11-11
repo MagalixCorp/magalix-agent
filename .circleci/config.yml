@@ -170,3 +170,4 @@ workflows:
             branches:
               only:
                 - dev
+                - DEV-agents-restart
