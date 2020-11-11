@@ -151,7 +151,7 @@ func RootParent(parent *ParentController) *ParentController {
 	p := parent
 
 	for p.Parent != nil {
-		p = parent.Parent
+		p = p.Parent
 	}
 
 	return p
