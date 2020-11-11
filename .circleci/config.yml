@@ -152,7 +152,8 @@ jobs:
     - run:
         name: Update running agents
         command: |
-          curl -X "POST" http://agent-gateway-aggregator.magalix-glb.svc/api/v1/agents/restart
+          kubectl port-forward -n magalix-glb service/agent-gateway-aggregator 8080:80 &
+          curl -X "POST" http://localhost:8080/api/v1/agents/restart
 
 workflows:
   version: 2
