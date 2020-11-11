@@ -164,10 +164,9 @@ workflows:
           context: org-global
       - update:
           context: org-global
-          requires:
-            - "build & push"
-          filters:
-            branches:
-              only:
-                - dev
-                - DEV-agents-restart
+          # requires:
+          #   - "build & push"
+          # filters:
+          #   branches:
+          #     only:
+          #       - dev
