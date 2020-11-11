@@ -274,7 +274,7 @@ func (kubelet *Kubelet) GetMetrics(
 		})
 
 		if err != nil {
-			logger.Warnw("can't calculate rate",
+			logger.Debugw("can't calculate rate",
 				"metric", metric.Name,
 				"type", metric.Type,
 				"timestamp", metric.Timestamp,
