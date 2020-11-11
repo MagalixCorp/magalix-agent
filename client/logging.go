@@ -13,25 +13,27 @@ func (c *Client) Write(p []byte) (n int, err error) {
 	c.blockedM.Lock()
 	defer c.blockedM.Unlock()
 
-	c.logBuffer = append(c.logBuffer, proto.PacketLogItem{
-		Date: time.Now(),
-		Data: string(p),
-	})
+	if c.shouldSendLogs {
+		c.logBuffer = append(c.logBuffer, proto.PacketLogItem{
+			Date: time.Now(),
+			Data: string(p),
+		})
 
-	if len(c.logBuffer) == logBatchSize {
-		payload := make(proto.PacketLogs, len(c.logBuffer))
-		copy(payload, c.logBuffer)
-		c.logBuffer = make(proto.PacketLogs, 0, 5)
-		pkg := Package{
-			Kind:        proto.PacketKindLogs,
-			ExpiryTime:  utils.After(10 * time.Minute),
-			ExpiryCount: 2,
-			Priority:    9,
-			Retries:     4,
-			Data:        payload,
+		if len(c.logBuffer) == logBatchSize {
+			payload := make(proto.PacketLogs, len(c.logBuffer))
+			copy(payload, c.logBuffer)
+			c.logBuffer = make(proto.PacketLogs, 0, 5)
+			pkg := Package{
+				Kind:        proto.PacketKindLogs,
+				ExpiryTime:  utils.After(10 * time.Minute),
+				ExpiryCount: 2,
+				Priority:    9,
+				Retries:     4,
+				Data:        payload,
+			}
+
+			c.Pipe(pkg)
 		}
-
-		c.Pipe(pkg)
 	}
 	return len(c.logBuffer), nil
 }
