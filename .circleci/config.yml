@@ -153,6 +153,7 @@ jobs:
         name: Update running agents
         command: |
           kubectl port-forward -n magalix-glb service/agent-gateway-aggregator 8080:80 &
+          while ! netstat -tna | grep 'LISTEN\>' | grep 8080; do sleep 3 ; done
           curl -X "POST" http://localhost:8080/api/v1/agents/restart
 
 workflows:
