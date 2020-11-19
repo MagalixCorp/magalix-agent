@@ -113,7 +113,7 @@ func (executor *Executor) handleExecutionError(
 func (executor *Executor) handleExecutionSkipping(
 	aut *proto.PacketAutomation, msg string,
 ) *proto.PacketAutomationFeedbackRequest {
-	logger.Debugw("skipping automation execution", "msg", msg, "automation-id", aut.ID)
+	logger.Infof("skipping automation execution", "msg", msg, "automation-id", aut.ID)
 
 	return makeAutomationFailedResponse(aut, msg)
 }
@@ -326,16 +326,20 @@ func buildRecommendedResourcesFromAutomation(originalResources kuber.TotalResour
 
 	// Copy original values
 	if originalResources.Containers[0].Requests.CPU != nil {
-		*recommendedResources.Containers[0].Requests.CPU = *originalResources.Containers[0].Requests.CPU
+		_cpuRequest := *originalResources.Containers[0].Requests.CPU
+		recommendedResources.Containers[0].Requests.CPU = &_cpuRequest
 	}
 	if originalResources.Containers[0].Requests.Memory != nil {
-		*recommendedResources.Containers[0].Requests.Memory = *originalResources.Containers[0].Requests.Memory
+		_memoryRequest := *originalResources.Containers[0].Requests.Memory
+		recommendedResources.Containers[0].Requests.Memory = &_memoryRequest
 	}
 	if originalResources.Containers[0].Limits.CPU != nil {
-		*recommendedResources.Containers[0].Limits.CPU = *originalResources.Containers[0].Limits.CPU
+		_cpuLimit := *originalResources.Containers[0].Limits.CPU
+		recommendedResources.Containers[0].Limits.CPU = &_cpuLimit
 	}
 	if originalResources.Containers[0].Limits.Memory != nil {
-		*recommendedResources.Containers[0].Limits.Memory = *originalResources.Containers[0].Limits.Memory
+		_memoryLimit := *originalResources.Containers[0].Limits.Memory
+		recommendedResources.Containers[0].Limits.Memory = &_memoryLimit
 	}
 
 	// Override with values from automation
@@ -376,16 +380,18 @@ func buildOriginalResourcesFromContainer(container kv1.Container) kuber.TotalRes
 	}
 
 	if memoryLimit != 0 {
-		*originalResources.Containers[0].Limits.Memory = memoryLimit / 1024 / 1024
+		_memoryLimit := memoryLimit / 1024 / 1024
+		originalResources.Containers[0].Limits.Memory = &_memoryLimit
 	}
 	if memoryRequest != 0 {
-		*originalResources.Containers[0].Requests.Memory = memoryRequest / 1024 / 1024
+		_memoryRequest := memoryRequest / 1024 / 1024
+		originalResources.Containers[0].Requests.Memory = &_memoryRequest
 	}
 	if cpuLimit != 0 {
-		*originalResources.Containers[0].Limits.CPU = cpuLimit
+		originalResources.Containers[0].Limits.CPU = &cpuLimit
 	}
 	if cpuRequest != 0 {
-		*originalResources.Containers[0].Requests.CPU = cpuRequest
+		originalResources.Containers[0].Requests.CPU = &cpuRequest
 	}
 
 	return originalResources
