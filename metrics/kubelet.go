@@ -172,16 +172,9 @@ func (kubelet *Kubelet) GetMetrics(
 	addMetric := func(metric *Metric) {
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
-		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
-			logger.Debugw("Adding metric", "metric", metric.Name, "container", metric.ContainerName)
-		}
-
-		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
-			defer logger.Debugw("Finished Adding metric", "metric", metric.Name, "container", metric.ContainerName)
-		}
 
 		if metric.Timestamp.Equal(time.Time{}) {
-			logger.Errorw("invalid timestamp detect. defaulting to tickTime",
+			logger.Errorw("{kubelet} invalid timestamp detect. defaulting to tickTime",
 				"metric", metric.Name,
 				"type", metric.Type,
 				"timestamp", metric.Timestamp,
@@ -256,7 +249,7 @@ func (kubelet *Kubelet) GetMetrics(
 		metric *Metric,
 	) {
 		if metric.Timestamp.Equal(time.Time{}) {
-			logger.Errorw("invalid timestamp detect. defaulting to tickTime",
+			logger.Errorw("{kubelet} invalid timestamp detect. defaulting to tickTime",
 				"metric", metric.Name,
 				"type", metric.Type,
 				"timestamp", metric.Timestamp,
@@ -274,7 +267,7 @@ func (kubelet *Kubelet) GetMetrics(
 		})
 
 		if err != nil {
-			logger.Debugw("can't calculate rate",
+			logger.Debugw("{kubelet} can't calculate rate",
 				"metric", metric.Name,
 				"type", metric.Type,
 				"timestamp", metric.Timestamp,
@@ -319,7 +312,7 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	logger.Info("{kubelet} Fetching nodes")
+	logger.Debug("{kubelet} Fetching nodes")
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes, err := entitiesProvider.GetNodes()
@@ -327,7 +320,6 @@ func (kubelet *Kubelet) GetMetrics(
 		return nil, fmt.Errorf("{kubelet} Can't get nodes, error: %w", err)
 	}
 
-	logger.Debug("===============================")
 	addMetricValue(
 		TypeCluster,
 		"nodes/count",
@@ -341,8 +333,6 @@ func (kubelet *Kubelet) GetMetrics(
 		tickTime,
 		int64(len(nodes)),
 	)
-
-	logger.Debug("===============================")
 
 	instanceGroups := map[string]int64{}
 	for _, node := range nodes {
@@ -400,22 +390,21 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 	}
 
-	logger.Debug("Fetching pods")
+	logger.Debug("{kubelet} Fetching pods")
 
 	pods, err := entitiesProvider.GetPods()
 	if err != nil {
 		return nil, fmt.Errorf("{kubelet} unable to get pods, error: %w", err)
 	}
 
-	logger.Debugf("Fetched %d pods", len(pods))
+	logger.Debugf("{kubelet} Fetched %d pods", len(pods))
 	processedPodsCount := 0
 	processedContainersCount := 0
 
-	logger.Info("Start processing containers and pods")
 	for _, pod := range pods {
 		controllerName, controllerKind, err := entitiesProvider.FindPodController(pod.Namespace, pod.Name)
 		if err != nil {
-			logger.Errorw("unable to find pod controller",
+			logger.Errorw("{kubelet} unable to find pod controller",
 				"pod_name", pod.Name,
 				"namespace", pod.Namespace,
 				"error", err,
@@ -423,7 +412,6 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 
 		processedPodsCount++
-		logger.Debugf("Processing %d containers in pod %s", len(pod.Spec.Containers), pod.Name)
 
 		for _, container := range pod.Spec.Containers {
 			for _, measurement := range []struct {
@@ -455,16 +443,16 @@ func (kubelet *Kubelet) GetMetrics(
 		processedContainersCount += len(pod.Spec.Containers)
 	}
 
-	logger.Infof("Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
+	logger.Debugf("{kubelet} Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
 
-	logger.Info("Fetching nodes metrics")
+	logger.Debug("{kubelet} Fetching nodes metrics")
 
 	pr, err := alltogether.NewConcurrentProcessor(
 		nodes,
 		func(node corev1.Node) error {
 			nodeIP := GetNodeIP(&node)
 			logger.Debugf(
-				"requesting metrics from node %s",
+				"{kubelet} requesting metrics from node %s",
 				node.Name,
 			)
 
@@ -479,7 +467,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 				if err != nil {
 					if strings.Contains(err.Error(), "the server could not find the requested resource") {
-						logger.Warnw("unable to get summary", "node", node.Name, "error", err)
+						logger.Warnw("{kubelet} unable to get summary", "node", node.Name, "error", err)
 						summaryBytes = []byte("{}")
 						return nil
 					}
@@ -563,7 +551,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 				if err != nil {
 					logger.Warnw(
-						"unable to find controller for pod",
+						"{kubelet} unable to find controller for pod",
 						"namespace", pod.PodRef.Namespace,
 						"pod_name", pod.PodRef.Name,
 						"error", err,
@@ -711,7 +699,7 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 				if err != nil {
 					if strings.Contains(err.Error(), "the server could not find the requested resource") {
-						logger.Warnw("unable to get cAdvisor",
+						logger.Warnw("{kubelet} unable to get cAdvisor",
 							"error", err,
 							"node", node.Name,
 						)
@@ -752,7 +740,7 @@ func (kubelet *Kubelet) GetMetrics(
 						controllerName, controllerKind, err := entitiesProvider.FindPodController(namespaceName, podName)
 						if err != nil {
 							logger.Errorw(
-								"unable to find controller for pod",
+								"{kubelet} unable to find controller for pod",
 								"error", err,
 							)
 						}
@@ -768,7 +756,7 @@ func (kubelet *Kubelet) GetMetrics(
 							storedMetric.Value = int64(value)
 						} else {
 							logger.Warnw(
-								"found a container in cAdvisor response that don't exist at summary response",
+								"{kubelet} found a container in cAdvisor response that don't exist at summary response",
 								"namespace", namespaceName,
 								"pod_name", podName,
 								"container_name", containerName,
@@ -817,7 +805,7 @@ func (kubelet *Kubelet) GetMetrics(
 		for _, err := range errs {
 			if err != nil {
 				logger.Errorw(
-					"error while scraping nodes metrics",
+					"{kubelet} error while scraping nodes metrics",
 					"error", err,
 				)
 			}
@@ -844,18 +832,15 @@ func (kubelet *Kubelet) GetMetrics(
 		result = append(result, metrics)
 	}
 
+	var timestamp time.Time
 	if len(metrics) > 0 {
-		logger.Infof(
-			"collected %d measurements with timestamp %s",
-			len(metrics),
-			metrics[0].Timestamp,
-		)
-	} else {
-		logger.Infof(
-			"collected %d measurements",
-			len(metrics),
-		)
+		timestamp = metrics[0].Timestamp
 	}
+	logger.Infof(
+		"{kubelet} collected %d measurements with timestamp %s",
+		len(metrics),
+		timestamp,
+	)
 
 	return result, nil
 }

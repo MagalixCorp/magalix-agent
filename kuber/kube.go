@@ -778,7 +778,7 @@ func (kube *Kube) SetResources(
 		updateStrategy := statefulSet.Spec.UpdateStrategy.Type
 
 		errMap := map[string]interface{}{
-			"replicas":        statefulSet.Spec.Replicas,
+			"replicas":        *statefulSet.Spec.Replicas,
 			"update-strategy": updateStrategy,
 		}
 
