@@ -8,8 +8,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
-	"github.com/MagalixTechnologies/log-go"
-	"github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -68,7 +67,6 @@ type EntitiesWatcher interface {
 }
 
 type entitiesWatcher struct {
-	logger   *log.Logger
 	client   *client.Client
 	observer *kuber.Observer
 
@@ -81,7 +79,6 @@ type entitiesWatcher struct {
 }
 
 func NewEntitiesWatcher(
-	logger *log.Logger,
 	observer_ *kuber.Observer,
 	client_ *client.Client,
 	version int,
@@ -91,8 +88,6 @@ func NewEntitiesWatcher(
 	}
 
 	ew := &entitiesWatcher{
-		logger: logger,
-
 		client: client_,
 
 		observer:       observer_,
@@ -122,7 +117,7 @@ func (ew *entitiesWatcher) Start() {
 	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
 	err := ew.observer.WaitForCacheSync()
 	if err != nil {
-		ew.logger.Warning(err)
+		logger.Warnf("timeout due to missing permissions with error %s ", err.Error())
 	}
 
 	go ew.deltasWorker()
@@ -140,9 +135,10 @@ func (ew *entitiesWatcher) WatcherFor(
 ) (kuber.Watcher, error) {
 	w, ok := ew.watchers[gvrk]
 	if !ok {
-		return nil, karma.
-			Describe("gvrk", gvrk).
-			Format(nil, "non watched resource")
+		return nil, fmt.Errorf(
+			"non watched resource, gvrk: %+v",
+			gvrk,
+		)
 	}
 	return w, nil
 }
@@ -161,9 +157,9 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 
 		ret, err := w.Lister().List(labels.Everything())
 		if err != nil {
-			ew.logger.Errorf(
-				err,
-				"unable to list %s", resource,
+			logger.Errorw(
+				"unable to list "+resource,
+				"error", err,
 			)
 		}
 		if len(ret) == 0 {
@@ -175,16 +171,16 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 			u := *ret[i].(*unstructured.Unstructured)
 			meta, found, err := unstructured.NestedFieldNoCopy(u.Object, "metadata")
 			if !found || err != nil {
-				ew.logger.Errorf(
-					err,
-					"unable to find metadata field of Unstructured: %s",
-					resource,
+				logger.Errorw(
+					"unable to find metadata field",
+					"error", err,
+					"resource", resource,
 				)
 			}
 
 			status, err := getObjectStatus(&u, gvrk)
 			if err != nil {
-				ew.logger.Errorf(err, "unable to get object status data")
+				logger.Errorw("unable to get object status data", "error", err)
 			}
 
 			items[i] = &unstructured.Unstructured{
@@ -242,9 +238,9 @@ func (ew *entitiesWatcher) publishGvrk(
 	resource := gvrk.Resource
 	ret, err := w.Lister().List(labels.Everything())
 	if err != nil {
-		ew.logger.Errorf(
-			err,
-			"unable to list %s", resource,
+		logger.Errorf(
+			"unable to list "+resource,
+			"error", err,
 		)
 	}
 	if len(ret) == 0 {
@@ -284,9 +280,9 @@ func (ew *entitiesWatcher) deltaWrapper(
 	if gvrk == kuber.Pods {
 		parents, err := ew.getParents(&delta.Data)
 		if err != nil {
-			return delta, karma.Format(
+			return delta, fmt.Errorf(
+				"unable to get pod parents, error: %w",
 				err,
-				"unable to get pod parents",
 			)
 		}
 		delta.Parent = parents
@@ -309,7 +305,7 @@ func (ew *entitiesWatcher) OnAdd(
 		},
 	)
 	if err != nil {
-		ew.logger.Warningf(err, "unable to handle OnAdd delta")
+		logger.Warnw("unable to handle OnAdd delta", "error", err)
 		return
 	}
 	ew.deltasQueue <- delta
@@ -329,7 +325,7 @@ func (ew *entitiesWatcher) OnUpdate(
 		},
 	)
 	if err != nil {
-		ew.logger.Warningf(err, "unable to handle onUpdate delta")
+		logger.Warnw("unable to handle onUpdate delta", "error", err)
 		return
 	}
 	ew.deltasQueue <- delta
@@ -350,7 +346,7 @@ func (ew *entitiesWatcher) OnDelete(
 		},
 	)
 	if err != nil {
-		ew.logger.Warningf(err, "unable to handle OnDelete delta")
+		logger.Warnw("unable to handle OnDelete delta", "error", err)
 		return
 	}
 	ew.deltasQueue <- delta
@@ -399,6 +395,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 	if len(deltas) == 0 {
 		return
 	}
+	logger.Info("Sending deltas")
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
@@ -417,7 +414,7 @@ func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta)
 		Retries:     deltasPacketRetries,
 		Data:        packet,
 	})
-	ew.logger.Info("deltas sent")
+	logger.Infof("%d deltas sent", len(deltas))
 }
 
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {
@@ -445,7 +442,7 @@ func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionReso
 	case kuber.Nodes:
 		ip, found, err := getNodeInternalIP(obj)
 		if !found || err != nil {
-			return nil, karma.Format(err, "unable to find node internal ip")
+			return nil, fmt.Errorf("unable to find node internal ip, error: %w", err)
 		}
 
 		return map[string]interface{}{
@@ -469,16 +466,16 @@ func getNodeInternalIP(node *unstructured.Unstructured) (string, bool, error) {
 	for _, address := range addresses {
 		addressMap, ok := address.(map[string]interface{})
 		if !ok {
-			return "", false, karma.Format(nil, "%v of type %T is not map[string]interface{}", address, address)
+			return "", false, fmt.Errorf("%v of type %T is not map[string]interface{}", address, address)
 		}
 		addressType, ok := addressMap["type"].(string)
 		if !ok {
-			return "", false, karma.Format(nil, "%v of type %T is not string", addressMap["type"], addressMap["type"])
+			return "", false, fmt.Errorf("%v of type %T is not string", addressMap["type"], addressMap["type"])
 		}
 		if addressType == string(corev1.NodeInternalIP) {
 			internalIP, ok := addressMap["address"].(string)
 			if !ok {
-				return "", false, karma.Format(nil, "%v of type %T is not string", addressMap["address"], addressMap["address"])
+				return "", false, fmt.Errorf("%v of type %T is not string", addressMap["address"], addressMap["address"])
 			}
 			return internalIP, true, nil
 		}

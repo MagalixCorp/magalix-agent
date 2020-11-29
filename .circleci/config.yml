@@ -103,7 +103,6 @@ jobs:
             fi
 
             make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
-
       - deploy:
           name: Build image & Push to GCR Registry
           command: |
@@ -139,8 +138,23 @@ jobs:
               push_to_gcr ${GCLOUD_SERVICE_KEY} ${GOOGLE_COMPUTE_ZONE} ${GOOGLE_PROJECT_ID} ${AGENT_TAG_MAJOR}
             fi
 
-
-
+  update:
+    docker:
+      - image: mgxinternal/go-10-helm-kubectl:1
+        auth:
+          username: $DOCKERHUB_USERNAME
+          password: $DOCKERHUB_PASSWORD
+    steps:
+    - run:
+        name: Auth to cluster
+        command: |
+          /bin/auth_to_cluster
+    - run:
+        name: Update running agents
+        command: |
+          kubectl port-forward -n magalix-glb service/agent-gateway-aggregator 8080:80 &
+          while ! netstat -tna | grep 'LISTEN\>' | grep 8080; do sleep 3 ; done
+          curl -X "POST" http://localhost:8080/api/v1/agents/restart
 
 workflows:
   version: 2
@@ -148,3 +162,11 @@ workflows:
     jobs:
       - "build & push":
           context: org-global
+      - update:
+          context: org-global
+          requires:
+            - "build & push"
+          filters:
+            branches:
+              only:
+                - dev

@@ -1,9 +1,9 @@
 package kuber
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -171,8 +171,7 @@ func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
 	case ServiceAccounts.Kind:
 		return &ServiceAccounts, nil
 	default:
-		return nil, karma.Format(
-			nil,
+		return nil, fmt.Errorf(
 			"unknown kind: %s",
 			kind,
 		)

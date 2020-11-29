@@ -1,10 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/MagalixTechnologies/log-go"
-	"github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 type Backoff struct {
@@ -12,10 +12,7 @@ type Backoff struct {
 	MaxRetries int
 }
 
-func WithBackoff(fn func() error, backoff Backoff, logger *log.Logger) error {
-	if logger == nil {
-		logger = stderr
-	}
+func WithBackoff(fn func() error, backoff Backoff) error {
 	try := 0
 	for {
 		try++
@@ -26,20 +23,22 @@ func WithBackoff(fn func() error, backoff Backoff, logger *log.Logger) error {
 		}
 
 		if try > backoff.MaxRetries {
-			return karma.
-				Describe("retry", try).
-				Describe("maxRetry", backoff.MaxRetries).
-				Format(err, "max retries exceeded")
+			return fmt.Errorf(
+				"max retries exceeded, retry: %d, maxRetry: %d, error: %w",
+				try,
+				backoff.MaxRetries,
+				err,
+			)
 		}
 
 		// NOTE max multiplier = 10
 		// 300ms -> 600ms -> [...] -> 3000ms -> 300ms
 		timeout := backoff.Sleep * time.Duration((try-1)%10+1)
 
-		logger.Errorf(
-			karma.Describe("retry", try).Reason(err),
-			"unhandled error occurred, retrying after %s",
-			timeout,
+		logger.Errorw(
+			"unhandled error occurred",
+			"retry-time", timeout,
+			"error", err,
 		)
 
 		time.Sleep(timeout)

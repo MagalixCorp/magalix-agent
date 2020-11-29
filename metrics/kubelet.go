@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/MagalixTechnologies/alltogether-go"
-	"github.com/MagalixTechnologies/log-go"
-	"github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
+	"github.com/pkg/errors"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -73,8 +73,6 @@ type kubeletTimeouts struct {
 
 // Kubelet kubelet client
 type Kubelet struct {
-	*log.Logger
-
 	resolution    time.Duration
 	previous      map[string]KubeletValue
 	previousMutex *sync.Mutex
@@ -85,12 +83,10 @@ type Kubelet struct {
 // NewKubelet returns new kubelet
 func NewKubelet(
 	kubeletClient *KubeletClient,
-	log *log.Logger,
 	resolution time.Duration,
 	timeouts kubeletTimeouts,
 ) (*Kubelet, error) {
 	kubelet := &Kubelet{
-		Logger: log,
 
 		kubeletClient: kubeletClient,
 
@@ -109,7 +105,7 @@ func (kubelet *Kubelet) GetMetrics(
 ) (result []*Metric, err error) {
 	defer func() {
 		if tears := recover(); tears != nil {
-			err = karma.Describe("trace", string(debug.Stack())).Reason(tears)
+			err = errors.New(string(debug.Stack()))
 		}
 	}()
 
@@ -159,7 +155,7 @@ func (kubelet *Kubelet) GetMetrics(
 		duration := int64(timestamp.Sub(previous.Timestamp).Seconds())
 
 		if duration <= 1 {
-			return 0, karma.Format(nil, "timestamp less than or equal previous one")
+			return 0, errors.New("timestamp less than or equal previous one")
 		}
 
 		previousValue := previous.Value
@@ -174,25 +170,14 @@ func (kubelet *Kubelet) GetMetrics(
 	}
 
 	addMetric := func(metric *Metric) {
-		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
-			kubelet.Infof(nil, "{kubelet} Adding metric %s for %s", metric.Name, metric.ContainerName)
-		}
-
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
 
-		if metric.Name == "memory/limit" || metric.Name == "memory/request" || metric.Name == "cpu/limit" || metric.Name == "cpu/request" {
-			defer kubelet.Infof(nil, "{kubelet} Finished Adding metric %s for %s", metric.Name, metric.ContainerName)
-
-		}
-
 		if metric.Timestamp.Equal(time.Time{}) {
-			kubelet.Errorf(
-				karma.Describe("metric", metric.Name).
-					Describe("type", metric.Type).
-					Describe("timestamp", metric.Timestamp).
-					Reason(fmt.Errorf("invalid timestamp")),
-				"{kubelet} invalid timestamp detect. defaulting to tickTime",
+			logger.Errorw("{kubelet} invalid timestamp detect. defaulting to tickTime",
+				"metric", metric.Name,
+				"type", metric.Type,
+				"timestamp", metric.Timestamp,
 			)
 			metric.Timestamp = tickTime
 		}
@@ -264,12 +249,10 @@ func (kubelet *Kubelet) GetMetrics(
 		metric *Metric,
 	) {
 		if metric.Timestamp.Equal(time.Time{}) {
-			kubelet.Errorf(
-				karma.Describe("metric", metric.Name).
-					Describe("type", metric.Type).
-					Describe("timestamp", metric.Timestamp).
-					Reason(fmt.Errorf("invalid timestamp")),
-				"{kubelet} {rate} invalid timestamp detect. defaulting to tickTime",
+			logger.Errorw("{kubelet} invalid timestamp detect. defaulting to tickTime",
+				"metric", metric.Name,
+				"type", metric.Type,
+				"timestamp", metric.Timestamp,
 			)
 			metric.Timestamp = tickTime
 		}
@@ -284,12 +267,11 @@ func (kubelet *Kubelet) GetMetrics(
 		})
 
 		if err != nil {
-			kubelet.Warningf(
-				karma.Describe("metric", metric.Name).
-					Describe("type", metric.Type).
-					Describe("timestamp", metric.Timestamp).
-					Reason(err),
-				"{kubelet} can't calculate rate",
+			logger.Debugw("{kubelet} can't calculate rate",
+				"metric", metric.Name,
+				"type", metric.Type,
+				"timestamp", metric.Timestamp,
+				"error", err,
 			)
 			return
 		}
@@ -330,12 +312,12 @@ func (kubelet *Kubelet) GetMetrics(
 		)
 	}
 
-	kubelet.Info("{kubelet} Fetching nodes")
+	logger.Debug("{kubelet} Fetching nodes")
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
 	nodes, err := entitiesProvider.GetNodes()
 	if err != nil {
-		return nil, karma.Format(err, "{kubelet} Can't get nodes")
+		return nil, fmt.Errorf("{kubelet} Can't get nodes, error: %w", err)
 	}
 
 	addMetricValue(
@@ -408,30 +390,28 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 	}
 
-	kubelet.Info("{kubelet} Fetching pods")
+	logger.Debug("{kubelet} Fetching pods")
 
 	pods, err := entitiesProvider.GetPods()
 	if err != nil {
-		return nil, karma.Format(err, "{kubelet} unable to get pods")
+		return nil, fmt.Errorf("{kubelet} unable to get pods, error: %w", err)
 	}
 
-	kubelet.Infof(nil, "{kubelet} Fetched %d pods", len(pods))
+	logger.Debugf("{kubelet} Fetched %d pods", len(pods))
 	processedPodsCount := 0
 	processedContainersCount := 0
 
 	for _, pod := range pods {
-		controllerName, controllerKind, err := entitiesProvider.FindController(pod.Namespace, pod.Name)
+		controllerName, controllerKind, err := entitiesProvider.FindPodController(pod.Namespace, pod.Name)
 		if err != nil {
-			kubelet.Errorf(
-				karma.Describe("pod_name", pod.Name).
-					Describe("namespace", pod.Namespace).
-					Reason(err),
-				"{kubelet} unable to find pod controller",
+			logger.Errorw("{kubelet} unable to find pod controller",
+				"pod_name", pod.Name,
+				"namespace", pod.Namespace,
+				"error", err,
 			)
 		}
 
 		processedPodsCount++
-		kubelet.Infof(nil, "{kubelet} Processing %d containers in pod %s", len(pod.Spec.Containers), pod.Name)
 
 		for _, container := range pod.Spec.Containers {
 			for _, measurement := range []struct {
@@ -463,16 +443,15 @@ func (kubelet *Kubelet) GetMetrics(
 		processedContainersCount += len(pod.Spec.Containers)
 	}
 
-	kubelet.Infof(nil, "{kubelet} Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
+	logger.Debugf("{kubelet} Processed %d/%d pods and %d containers", processedPodsCount, len(pods), processedContainersCount)
 
-	kubelet.Info("{kubelet} Fetching nodes metrics")
+	logger.Debug("{kubelet} Fetching nodes metrics")
 
 	pr, err := alltogether.NewConcurrentProcessor(
 		nodes,
 		func(node corev1.Node) error {
 			nodeIP := GetNodeIP(&node)
-			kubelet.Infof(
-				nil,
+			logger.Debugf(
 				"{kubelet} requesting metrics from node %s",
 				node.Name,
 			)
@@ -488,13 +467,13 @@ func (kubelet *Kubelet) GetMetrics(
 
 				if err != nil {
 					if strings.Contains(err.Error(), "the server could not find the requested resource") {
-						kubelet.Warningf(err, "{kubelet} unable to get summary from node %q", node.Name)
+						logger.Warnw("{kubelet} unable to get summary", "node", node.Name, "error", err)
 						summaryBytes = []byte("{}")
 						return nil
 					}
-					return karma.Format(
+					return errors.Wrapf(
 						err,
-						"{kubelet} unable to get summary from node %q",
+						"unable to get summary from node %q",
 						node.Name,
 					)
 				}
@@ -507,9 +486,9 @@ func (kubelet *Kubelet) GetMetrics(
 
 			err = json.Unmarshal(summaryBytes, &summary)
 			if err != nil {
-				return karma.Format(
+				return errors.Wrap(
 					err,
-					"{kubelet} unable to unmarshal summary response",
+					"unable to unmarshal summary response",
 				)
 			}
 
@@ -565,17 +544,17 @@ func (kubelet *Kubelet) GetMetrics(
 			throttleMetrics := make(map[string]*Metric)
 
 			for _, pod := range summary.Pods {
-				controllerName, controllerKind, err := entitiesProvider.FindController(
+				controllerName, controllerKind, err := entitiesProvider.FindPodController(
 					pod.PodRef.Namespace, pod.PodRef.Name,
 				)
 				namespaceName := pod.PodRef.Namespace
 
 				if err != nil {
-					kubelet.Warningf(
-						karma.Describe("namespace", pod.PodRef.Namespace).
-							Describe("pod_name", pod.PodRef.Name).
-							Reason(err),
+					logger.Warnw(
 						"{kubelet} unable to find controller for pod",
+						"namespace", pod.PodRef.Namespace,
+						"pod_name", pod.PodRef.Name,
+						"error", err,
 					)
 					continue
 				}
@@ -720,16 +699,16 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 				if err != nil {
 					if strings.Contains(err.Error(), "the server could not find the requested resource") {
-						kubelet.Warningf(err,
-							"{kubelet} {cAdvisor} unable to get cAdvisor from node %q",
-							node.Name,
+						logger.Warnw("{kubelet} unable to get cAdvisor",
+							"error", err,
+							"node", node.Name,
 						)
 						cadvisorResponse = []byte{}
 						return nil
 					}
-					return karma.Format(
+					return errors.Wrapf(
 						err,
-						"{kubelet} unable to get cadvisor from node %q",
+						"unable to get cadvisor from node %q",
 						node.Name,
 					)
 				}
@@ -742,8 +721,8 @@ func (kubelet *Kubelet) GetMetrics(
 
 			cadvisor, err := decodeCAdvisorResponse(bytes.NewReader(cadvisorResponse))
 			if err != nil {
-				return karma.Format(err,
-					"{kubelet} unable to read cadvisor response",
+				return errors.Wrap(err,
+					"unable to read cadvisor response",
 				)
 			}
 
@@ -757,17 +736,12 @@ func (kubelet *Kubelet) GetMetrics(
 			} {
 				for _, val := range cadvisor[metric.Ref] {
 					namespaceName, podName, containerName, value, ok := getCAdvisorContainerValue(val)
-					ctx :=
-						karma.
-							Describe("namespace", namespaceName).
-							Describe("pod_name", podName).
-							Describe("container_name", containerName)
 					if ok {
-						controllerName, controllerKind, err := entitiesProvider.FindController(namespaceName, podName)
+						controllerName, controllerKind, err := entitiesProvider.FindPodController(namespaceName, podName)
 						if err != nil {
-							kubelet.Errorf(
-								ctx.Reason(err),
+							logger.Errorw(
 								"{kubelet} unable to find controller for pod",
+								"error", err,
 							)
 						}
 						key := getKey(
@@ -781,9 +755,11 @@ func (kubelet *Kubelet) GetMetrics(
 						if storedMetric, ok := throttleMetrics[key]; ok {
 							storedMetric.Value = int64(value)
 						} else {
-							kubelet.Warningf(
-								ctx.Reason(nil),
+							logger.Warnw(
 								"{kubelet} found a container in cAdvisor response that don't exist at summary response",
+								"namespace", namespaceName,
+								"pod_name", podName,
+								"container_name", containerName,
 							)
 						}
 					}
@@ -828,9 +804,9 @@ func (kubelet *Kubelet) GetMetrics(
 
 		for _, err := range errs {
 			if err != nil {
-				kubelet.Errorf(
-					karma.Format(err, "error while scraping node metrics"),
+				logger.Errorw(
 					"{kubelet} error while scraping nodes metrics",
+					"error", err,
 				)
 			}
 		}
@@ -838,11 +814,10 @@ func (kubelet *Kubelet) GetMetrics(
 
 	result = make([]*Metric, 0)
 
-	var context *karma.Context
 	for _, metrics := range metrics {
 
 		/*
-			context = context.Describe(
+			context = context.
 				fmt.Sprintf(
 					"%s %s %s %s",
 					metrics.Node,
@@ -857,20 +832,15 @@ func (kubelet *Kubelet) GetMetrics(
 		result = append(result, metrics)
 	}
 
+	var timestamp time.Time
 	if len(metrics) > 0 {
-		kubelet.Infof(
-			context,
-			"{kubelet} collected %d measurements with timestamp %s",
-			len(metrics),
-			metrics[0].Timestamp,
-		)
-	} else {
-		kubelet.Infof(
-			context,
-			"{kubelet} collected %d measurements",
-			len(metrics),
-		)
+		timestamp = metrics[0].Timestamp
 	}
+	logger.Infof(
+		"{kubelet} collected %d measurements with timestamp %s",
+		len(metrics),
+		timestamp,
+	)
 
 	return result, nil
 }
@@ -890,7 +860,7 @@ func (kubelet *Kubelet) getPreviousValue(key string) (*KubeletValue, error) {
 	previous, ok := kubelet.previous[key]
 
 	if !ok {
-		return nil, karma.Format(nil, "No previous value")
+		return nil, errors.New("No previous value")
 	}
 
 	// make new copy
@@ -918,26 +888,16 @@ func (kubelet *Kubelet) withBackoff(fn func() error) error {
 		}
 
 		if try > maxRetry {
-			context := karma.
-				Describe("retry", try).
-				Describe("maxRetry", maxRetry).
-				Reason(err)
-			kubelet.Errorf(
-				context,
-				"{kubelet} unhandled error occurred, no more retrying",
-			)
-
-			return karma.Format(context, "max retries exceeded")
+			return errors.Wrapf(err, "max retries exceeded")
 		}
 
 		// NOTE max multiplier = 10
 		// 300ms -> 600ms -> [...] -> 3000ms -> 300ms
 		timeout := kubelet.timeouts.backoff.sleep * time.Duration((try-1)%10+1)
 
-		kubelet.Warningf(
-			karma.Describe("retry", try).Reason(err),
-			"{kubelet} unhandled error occurred, retrying after %s",
-			timeout,
+		logger.Warnw("unhandled error occurred",
+			"error", err,
+			"retryAfter", timeout,
 		)
 
 		time.Sleep(timeout)

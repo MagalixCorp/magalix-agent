@@ -3,11 +3,10 @@ package metrics
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
-
-	"github.com/reconquest/karma-go"
 )
 
 // tagsValue a struct to hod tags and values
@@ -99,7 +98,7 @@ func decodeCAdvisorResponse(r io.Reader) (cAdvisorMetrics, error) {
 					tagSplit := strings.SplitN(tag, "=", 2)
 					tmp, err := strconv.Unquote(tagSplit[1])
 					if err != nil {
-						return nil, karma.Format(err, "unable to unquote: %s", token)
+						return nil, fmt.Errorf("unable to unquote: %s, error: %w", token, err)
 					}
 					tags[tagSplit[0]] = tmp
 				}
@@ -110,7 +109,7 @@ func decodeCAdvisorResponse(r io.Reader) (cAdvisorMetrics, error) {
 				token = parts[0]
 				tmp, err := strconv.ParseFloat(token, 64)
 				if err != nil {
-					return nil, karma.Format(err, "unable to parse float %s", token)
+					return nil, fmt.Errorf("unable to parse float %s, error: %w", token, err)
 				}
 				value = tmp
 				v, ok := ret[metric]
@@ -132,7 +131,7 @@ func decodeCAdvisorResponse(r io.Reader) (cAdvisorMetrics, error) {
 	}
 
 	if err := bufScanner.Err(); err != nil {
-		return nil, karma.Format(err, "bufScanner returned an error")
+		return nil, fmt.Errorf("bufScanner returned an error, error: %w", err)
 	}
 	return ret, nil
 }

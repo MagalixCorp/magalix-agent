@@ -3,13 +3,14 @@ package kuber
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
-	"github.com/MagalixTechnologies/log-go"
-	"github.com/reconquest/karma-go"
+	"github.com/MagalixTechnologies/core/logger"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
@@ -23,12 +24,10 @@ type Observer struct {
 	dynamicinformer.DynamicSharedInformerFactory
 	ParentsStore *ParentsStore
 
-	logger *log.Logger
 	stopCh chan struct{}
 }
 
 func NewObserver(
-	logger *log.Logger,
 	client dynamic.Interface,
 	parentsStore *ParentsStore,
 	stopCh chan struct{},
@@ -37,20 +36,12 @@ func NewObserver(
 	return &Observer{
 		DynamicSharedInformerFactory: dynamicinformer.NewDynamicSharedInformerFactory(client, defaultResync),
 		ParentsStore:                 parentsStore,
-		logger:                       logger,
 		stopCh:                       stopCh,
 	}
 }
 
-func (observer *Observer) Watch(
-	gvrk GroupVersionResourceKind,
-) *watcher {
-	observer.logger.Infof(
-		nil,
-		"subscribed on changes about resource: %s",
-		gvrk.String(),
-	)
-
+func (observer *Observer) Watch(gvrk GroupVersionResourceKind) *watcher {
+	logger.Debugw("subscribed on changes", "resource", gvrk.String())
 	watcher := observer.WatcherFor(gvrk)
 	observer.Start()
 
@@ -72,10 +63,7 @@ func (observer *Observer) WatchAndWaitForSync(gvrk GroupVersionResourceKind) (*w
 	case <-done:
 		return watcher, nil
 	case <-time.After(timeout):
-		return nil, karma.
-			Describe("GVRK", gvrk).
-			Describe("timeout", timeout).
-			Format(nil, "Time out waiting for informer sync")
+		return nil, fmt.Errorf("Time out waiting for informer sync: (GVRK, %+v), (timeout, %v)", gvrk, timeout)
 	}
 }
 
@@ -86,7 +74,6 @@ func (observer *Observer) WatcherFor(
 
 	return &watcher{
 		gvrk:     gvrk,
-		logger:   observer.logger,
 		informer: informer,
 	}
 }
@@ -115,8 +102,7 @@ func (observer *Observer) WaitForCacheSync() error {
 		case <-finished:
 			return nil
 		case <-ctx.Done():
-			return karma.Format(
-				nil,
+			return fmt.Errorf(
 				"timeout waiting for cache sync",
 			)
 		}
@@ -131,14 +117,14 @@ func (observer *Observer) GetNodes() ([]corev1.Node, error) {
 	}
 	_nodes, err := watcher.Lister().List(labels.Everything())
 	if err != nil {
-		return nil, karma.Format(err, "unable to list nodes")
+		return nil, fmt.Errorf("unable to list nodes, error: %w", err)
 	}
 	nodes := make([]corev1.Node, len(_nodes))
 	for i, n := range _nodes {
 		u := n.(*unstructured.Unstructured)
 		err = utils.Transcode(u, &nodes[i])
 		if err != nil {
-			return nil, karma.Format(err, "unable to transcode unstructured to corev1.Node")
+			return nil, fmt.Errorf("unable to transcode unstructured to corev1.Node, error: %w", err)
 		}
 	}
 	return nodes, nil
@@ -151,23 +137,91 @@ func (observer *Observer) GetPods() ([]corev1.Pod, error) {
 	}
 	_pods, err := watcher.Lister().List(labels.Everything())
 	if err != nil {
-		return nil, karma.Format(err, "unable to list pods")
+		return nil, fmt.Errorf("unable to list pods, error: %w", err)
 	}
 	pods := make([]corev1.Pod, len(_pods))
 	for i, n := range _pods {
 		u := n.(*unstructured.Unstructured)
 		err = utils.Transcode(u, &pods[i])
 		if err != nil {
-			return nil, karma.Format(err, "unable to transcode unstructured to corev1.Pod")
+			return nil, fmt.Errorf("unable to transcode unstructured to corev1.Pod, error: %w", err)
 		}
 	}
 	return pods, nil
 }
 
-func (observer *Observer) FindController(namespaceName string, podName string) (string, string, error) {
-	ctx := karma.
-		Describe("pod_name", podName).
-		Describe("namespace_name", namespaceName)
+func (observer *Observer) FindController(
+	namespaceName string,
+	controllerKind string,
+	controllerName string,
+) (*unstructured.Unstructured, error) {
+	errMap := map[string]interface{}{
+		"namespace-name":  namespaceName,
+		"controller-kind": controllerKind,
+		"controller-name": controllerName,
+	}
+
+	gvrk, err := KindToGvrk(controllerKind)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get GVRK, error: %w with data %+v", err, errMap)
+	}
+	watcher, err := observer.WatchAndWaitForSync(*gvrk)
+	if err != nil {
+		return nil, err
+	}
+
+	controller, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(controllerName)
+	if err != nil {
+		return nil, fmt.Errorf("unable to find controller, error: %w with data %+v", err, errMap)
+	}
+
+	return controller.(*unstructured.Unstructured), err
+}
+
+func (observer *Observer) FindContainer(
+	namespaceName string,
+	controllerKind string,
+	controllerName string,
+	containerName string,
+) (*corev1.Container, error) {
+	errMap := map[string]interface{}{
+		"namespace-name":  namespaceName,
+		"controller-kind": controllerKind,
+		"controller-name": controllerName,
+		"container-name":  containerName,
+	}
+
+	controller, err := observer.FindController(namespaceName, controllerKind, controllerName)
+	if err != nil {
+		return nil, fmt.Errorf("unable to find controller, error: %w with data %+v", err, errMap)
+	}
+
+	containersList, found, err := unstructured.NestedSlice(controller.Object, "spec", "template", "spec", "containers")
+	if err != nil {
+		return nil, fmt.Errorf("unable to find container, error: %w with data %+v", err, errMap)
+	}
+
+	if !found {
+		return nil, fmt.Errorf("unable to find containers spec with data %+v", errMap)
+	}
+
+	for _, c := range containersList {
+		var container corev1.Container
+		err := utils.Transcode(c, &container)
+		if err != nil {
+			return nil, fmt.Errorf("unable to transcode unstructured to container with data %+v", errMap)
+		}
+
+		if container.Name == containerName {
+			return &container, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unable to find container")
+}
+
+func (observer *Observer) FindPodController(namespaceName string, podName string) (string, string, error) {
+	lg := logger.With("pod", podName, "namespace", namespaceName)
 
 	watcher, err := observer.WatchAndWaitForSync(Pods)
 	if err != nil {
@@ -176,19 +230,19 @@ func (observer *Observer) FindController(namespaceName string, podName string) (
 
 	pod, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(podName)
 	if err != nil {
-		return "", "", karma.Format(ctx.Reason(err), "unable to get pod")
+		return "", "", errors.Wrap(err, "unable to get pod")
 	}
 
 	parent, err := GetParents(pod.(*unstructured.Unstructured), observer.ParentsStore, func(kind string) (Watcher, bool) {
 		gvrk, err := KindToGvrk(kind)
 		if err != nil {
-			observer.logger.Warningf(ctx.Describe("kind", kind).Reason(err), "unable to get GVRK for kind")
+			lg.Warnw("unable to get GVRK for kind", "kind", kind, "error", err)
 			return nil, false
 		}
 
 		watcher, err := observer.WatchAndWaitForSync(*gvrk)
 		if err != nil {
-			observer.logger.Errorf(err, "unable to get watcher for parent")
+			lg.Errorw("unable to get watcher for parent", "error", err)
 			return nil, false
 		}
 
@@ -234,7 +288,6 @@ type Watcher interface {
 
 type watcher struct {
 	gvrk     GroupVersionResourceKind
-	logger   *log.Logger
 	informer informers.GenericInformer
 }
 
@@ -247,11 +300,11 @@ func (w *watcher) Lister() cache.GenericLister {
 }
 
 func (w *watcher) AddEventHandler(handler ResourceEventHandler) {
-	w.informer.Informer().AddEventHandler(wrapHandler(handler, w.logger, w.gvrk))
+	w.informer.Informer().AddEventHandler(wrapHandler(handler, w.gvrk))
 }
 
 func (w *watcher) AddEventHandlerWithResyncPeriod(handler ResourceEventHandler, resyncPeriod time.Duration) {
-	w.informer.Informer().AddEventHandlerWithResyncPeriod(wrapHandler(handler, w.logger, w.gvrk), resyncPeriod)
+	w.informer.Informer().AddEventHandlerWithResyncPeriod(wrapHandler(handler, w.gvrk), resyncPeriod)
 }
 
 func (w *watcher) HasSynced() bool {
@@ -264,7 +317,6 @@ func (w *watcher) LastSyncResourceVersion() string {
 
 func wrapHandler(
 	wrapped ResourceEventHandler,
-	logger *log.Logger,
 	gvrk GroupVersionResourceKind,
 ) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
@@ -277,7 +329,7 @@ func wrapHandler(
 			if objUn != nil {
 				objUn, err := maskUnstructured(objUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
 				wrapped.OnAdd(now, gvrk, *objUn)
@@ -301,11 +353,11 @@ func wrapHandler(
 				// deep check that nothing has changed
 				oldJson, err := oldUn.MarshalJSON()
 				if err != nil {
-					logger.Errorf(err, "unable to marshal oldUn to json")
+					logger.Errorw("unable to marshal oldUn to json", "error", err)
 				}
 				newJson, err := newUn.MarshalJSON()
 				if err != nil {
-					logger.Errorf(err, "unable to marshal newUn to json")
+					logger.Errorf("unable to marshal newUn to json", "error", err)
 				}
 				if err == nil {
 					if bytes.Equal(oldJson, newJson) {
@@ -316,11 +368,11 @@ func wrapHandler(
 			if oldUn != nil && newUn != nil {
 				oldUn, err := maskUnstructured(oldUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 				}
 				newUn, err := maskUnstructured(newUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
 				wrapped.OnUpdate(now, gvrk, *oldUn, *newUn)
@@ -335,7 +387,7 @@ func wrapHandler(
 			if objUn != nil {
 				objUn, err := maskUnstructured(objUn)
 				if err != nil {
-					logger.Errorf(err, "unable to mask Unstructured")
+					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
 				wrapped.OnDelete(now, gvrk, *objUn)
@@ -361,7 +413,9 @@ func maskUnstructured(
 	obj *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {
 	kind := obj.GetKind()
-	ctx := karma.Describe("kind", kind)
+	errMap := map[string]interface{}{
+		"kind": kind,
+	}
 	podSpecPath, ok := podSpecMap[kind]
 	if !ok {
 		// not maskable kind
@@ -370,19 +424,19 @@ func maskUnstructured(
 
 	podSpecU, ok, err := unstructured.NestedFieldNoCopy(obj.Object, podSpecPath...)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to get pod spec")
+		return nil, fmt.
+			Errorf("unable to get pod spec, error: %w with data %+v", err, errMap)
 	}
 	if !ok {
-		return nil, ctx.
-			Format(nil, "unable to find pod spec in specified path")
+		return nil, fmt.
+			Errorf("unable to find pod spec in specified path with data %+v", errMap)
 	}
 
 	var podSpec corev1.PodSpec
 	err = utils.Transcode(podSpecU, &podSpec)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to transcode pod spec")
+		return nil, fmt.
+			Errorf("unable to transcode pod spec, error: %w with data %+v", err, errMap)
 	}
 
 	podSpec.Containers = maskContainers(podSpec.Containers)
@@ -391,16 +445,16 @@ func maskUnstructured(
 	var podSpecJson map[string]interface{}
 	err = utils.Transcode(podSpec, &podSpecJson)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to transcode pod spec")
+		return nil, fmt.
+			Errorf("unable to transcode pod spec, error: %w with data %+v", err, errMap)
 	}
 
 	// deep copy to not mutate the data from cash store
 	obj = obj.DeepCopy()
 	err = unstructured.SetNestedField(obj.Object, podSpecJson, podSpecPath...)
 	if err != nil {
-		return nil, ctx.
-			Format(err, "unable to set pod spec")
+		return nil, fmt.
+			Errorf("unable to set pod spec, error: %w, with data %+v", err, errMap)
 	}
 
 	return obj, nil

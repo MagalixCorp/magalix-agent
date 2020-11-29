@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/watcher"
+	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/reconquest/health-go"
-	"github.com/reconquest/karma-go"
 	"github.com/reconquest/stats-go"
 )
 
@@ -109,7 +109,7 @@ func (proc *Proc) runThreads() {
 			}
 		}(id)
 
-		debugf(nil, "[%d/%d] thread started", id, proc.threadpoolSize)
+		logger.Debugw("thread started", "id", id, "poolSize", proc.threadpoolSize)
 	}
 }
 
@@ -119,23 +119,21 @@ func (proc *Proc) handlePod(pod Pod) {
 
 	timestamp := time.Now()
 
-	context := getContext(pod.GetIdentity())
-
 	app, service, err := proc.getState(
 		pod.AccountID,
 		pod.ApplicationID,
 		pod.ServiceID,
 	)
 	if err != nil {
-		errorf(context.Reason(err), "unable to get app and service state for pod: %s", pod.Name)
+		logger.Errorw("unable to get app and service state for pod", "pod", pod.Name, "error", err)
 		proc.health.Alert(err, "pod", "get", "state")
 		return
 	}
 	proc.health.Resolve("pod", "get", "state")
 
-	tracef(
-		context.Describe("pod", logger.TraceJSON(pod)),
-		"{kubernetes} processing pod",
+	logger.Debugw(
+		"processing pod",
+		"pod", pod,
 	)
 
 	for container, state := range pod.Containers {
@@ -148,32 +146,7 @@ func (proc *Proc) handlePod(pod Pod) {
 		})
 
 		if updated {
-			subcontext := context
-
 			status, source := GetContainerStateStatus(state)
-			if source != nil {
-				if source.Reason != "" {
-					subcontext = subcontext.Describe("reason", source.Reason)
-				}
-
-				if source.ExitCode != nil {
-					subcontext = subcontext.Describe(
-						"exit_code", *source.ExitCode,
-					)
-				}
-
-				if source.Signal != nil {
-					subcontext = subcontext.Describe(
-						"signal", *source.Signal,
-					)
-				}
-			}
-
-			debugf(
-				subcontext,
-				"container: %s status: %s",
-				container, status,
-			)
 
 			if !proc.isSynced() {
 				proc.updateContainerStatus(
@@ -207,8 +180,6 @@ func (proc *Proc) handlePod(pod Pod) {
 	)
 
 	WithLock(service, func() {
-		tracef(context, "setting service pod status %s", pod.Status)
-
 		if pod.Status == watcher.StatusTerminated {
 			service.RemovePodStatus(pod.ID)
 		} else {
@@ -217,19 +188,12 @@ func (proc *Proc) handlePod(pod Pod) {
 	})
 
 	if !proc.isSynced() {
-		tracef(context, "proc is synced, updating service&app status")
-
 		WithLock(service, func() {
 			proc.updateServiceStatus(pod.GetIdentity(), service)
 		})
 		WithLock(app, func() {
 			proc.updateAppStatus(pod.GetIdentity(), app)
 		})
-	} else {
-		tracef(
-			context,
-			"proc is not synced, skipping updating app&service status",
-		)
 	}
 }
 
@@ -239,8 +203,7 @@ func (proc *Proc) handleReplicaSpec(spec ReplicaSpec) {
 
 	timestamp := time.Now()
 
-	context := getContext(spec.GetIdentity())
-	debugf(context, "setting service pods replicas to: %v", spec.Replicas)
+	logger.Debugf("setting service pods replicas to: %d", spec.Replicas)
 
 	app, service, err := proc.getState(
 		spec.AccountID,
@@ -248,7 +211,7 @@ func (proc *Proc) handleReplicaSpec(spec ReplicaSpec) {
 		spec.ServiceID,
 	)
 	if err != nil {
-		errorf(context.Reason(err), "unable to get app and service state for replicaspec: %s", spec.Name)
+		logger.Errorw("unable to get app and service state for replicaspec: "+spec.Name, "error", err)
 		proc.health.Alert(err, "replica", "get", "state")
 		return
 	}
@@ -368,35 +331,15 @@ func (proc *Proc) updateContainerStatus(
 }
 
 func (proc *Proc) updateAllStatuses() {
-	infof(nil, "updating statuses for all entities after full sync")
+	logger.Info("updating statuses for all entities after full sync")
 
 	updated := 0
 	WithLock(proc.states, func() {
 		for appID, app := range proc.states.apps {
-			tracef(
-				nil,
-				"updating statuses for services in application: %s",
-				appID,
-			)
-
 			WithLock(app, func() {
 				for serviceID, service := range app.services {
-					tracef(
-						karma.Describe("application_id", appID.String()),
-						"updating statuses for service: %s",
-						serviceID,
-					)
-
 					WithLock(service, func() {
 						for container, state := range service.containers {
-							tracef(
-								karma.
-									Describe("application_id", appID.String()).
-									Describe("service_id", serviceID.String()),
-								"updating statuses for container: %s",
-								container,
-							)
-
 							status, source := GetContainerStateStatus(state)
 
 							if proc.updateContainerStatus(
@@ -439,8 +382,8 @@ func (proc *Proc) updateAllStatuses() {
 		}
 	})
 
-	infof(nil, "after full sync updated %d statuses", updated)
-	infof(nil, "statues for all entities updated after full sync")
+	logger.Infof("after full sync updated %d statuses", updated)
+	logger.Debug(nil, "statues for all entities updated after full sync")
 }
 
 func (proc *Proc) writeEvent(event watcher.Event) bool {
@@ -449,10 +392,10 @@ func (proc *Proc) writeEvent(event watcher.Event) bool {
 	}
 	err := proc.database.WriteEvent(&event)
 	if err != nil {
-		errorf(err, "unable to write event to database")
+		logger.Errorw("unable to write event to database", "error", err)
 
 		proc.health.Alert(
-			karma.Format(err, "problems with writing events to database"),
+			fmt.Errorf("problems with writing events to database, error: %w", err),
 			"write", "event",
 		)
 
@@ -489,10 +432,10 @@ func (proc *Proc) getState(
 				appID, serviceID,
 			)
 			if apiError != nil {
-				err = karma.Format(
-					apiError,
-					"unable to get desired services for application: %s",
+				err = fmt.Errorf(
+					"unable to get desired services for application: %s, error: %w",
 					appID,
+					apiError,
 				)
 				err = apiError
 				return
@@ -523,22 +466,20 @@ func (proc *Proc) getApplicationDesiredServices(
 	for {
 		retry++
 
-		context := karma.Describe("application_id", appID).
-			Describe("expected service_id", expectedServiceID).
-			Describe("retry", fmt.Sprint(retry))
-
-		debugf(
-			context,
+		logger.Debugw(
 			"requesting list of services for application",
+			"expected service_id", expectedServiceID,
+			"retry", fmt.Sprint(retry),
+			"application_id", appID,
 		)
 
 		services, err = proc.changer.GetApplicationDesiredServices(appID)
 		if err != nil {
-			if karma.Contains(err, watcher.ErrorNoSuchEntity) {
+			if errors.Is(err, watcher.ErrorNoSuchEntity) {
 				return nil, err
 			}
 
-			errorf(err, "unable to retrieve list of services for application")
+			logger.Errorw("unable to retrieve list of services for application", "error", err)
 
 			time.Sleep(retryInterval)
 
@@ -568,12 +509,4 @@ func (proc *Proc) isSynced() bool {
 // SetSynced sync all entities
 func (proc *Proc) SetSynced() {
 	proc.updateAllStatuses()
-}
-
-func getContext(identity watcher.Identity) *karma.Context {
-	context := karma.
-		Describe("application_id", identity.ApplicationID).
-		Describe("service_id", identity.ServiceID)
-
-	return context
 }

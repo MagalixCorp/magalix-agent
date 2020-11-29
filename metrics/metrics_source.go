@@ -9,7 +9,7 @@ import (
 type EntitiesProvider interface {
 	GetNodes() ([]corev1.Node, error)
 	GetPods() ([]corev1.Pod, error)
-	FindController(namespaceName string, podName string) (string, string, error)
+	FindPodController(namespaceName string, podName string) (string, string, error)
 }
 
 // in future releases. Consider using Source interface instead.

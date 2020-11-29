@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/reconquest/karma-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	apisv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -69,11 +68,12 @@ func GetParents(
 	parentsStore *ParentsStore,
 	getWatcher GetWatcherFromKindFunc,
 ) (*ParentController, error) {
-	ctx := karma.
-		Describe("object_name", obj.GetName()).
-		Describe("object_kind", obj.GetKind()).
-		Describe("object_namespace", obj.GetNamespace()).
-		Describe("object_api_version", obj.GetAPIVersion())
+	errMap := map[string]interface{}{
+		"object_name":        obj.GetName(),
+		"object_kind":        obj.GetKind(),
+		"object_namespace":   obj.GetNamespace(),
+		"object_api_version": obj.GetAPIVersion(),
+	}
 
 	parents, found := parentsStore.GetParents(obj.GetNamespace(), obj.GetKind(), obj.GetName())
 	if found {
@@ -85,13 +85,12 @@ func GetParents(
 	if len(owners) > 1 {
 
 		for i, owner := range owners {
-			ctx = ctx.
-				Describe(fmt.Sprintf("owner_name_%d", i), owner.Name).
-				Describe(fmt.Sprintf("owner_kind_%d", i), owner.Kind).
-				Describe(fmt.Sprintf("owner_api_version_%d", i), owner.APIVersion)
+			errMap[fmt.Sprintf("owner_name_%d", i)] = owner.Name
+			errMap[fmt.Sprintf("owner_kind_%d", i)] = owner.Kind
+			errMap[fmt.Sprintf("owner_api_version_%d", i)] = owner.APIVersion
 		}
 
-		return nil, ctx.Format(nil, "object has multiple owners")
+		return nil, fmt.Errorf("object has multiple owners with data: %+v", errMap)
 	}
 
 	var parent *ParentController
@@ -115,23 +114,20 @@ func GetParents(
 				ByNamespace(obj.GetNamespace()).
 				Get(owner.Name)
 			if err != nil {
-				return nil, ctx.Format(
-					err,
-					"unable to get parent owner",
+				return nil, fmt.Errorf(
+					"unable to get parent owner, error: %w with data %+v", err, errMap,
 				)
 			}
 			ownerU, ok := ownerObj.(*unstructured.Unstructured)
 			if !ok {
-				return nil, ctx.Format(
-					nil,
-					"unable to cast runtime.Object to *unstructured.Unstructured",
+				return nil, fmt.Errorf(
+					"unable to cast runtime.Object to *unstructured.Unstructured with data %+v", errMap,
 				)
 			}
 			parentParent, err := GetParents(ownerU, parentsStore, getWatcher)
 			if err != nil {
-				return nil, ctx.Format(
-					err,
-					"unable to get parent.parent",
+				return nil, fmt.Errorf(
+					"unable to get parent.parent, error: %w with data %+v", err, errMap,
 				)
 			}
 			parent.Parent = parentParent
