@@ -19,7 +19,6 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	objectName := ""
 	result = proto.AutomationFailed
 	targetPods = 0
-	runningPods = 0
 	var err error = nil
 	flag := false
 
@@ -77,6 +76,8 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 				result = proto.AutomationFailed
 				break
 			}
+
+			runningPods = 0
 			// TODO update the execution flow to check pods status across controllers
 			for _, pod := range pods.Items {
 				//handle the bug of naming convention for pods in kubernetes DEV-2046
