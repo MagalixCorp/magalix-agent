@@ -27,11 +27,11 @@ spec:
           livenessProbe:
             httpGet:
               path: /live
-              port: 80
+              port: 8080
           readinessProbe:
             httpGet:
               path: /ready
-              port: 80
+              port: 8080
 
 ---
 
