@@ -21,6 +21,7 @@ spec:
             - --gateway=wss://agent-gateway.magalix.com/
             - --source=kubelet
             - --trace-log=/agent.log
+            - --port=8080
           envFrom:
             - secretRef:
                 name: magalix-agent
