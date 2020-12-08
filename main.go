@@ -92,7 +92,7 @@ Options:
   --disable-events                           Disable events collecting and sending(Deprecated).
   --disable-scalar                           Disable in-agent scalar.
   --port <port>                              Port to start the server on for liveness and readiness probes
-                                               [default: 8080]
+                                               [default: 80]
   --dry-run                                  Disable automation execution.
   --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
