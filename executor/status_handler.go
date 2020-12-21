@@ -16,87 +16,87 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	msg = "pods restarting exceeded timout (15 min)"
 	start := time.Now()
 
-	objectName := ""
-	result = proto.AutomationFailed
-	targetPods = 0
-	var err error = nil
-	flag := false
+	for time.Now().Sub(start) < automationsExecutionTimeout {
 
-	if strings.ToLower(kind) == "deployment" {
-		objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
-		if err != nil {
-			flag = true
-
-		}
-
-	} else if strings.ToLower(kind) == "statefulset" {
-		objectName, targetPods, err = executor.statefulsetsHandler(entityName, namespace)
-		if err != nil {
-			flag = true
-
-		}
-
-	} else if strings.ToLower(kind) == "daemonset" {
-		objectName, targetPods, err = executor.daemonsetsHandler(entityName, namespace)
-		if err != nil {
-			flag = true
-
-		}
-
-	} else if strings.ToLower(kind) == "job" || strings.ToLower(kind) == "cronjob" {
-		job, err := executor.kube.GetCronJob(namespace, entityName)
-
-		if err != nil {
-			flag = true
-
-		} else {
-			// get the new job
-			objectName = job.Name
-			targetPods = 1
-
-		}
-	}
-
-	if flag {
-		msg = "failed to trigger pod status"
+		objectName := ""
 		result = proto.AutomationFailed
+		targetPods = 0
+		var err error = nil
+		flag := false
 
-	} else {
+		time.Sleep(podStatusSleep)
 
-		// get pods of the new controller
-		for time.Now().Sub(start) < automationsExecutionTimeout {
+		if strings.ToLower(kind) == "deployment" {
+			objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
+			if err != nil {
+				flag = true
 
-			status := kv1.PodPending
+			}
 
-			time.Sleep(podStatusSleep)
-			pods, err := executor.kube.GetNameSpacePods(namespace)
+		} else if strings.ToLower(kind) == "statefulset" {
+			objectName, targetPods, err = executor.statefulsetsHandler(entityName, namespace)
+			if err != nil {
+				flag = true
+
+			}
+
+		} else if strings.ToLower(kind) == "daemonset" {
+			objectName, targetPods, err = executor.daemonsetsHandler(entityName, namespace)
+			if err != nil {
+				flag = true
+
+			}
+
+		} else if strings.ToLower(kind) == "job" || strings.ToLower(kind) == "cronjob" {
+			job, err := executor.kube.GetCronJob(namespace, entityName)
 
 			if err != nil {
-				msg = "failed to trigger pod status"
-				result = proto.AutomationFailed
-				break
-			}
+				flag = true
 
-			runningPods = 0
-			// TODO update the execution flow to check pods status across controllers
-			for _, pod := range pods.Items {
-				//handle the bug of naming convention for pods in kubernetes DEV-2046
-				if strings.Contains(pod.GenerateName, objectName) {
-					logger.Debugw("get pod status", "pod", pod.Name, "status", pod.Status.Phase)
-					status = pod.Status.Phase
-					if status == kv1.PodRunning {
-						runningPods++
-					} else if status != kv1.PodPending {
-						break
-					}
+			} else {
+				// get the new job
+				objectName = job.Name
+				targetPods = 1
+
+			}
+		}
+
+		if flag {
+			msg = "failed to trigger pod status"
+			result = proto.AutomationFailed
+			break
+
+		}
+
+		status := kv1.PodPending
+
+		pods, err := executor.kube.GetNameSpacePods(namespace)
+
+		if err != nil {
+			msg = "failed to trigger pod status"
+			result = proto.AutomationFailed
+			break
+		}
+
+		runningPods = 0
+		// TODO update the execution flow to check pods status across controllers
+		for _, pod := range pods.Items {
+			//handle the bug of naming convention for pods in kubernetes DEV-2046
+			if strings.Contains(pod.GenerateName, objectName) {
+				logger.Debugw("get pod status", "pod", pod.Name, "status", pod.Status.Phase)
+				status = pod.Status.Phase
+				if status == kv1.PodRunning {
+					runningPods++
+				} else if status != kv1.PodPending {
+					break
 				}
 			}
+		}
 
-			if runningPods == targetPods {
-				msg = statusMap[status]
-				result = proto.AutomationExecuted
-				break
-			}
+		if runningPods == targetPods {
+			msg = statusMap[status]
+			result = proto.AutomationExecuted
+			break
 		}
 	}
 
@@ -108,23 +108,22 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 
 	if err != nil {
 		return "", 0, err
-
-	} else {
-		currentReplicas := []Replica{}
-		// get the new replicaset
-		for _, replica := range replicasets.Items {
-			if strings.Contains(replica.Name, entityName) && replica.Status.Replicas > 0 {
-				currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.CreationTimestamp.Local()})
-			}
-		}
-
-		sort.Slice(currentReplicas, func(i, j int) bool {
-			return currentReplicas[i].time.After(currentReplicas[j].time)
-		})
-
-		deploymentName = currentReplicas[0].name
-		targetPods = currentReplicas[0].replicas
 	}
+
+	currentReplicas := []Replica{}
+	// get the new replicaset
+	for _, replica := range replicasets.Items {
+		if strings.Contains(replica.Name, entityName) && replica.Status.Replicas > 0 {
+			currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.CreationTimestamp.Local()})
+		}
+	}
+
+	sort.Slice(currentReplicas, func(i, j int) bool {
+		return currentReplicas[i].time.After(currentReplicas[j].time)
+	})
+
+	deploymentName = currentReplicas[0].name
+	targetPods = currentReplicas[0].replicas
 
 	return deploymentName, targetPods, nil
 }
