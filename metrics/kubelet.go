@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"math"
 	"runtime/debug"
 	"strings"
@@ -15,6 +16,15 @@ import (
 	"github.com/pkg/errors"
 
 	corev1 "k8s.io/api/core/v1"
+)
+
+const (
+	// TypeCluster cluster
+	TypeCluster = "cluster"
+	// TypeNode node
+	TypeNode = "node"
+	// TypePodContainer container in a pod
+	TypePodContainer = "pod_container"
 )
 
 type KubeletSummaryContainer struct {
@@ -73,46 +83,49 @@ type kubeletTimeouts struct {
 
 // Kubelet kubelet client
 type Kubelet struct {
-	resolution    time.Duration
 	previous      map[string]KubeletValue
 	previousMutex *sync.Mutex
 	timeouts      kubeletTimeouts
 	kubeletClient *KubeletClient
+	EntitiesProvider EntitiesProvider
 }
 
 // NewKubelet returns new kubelet
 func NewKubelet(
 	kubeletClient *KubeletClient,
-	resolution time.Duration,
-	timeouts kubeletTimeouts,
+	entitiesProvider EntitiesProvider,
+	backOffSleep time.Duration,
+	maxRetries int,
 ) (*Kubelet, error) {
 	kubelet := &Kubelet{
-
 		kubeletClient: kubeletClient,
-
-		resolution:    resolution,
+		EntitiesProvider: entitiesProvider,
 		previous:      map[string]KubeletValue{},
 		previousMutex: &sync.Mutex{},
-		timeouts:      timeouts,
+		timeouts: kubeletTimeouts{
+			backoff: backOff{
+				sleep:      backOffSleep,
+				maxRetries: maxRetries,
+			}},
 	}
 
 	return kubelet, nil
 }
 
 // GetMetrics gets metrics
-func (kubelet *Kubelet) GetMetrics(
-	entitiesProvider EntitiesProvider, tickTime time.Time,
-) (result []*Metric, err error) {
+func (kubelet *Kubelet) GetMetrics() (result []*agent.Metric, err error) {
 	defer func() {
 		if tears := recover(); tears != nil {
 			err = errors.New(string(debug.Stack()))
 		}
 	}()
 
+	tickTime := time.Now().Truncate(time.Minute)
+
 	kubelet.collectGarbage()
 
 	metricsMutex := &sync.Mutex{}
-	metrics := make([]*Metric, 0)
+	metrics := make([]*agent.Metric, 0)
 
 	getKey := func(
 		measurement string,
@@ -169,7 +182,7 @@ func (kubelet *Kubelet) GetMetrics(
 		return rate, nil
 	}
 
-	addMetric := func(metric *Metric) {
+	addMetric := func(metric *agent.Metric) {
 		metricsMutex.Lock()
 		defer metricsMutex.Unlock()
 
@@ -181,8 +194,6 @@ func (kubelet *Kubelet) GetMetrics(
 			)
 			metric.Timestamp = tickTime
 		}
-
-		metric.Timestamp = metric.Timestamp.Truncate(time.Minute)
 
 		metrics = append(metrics, metric)
 	}
@@ -199,7 +210,7 @@ func (kubelet *Kubelet) GetMetrics(
 		timestamp time.Time,
 		value int64,
 	) {
-		addMetric(&Metric{
+		addMetric(&agent.Metric{
 			Name:           measurement,
 			Type:           measurementType,
 			NodeName:       nodeName,
@@ -227,7 +238,7 @@ func (kubelet *Kubelet) GetMetrics(
 		value int64,
 		additionalTags map[string]interface{},
 	) {
-		addMetric(&Metric{
+		addMetric(&agent.Metric{
 			Name:           measurement,
 			Type:           measurementType,
 			NodeName:       nodeName,
@@ -243,10 +254,21 @@ func (kubelet *Kubelet) GetMetrics(
 		})
 	}
 
+	// This replaces printing individual warnings for each rate calculation error as it is extremely noisy and is always
+	// to expected happen in the first time metrics are retrieved for all metrics which means it can be logged thousands
+	// of times.
+	rateErrorsCount := 0
+	defer func(count *int){
+		if rateErrorsCount > 0 {
+			logger.Warnf("Couldn't calculate rate for %d metrics", rateErrorsCount)
+		}
+		rateErrorsCount = 0
+	}(&rateErrorsCount)
+
 	addMetricRate := func(
 		entityKind string,
 		entityName string,
-		metric *Metric,
+		metric *agent.Metric,
 	) {
 		if metric.Timestamp.Equal(time.Time{}) {
 			logger.Errorw("{kubelet} invalid timestamp detect. defaulting to tickTime",
@@ -257,8 +279,6 @@ func (kubelet *Kubelet) GetMetrics(
 			metric.Timestamp = tickTime
 		}
 
-		metric.Timestamp = metric.Timestamp.Truncate(time.Minute)
-
 		key := getKey(metric.Name, metric.NamespaceName, entityKind, entityName, metric.PodName, metric.ContainerName)
 		rate, err := calcRate(key, metric.Timestamp, metric.Value)
 		kubelet.updatePreviousValue(key, &KubeletValue{
@@ -267,12 +287,7 @@ func (kubelet *Kubelet) GetMetrics(
 		})
 
 		if err != nil {
-			logger.Debugw("{kubelet} can't calculate rate",
-				"metric", metric.Name,
-				"type", metric.Type,
-				"timestamp", metric.Timestamp,
-				"error", err,
-			)
+			rateErrorsCount++
 			return
 		}
 		metric.Value = rate
@@ -296,7 +311,7 @@ func (kubelet *Kubelet) GetMetrics(
 		addMetricRate(
 			entityKind,
 			entityName,
-			&Metric{
+			&agent.Metric{
 				Name:           measurement,
 				Type:           measurementType,
 				NodeName:       nodeName,
@@ -315,7 +330,7 @@ func (kubelet *Kubelet) GetMetrics(
 	logger.Debug("{kubelet} Fetching nodes")
 
 	// scanner scans the nodes every 1m, so assume latest value is up to date
-	nodes, err := entitiesProvider.GetNodes()
+	nodes, err := kubelet.EntitiesProvider.GetNodes()
 	if err != nil {
 		return nil, fmt.Errorf("{kubelet} Can't get nodes, error: %w", err)
 	}
@@ -392,7 +407,7 @@ func (kubelet *Kubelet) GetMetrics(
 
 	logger.Debug("{kubelet} Fetching pods")
 
-	pods, err := entitiesProvider.GetPods()
+	pods, err := kubelet.EntitiesProvider.GetPods()
 	if err != nil {
 		return nil, fmt.Errorf("{kubelet} unable to get pods, error: %w", err)
 	}
@@ -402,7 +417,7 @@ func (kubelet *Kubelet) GetMetrics(
 	processedContainersCount := 0
 
 	for _, pod := range pods {
-		controllerName, controllerKind, err := entitiesProvider.FindPodController(pod.Namespace, pod.Name)
+		controllerName, controllerKind, err := kubelet.EntitiesProvider.FindPodController(pod.Namespace, pod.Name)
 		if err != nil {
 			logger.Errorw("{kubelet} unable to find pod controller",
 				"pod_name", pod.Name,
@@ -541,10 +556,10 @@ func (kubelet *Kubelet) GetMetrics(
 				)
 			}
 
-			throttleMetrics := make(map[string]*Metric)
+			throttleMetrics := make(map[string]*agent.Metric)
 
 			for _, pod := range summary.Pods {
-				controllerName, controllerKind, err := entitiesProvider.FindPodController(
+				controllerName, controllerKind, err := kubelet.EntitiesProvider.FindPodController(
 					pod.PodRef.Namespace, pod.PodRef.Name,
 				)
 				namespaceName := pod.PodRef.Namespace
@@ -631,7 +646,7 @@ func (kubelet *Kubelet) GetMetrics(
 						pod.PodRef.Name,
 						container.Name,
 					)
-					throttleMetrics[periodsKey] = &Metric{
+					throttleMetrics[periodsKey] = &agent.Metric{
 						Name: "container_cpu_cfs/periods_total",
 						Type: TypePodContainer,
 
@@ -653,7 +668,7 @@ func (kubelet *Kubelet) GetMetrics(
 						pod.PodRef.Name,
 						container.Name,
 					)
-					throttleMetrics[throttledSecondsKey] = &Metric{
+					throttleMetrics[throttledSecondsKey] = &agent.Metric{
 						Name: "container_cpu_cfs_throttled/seconds_total",
 						Type: TypePodContainer,
 
@@ -675,7 +690,7 @@ func (kubelet *Kubelet) GetMetrics(
 						pod.PodRef.Name,
 						container.Name,
 					)
-					throttleMetrics[throttledPeriodsKey] = &Metric{
+					throttleMetrics[throttledPeriodsKey] = &agent.Metric{
 						Name: "container_cpu_cfs_throttled/periods_total",
 						Type: TypePodContainer,
 
@@ -737,7 +752,7 @@ func (kubelet *Kubelet) GetMetrics(
 				for _, val := range cadvisor[metric.Ref] {
 					namespaceName, podName, containerName, value, ok := getCAdvisorContainerValue(val)
 					if ok {
-						controllerName, controllerKind, err := entitiesProvider.FindPodController(namespaceName, podName)
+						controllerName, controllerKind, err := kubelet.EntitiesProvider.FindPodController(namespaceName, podName)
 						if err != nil {
 							logger.Errorw(
 								"{kubelet} unable to find controller for pod",
@@ -812,23 +827,9 @@ func (kubelet *Kubelet) GetMetrics(
 		}
 	}
 
-	result = make([]*Metric, 0)
+	result = make([]*agent.Metric, 0)
 
 	for _, metrics := range metrics {
-
-		/*
-			context = context.
-				fmt.Sprintf(
-					"%s %s %s %s",
-					metrics.Node,
-					metrics.Application,
-					metrics.Service,
-					metrics.Container,
-				),
-				metrics.Name,
-			)
-		*/
-
 		result = append(result, metrics)
 	}
 

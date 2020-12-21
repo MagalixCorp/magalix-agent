@@ -1,0 +1,48 @@
+package agent
+
+import (
+	"math/rand"
+	"time"
+
+	"github.com/MagalixTechnologies/core/logger"
+)
+
+func (a *Agent) handleDeltas(deltas []*Delta) error {
+	return a.Gateway.SendEntitiesDeltas(deltas)
+}
+
+func (a *Agent) handleResync(resync *EntitiesResync) error {
+	return a.Gateway.SendEntitiesResync(resync)
+}
+
+func (a *Agent) handleMetrics(metrics []*Metric) error {
+	return a.Gateway.SendMetrics(metrics)
+}
+
+func (a *Agent) handleAutomationFeedback(feedback *AutomationFeedback) error {
+	return a.Gateway.SendAutomationFeedback(feedback)
+}
+
+func (a *Agent) handleRestart() error {
+	go func() {
+		if err := a.stopSources(); err != nil {
+			logger.Errorf("failed to stop agent sources. %w", err)
+		}
+		if err := logger.Sync(); err != nil {
+			logger.Errorf("failed to sync logs. %w", err)
+		}
+		if err := a.stopSinks(); err != nil {
+			logger.Errorf("failed to stop agent sinks. %w", err)
+		}
+		// Set a random wait time of up to 600 seconds (10 minutes)
+		waitTime := time.Duration(rand.Intn(600)) * time.Second
+		logger.Infof("Agent will exit in %f seconds", waitTime.Seconds())
+		time.Sleep(waitTime)
+		a.Exit(0)
+	}()
+	return nil
+}
+
+func (a *Agent) handleLogLevelChange(level *LogLevel) error {
+	return a.changeLogLevel(level)
+}

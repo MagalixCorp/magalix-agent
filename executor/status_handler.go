@@ -4,19 +4,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixTechnologies/core/logger"
 
 	kv1 "k8s.io/api/core/v1"
 )
 
-func (executor *Executor) podsStatusHandler(entityName string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result proto.AutomationStatus, msg string, targetPods int32, runningPods int32) {
+func (executor *Executor) podsStatusHandler(entityName string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result agent.AutomationStatus, msg string, targetPods int32, runningPods int32) {
 	// short pooling to trigger pod status with max 15 minutes
 	msg = "pods restarting exceeded timout (15 min)"
 	start := time.Now()
 
 	objectName := ""
-	result = proto.AutomationFailed
+	result = agent.AutomationFailed
 	targetPods = 0
 	var err error = nil
 	flag := false
@@ -51,7 +51,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 
 	if flag {
 		msg = "failed to trigger pod status"
-		result = proto.AutomationFailed
+		result = agent.AutomationFailed
 
 	} else {
 		for time.Now().Sub(start) < automationsExecutionTimeout {
@@ -63,7 +63,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 				objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
 				if err != nil {
 					msg = "failed to trigger pod status"
-					result = proto.AutomationFailed
+					result = agent.AutomationFailed
 					break
 				}
 			}
@@ -74,7 +74,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 
 			if err != nil {
 				msg = "failed to trigger pod status"
-				result = proto.AutomationFailed
+				result = agent.AutomationFailed
 				break
 			}
 
@@ -95,7 +95,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 
 			if runningPods == targetPods {
 				msg = statusMap[status]
-				result = proto.AutomationExecuted
+				result = agent.AutomationExecuted
 				break
 			}
 		}

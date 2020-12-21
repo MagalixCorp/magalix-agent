@@ -315,7 +315,7 @@ type NodesProvider interface {
 func NewKubeletClient(
 	nodesProvider NodesProvider,
 	kube *kuber.Kube,
-	args map[string]interface{},
+	kubeletPort string,
 ) (*KubeletClient, error) {
 
 	restClient, ok := kube.Clientset.RESTClient().(*rest.RESTClient)
@@ -332,7 +332,7 @@ func NewKubeletClient(
 		kube:       kube,
 		restClient: restClient,
 
-		httpPort: args["--kubelet-port"].(string),
+		httpPort: kubeletPort,
 	}
 
 	err := client.init()

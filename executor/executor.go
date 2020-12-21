@@ -1,13 +1,14 @@
 package executor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,12 +20,8 @@ const (
 	automationsBufferLength  = 1000
 	automationsBufferTimeout = 10 * time.Second
 
-	automationsFeedbackExpiryTime     = 30 * time.Minute
-	automationsFeedbackExpiryCount    = 0
-	automationsFeedbackExpiryPriority = 10
-	automationsFeedbackExpiryRetries  = 5
-	automationsExecutionTimeout       = 15 * time.Minute
-	podStatusSleep                    = 15 * time.Second
+	automationsExecutionTimeout = 15 * time.Minute
+	podStatusSleep              = 15 * time.Second
 )
 
 type EntitiesFinder interface {
@@ -34,13 +31,14 @@ type EntitiesFinder interface {
 
 // Executor Automation executor
 type Executor struct {
-	client          *client.Client
-	kube            *kuber.Kube
-	entitiesFinder  EntitiesFinder
-	dryRun          bool
-	workersCount    int
-	automationsChan chan *proto.PacketAutomation
-	inProgressJobs  map[string]bool
+	kube                   *kuber.Kube
+	entitiesFinder         EntitiesFinder
+	dryRun                 bool
+	workersCount           int
+	automationsChan        chan *agent.Automation
+	inProgressJobs         map[string]bool
+	cancelWorkers          context.CancelFunc
+	sendAutomationFeedback agent.AutomationFeedbackHandler
 }
 
 type Replica struct {
@@ -49,39 +47,73 @@ type Replica struct {
 	time     time.Time
 }
 
-// InitExecutor creates a new executor then starts it
-func InitExecutor(
-	client *client.Client,
-	kube *kuber.Kube,
-	entitiesFinder EntitiesFinder,
-	workersCount int,
-	dryRun bool,
-) *Executor {
-	e := NewExecutor(client, kube, entitiesFinder, workersCount, dryRun)
-	e.startWorkers()
-	return e
-}
-
 // NewExecutor creates a new executor
 func NewExecutor(
-	client *client.Client,
 	kube *kuber.Kube,
 	entitiesFinder EntitiesFinder,
 	workersCount int,
 	dryRun bool,
 ) *Executor {
 	executor := &Executor{
-		client:         client,
 		kube:           kube,
 		entitiesFinder: entitiesFinder,
 		dryRun:         dryRun,
 
 		workersCount:    workersCount,
 		inProgressJobs:  map[string]bool{},
-		automationsChan: make(chan *proto.PacketAutomation, automationsBufferLength),
+		automationsChan: make(chan *agent.Automation, automationsBufferLength),
 	}
 
 	return executor
+}
+
+func (executor *Executor) SubmitAutomation(automation *agent.Automation) error {
+	_, found := executor.inProgressJobs[automation.ID]
+	if !found {
+		executor.inProgressJobs[automation.ID] = true
+		convertAutomationMemoryFromKiloByteToMegabyte(automation)
+
+		err := executor.submitAutomation(automation, automationsBufferTimeout)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (executor *Executor) SetAutomationFeedbackHandler(handler agent.AutomationFeedbackHandler) {
+	if handler == nil {
+		panic("automation handler is nil")
+	}
+	executor.sendAutomationFeedback = handler
+}
+
+func (executor *Executor) Start(ctx context.Context) error {
+	if executor.cancelWorkers != nil {
+		executor.cancelWorkers()
+	}
+
+	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	eg, ctx := errgroup.WithContext(cancelCtx)
+	executor.cancelWorkers = cancel
+	for i := 0; i < executor.workersCount; i++ {
+		eg.Go(func() error {
+			executor.executorWorker(ctx)
+			return nil
+		})
+	}
+	return eg.Wait()
+}
+
+func (executor *Executor) Stop() error {
+	if executor.cancelWorkers == nil {
+		return nil
+	}
+	executor.cancelWorkers()
+	executor.cancelWorkers = nil
+	return nil
 }
 
 func (executor *Executor) backoff(
@@ -96,52 +128,22 @@ func (executor *Executor) backoff(
 	)
 }
 
-func (executor *Executor) startWorkers() {
-	// this method should be called one time only
-	for i := 0; i < executor.workersCount; i++ {
-		go executor.executorWorker()
-	}
-}
-
 func (executor *Executor) handleExecutionError(
-	automation *proto.PacketAutomation, err error,
-) *proto.PacketAutomationFeedbackRequest {
+	automation *agent.Automation, err error,
+) *agent.AutomationFeedback {
 	logger.Errorw("unable to execute automation", "error", err, "automation-id", automation.ID)
 
 	return makeAutomationFailedResponse(automation, err.Error())
 }
 func (executor *Executor) handleExecutionSkipping(
-	aut *proto.PacketAutomation, msg string,
-) *proto.PacketAutomationFeedbackRequest {
+	aut *agent.Automation, msg string,
+) *agent.AutomationFeedback {
 	logger.Infof("skipping automation execution", "msg", msg, "automation-id", aut.ID)
 
 	return makeAutomationFailedResponse(aut, msg)
 }
 
-func (executor *Executor) Listener(in []byte) (out []byte, err error) {
-	var automation proto.PacketAutomation
-	if err = proto.DecodeSnappy(in, &automation); err != nil {
-		return
-	}
-	_, found := executor.inProgressJobs[automation.ID]
-	if !found {
-		executor.inProgressJobs[automation.ID] = true
-		convertAutomationMemoryFromKiloByteToMegabyte(&automation)
-
-		err = executor.submitAutomation(&automation, automationsBufferTimeout)
-		if err != nil {
-			errMessage := err.Error()
-			return proto.EncodeSnappy(proto.PacketAutomationResponse{
-				ID:    automation.ID,
-				Error: &errMessage,
-			})
-		}
-	}
-
-	return proto.EncodeSnappy(proto.PacketAutomationResponse{})
-}
-
-func convertAutomationMemoryFromKiloByteToMegabyte(automation *proto.PacketAutomation) {
+func convertAutomationMemoryFromKiloByteToMegabyte(automation *agent.Automation) {
 	if automation.ContainerResources.Requests != nil && automation.ContainerResources.Requests.Memory != nil {
 		*automation.ContainerResources.Requests.Memory = *automation.ContainerResources.Requests.Memory / 1024
 	}
@@ -151,7 +153,7 @@ func convertAutomationMemoryFromKiloByteToMegabyte(automation *proto.PacketAutom
 }
 
 func (executor *Executor) submitAutomation(
-	automation *proto.PacketAutomation,
+	automation *agent.Automation,
 	timeout time.Duration,
 ) error {
 	select {
@@ -165,36 +167,50 @@ func (executor *Executor) submitAutomation(
 	return nil
 }
 
-func (executor *Executor) executorWorker() {
-	for automation := range executor.automationsChan {
-		// TODO: execute automations in batches
-		response, err := executor.execute(automation)
-		if err != nil {
-			logger.Errorw(
-				"unable to execute automation",
-				"error", err,
-				"automation-id", automation.ID,
-			)
+func (executor *Executor) executorWorker(ctx context.Context) {
+	logger.Debug("Executor worker started")
+	for {
+		select {
+		case automation := <-executor.automationsChan:
+
+			// TODO: execute automations in batches
+			response, err := executor.execute(automation)
+			if err != nil {
+				logger.Errorw(
+					"unable to execute automation",
+					"error", err,
+					"automation-id", automation.ID,
+				)
+			}
+
+			delete(executor.inProgressJobs, automation.ID)
+
+			err = executor.sendAutomationFeedback(&agent.AutomationFeedback{
+				ID:             response.ID,
+				NamespaceName:  response.NamespaceName,
+				ControllerName: response.ControllerName,
+				ControllerKind: response.ControllerKind,
+				ContainerName:  response.ContainerName,
+				Status:         response.Status,
+				Message:        response.Message,
+			})
+			if err != nil {
+				logger.Errorw(
+					"unable to send automation feedback",
+					"error", err,
+					"automation-id", automation.ID,
+				)
+			}
+		case <-ctx.Done():
+			logger.Debug("Executor worker stopped")
+			return
 		}
-
-		delete(executor.inProgressJobs, automation.ID)
-
-		executor.client.Pipe(
-			client.Package{
-				Kind:        proto.PacketKindAutomationFeedback,
-				ExpiryTime:  utils.After(automationsFeedbackExpiryTime),
-				ExpiryCount: automationsFeedbackExpiryCount,
-				Priority:    automationsFeedbackExpiryPriority,
-				Retries:     automationsFeedbackExpiryRetries,
-				Data:        response,
-			},
-		)
 	}
 }
 
 func (executor *Executor) execute(
-	automation *proto.PacketAutomation,
-) (*proto.PacketAutomationFeedbackRequest, error) {
+	automation *agent.Automation,
+) (*agent.AutomationFeedback, error) {
 	c, err := executor.entitiesFinder.FindContainer(
 		automation.NamespaceName,
 		automation.ControllerKind,
@@ -246,7 +262,7 @@ func (executor *Executor) execute(
 		)
 		if err != nil {
 			// TODO: do we need to retry execution before fail?
-			var response *proto.PacketAutomationFeedbackRequest
+			var response *agent.AutomationFeedback
 			if skipped {
 				response = executor.handleExecutionSkipping(automation, err.Error())
 			} else {
@@ -272,7 +288,7 @@ func (executor *Executor) execute(
 		if runningPods < targetPodCount {
 
 			msg = statusMap[kv1.PodFailed]
-			result = proto.AutomationFailed
+			result = agent.AutomationFailed
 
 			// execute the automation with old values to rollback
 			_, err := executor.kube.SetResources(
@@ -289,7 +305,7 @@ func (executor *Executor) execute(
 
 		lg.Debug(msg)
 
-		return &proto.PacketAutomationFeedbackRequest{
+		return &agent.AutomationFeedback{
 			ID:             automation.ID,
 			NamespaceName:  automation.NamespaceName,
 			ControllerName: automation.ControllerName,
@@ -301,19 +317,19 @@ func (executor *Executor) execute(
 	}
 }
 
-func makeAutomationFailedResponse(automation *proto.PacketAutomation, msg string) *proto.PacketAutomationFeedbackRequest {
-	return &proto.PacketAutomationFeedbackRequest{
+func makeAutomationFailedResponse(automation *agent.Automation, msg string) *agent.AutomationFeedback {
+	return &agent.AutomationFeedback{
 		ID:             automation.ID,
 		NamespaceName:  automation.NamespaceName,
 		ControllerKind: automation.ControllerName,
 		ControllerName: automation.ControllerName,
 		ContainerName:  automation.ContainerName,
-		Status:         proto.AutomationFailed,
+		Status:         agent.AutomationFailed,
 		Message:        msg,
 	}
 }
 
-func buildRecommendedResourcesFromAutomation(originalResources kuber.TotalResources, automation *proto.PacketAutomation) kuber.TotalResources {
+func buildRecommendedResourcesFromAutomation(originalResources kuber.TotalResources, automation *agent.Automation) kuber.TotalResources {
 	recommendedResources := kuber.TotalResources{
 		Containers: []kuber.ContainerResourcesRequirements{
 			{

@@ -1,13 +1,13 @@
 package entities
 
 import (
+	"context"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -16,22 +16,12 @@ import (
 )
 
 const (
-	snapshotResyncTickerInterval = 4 * time.Hour
-	snapshotTickerInterval       = 3 * time.Hour
+	resyncInterval   = 4 * time.Hour
+	snapshotInterval = 3 * time.Hour
 
 	deltasBufferChanSize       = 1024
 	deltasPacketFlushAfterSize = 100
 	deltasPacketFlushAfterTime = time.Second * 10
-
-	deltasPacketExpireAfter = 30 * time.Minute
-	deltasPacketExpireCount = 0
-	deltasPacketPriority    = 1
-	deltasPacketRetries     = 5
-
-	resyncPacketExpireAfter = time.Hour
-	resyncPacketExpireCount = 2
-	resyncPacketPriority    = 0
-	resyncPacketRetries     = 5
 )
 
 var (
@@ -61,48 +51,46 @@ var (
 	}
 )
 
-type EntitiesWatcher interface {
-	Start()
-	WatcherFor(gvrk kuber.GroupVersionResourceKind) (kuber.Watcher, error)
-}
-
-type entitiesWatcher struct {
-	client   *client.Client
+type EntitiesWatcher struct {
 	observer *kuber.Observer
 
 	watchers       map[kuber.GroupVersionResourceKind]kuber.Watcher
 	watchersByKind map[string]kuber.Watcher
-	deltasQueue    chan proto.PacketEntityDelta
+	deltasQueue    chan agent.Delta
 
-	snapshotIdentitiesTicker *utils.Ticker
-	snapshotTicker           *utils.Ticker
+	sendDeltas         agent.DeltasHandler
+	sendEntitiesResync agent.EntitiesResyncHandler
+
+	cancelWorker context.CancelFunc
 }
 
 func NewEntitiesWatcher(
 	observer_ *kuber.Observer,
-	client_ *client.Client,
 	version int,
-) EntitiesWatcher {
+) *EntitiesWatcher {
 	if version >= 18 {
 		watchedResources = append(watchedResources, kuber.IngressClasses)
 	}
 
-	ew := &entitiesWatcher{
-		client: client_,
-
+	ew := &EntitiesWatcher{
 		observer:       observer_,
 		watchers:       map[kuber.GroupVersionResourceKind]kuber.Watcher{},
 		watchersByKind: map[string]kuber.Watcher{},
 
-		deltasQueue: make(chan proto.PacketEntityDelta, deltasBufferChanSize),
+		deltasQueue: make(chan agent.Delta, deltasBufferChanSize),
 	}
-	ew.snapshotIdentitiesTicker = utils.NewTicker("snapshot-resync", snapshotResyncTickerInterval, ew.snapshotResync)
-	ew.snapshotTicker = utils.NewTicker("snapshot", snapshotTickerInterval, ew.snapshot)
-
 	return ew
 }
 
-func (ew *entitiesWatcher) Start() {
+func (ew *EntitiesWatcher) SetDeltasHandler(handler agent.DeltasHandler) {
+	ew.sendDeltas = handler
+}
+
+func (ew *EntitiesWatcher) SetEntitiesResyncHandler(handler agent.EntitiesResyncHandler) {
+	ew.sendEntitiesResync = handler
+}
+
+func (ew *EntitiesWatcher) Start(ctx context.Context) error {
 	// this method should be called only once
 
 	// TODO: if a packet expires or failed to be sent
@@ -120,17 +108,34 @@ func (ew *entitiesWatcher) Start() {
 		logger.Warnf("timeout due to missing permissions with error %s ", err.Error())
 	}
 
-	go ew.deltasWorker()
-
-	ew.snapshotIdentitiesTicker.Start(true, false, false)
-	ew.snapshotTicker.Start(true, false, false)
-
 	for _, watcher := range ew.watchers {
 		watcher.AddEventHandler(ew)
 	}
+
+	cancelCtx, cancel := context.WithCancel(ctx)
+	ew.cancelWorker = cancel
+	eg, egCtx := errgroup.WithContext(cancelCtx)
+	eg.Go(func() error {
+		ew.deltasWorker(egCtx)
+		return nil
+	})
+	eg.Go(func() error {
+		ew.snapshotWorker(egCtx)
+		return nil
+	})
+	return eg.Wait()
 }
 
-func (ew *entitiesWatcher) WatcherFor(
+func (ew *EntitiesWatcher) Stop() error {
+	if ew.cancelWorker == nil {
+		return nil
+	}
+	ew.cancelWorker()
+	ew.cancelWorker = nil
+	return nil
+}
+
+func (ew *EntitiesWatcher) WatcherFor(
 	gvrk kuber.GroupVersionResourceKind,
 ) (kuber.Watcher, error) {
 	w, ok := ew.watchers[gvrk]
@@ -143,10 +148,10 @@ func (ew *entitiesWatcher) WatcherFor(
 	return w, nil
 }
 
-func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
-	packet := proto.PacketEntitiesResyncRequest{
-		Snapshot:  map[string]proto.PacketEntitiesResyncItem{},
-		Timestamp: tickTime.UTC(),
+func (ew *EntitiesWatcher) buildAndSendSnapshotResync() {
+	resync := agent.EntitiesResync{
+		Snapshot:  map[string]agent.EntitiesResyncItem{},
+		Timestamp: time.Now(),
 	}
 
 	for gvrk, w := range ew.watchers {
@@ -183,6 +188,7 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 				logger.Errorw("unable to get object status data", "error", err)
 			}
 
+			// TODO: Replace with basic identification data. The rest of the data shouldn't be needed
 			items[i] = &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"kind":       u.GetKind(),
@@ -192,30 +198,26 @@ func (ew *entitiesWatcher) snapshotResync(tickTime time.Time) {
 				},
 			}
 		}
-		packet.Snapshot[resource] = proto.PacketEntitiesResyncItem{
+		resync.Snapshot[resource] = agent.EntitiesResyncItem{
 			Gvrk: packetGvrk(gvrk),
 			Data: items,
 		}
 	}
 
-	ew.client.Pipe(client.Package{
-		Kind:        proto.PacketKindEntitiesResyncRequest,
-		ExpiryTime:  utils.After(resyncPacketExpireAfter),
-		ExpiryCount: resyncPacketExpireCount,
-		Priority:    resyncPacketPriority,
-		Retries:     resyncPacketRetries,
-		Data:        packet,
-	})
+	err := ew.sendEntitiesResync(&resync)
+	if err != nil {
+		logger.Errorf("Failed to send Entities Resync. %w", err)
+	}
 }
 
-func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
+func (ew *EntitiesWatcher) sendSnapshot() {
 	// send nodes and namespaces before all other deltas because they act as
 	// parents for other resources
 	nodesWatcher := ew.watchers[kuber.Nodes]
-	ew.publishGvrk(kuber.Nodes, nodesWatcher, tickTime)
+	ew.publishGvrk(kuber.Nodes, nodesWatcher)
 
 	namespacesWatcher := ew.watchers[kuber.Namespaces]
-	ew.publishGvrk(kuber.Namespaces, namespacesWatcher, tickTime)
+	ew.publishGvrk(kuber.Namespaces, namespacesWatcher)
 
 	for gvrk, w := range ew.watchers {
 		// no need for concurrent goroutines here because the lister uses
@@ -226,36 +228,31 @@ func (ew *entitiesWatcher) snapshot(tickTime time.Time) {
 			continue
 		}
 
-		ew.publishGvrk(gvrk, w, tickTime)
+		ew.publishGvrk(gvrk, w)
 	}
 }
 
-func (ew *entitiesWatcher) publishGvrk(
+func (ew *EntitiesWatcher) publishGvrk(
 	gvrk kuber.GroupVersionResourceKind,
 	w kuber.Watcher,
-	tickTime time.Time,
 ) {
 	resource := gvrk.Resource
 	ret, err := w.Lister().List(labels.Everything())
 	if err != nil {
-		logger.Errorf(
-			"unable to list "+resource,
-			"error", err,
-		)
+		logger.Errorf("unable to list %s. %w", resource, err)
 	}
 	if len(ret) == 0 {
 		return
 	}
 	for i := range ret {
 		u := *ret[i].(*unstructured.Unstructured)
-		ew.OnAdd(tickTime, gvrk, u)
+		ew.OnAdd(gvrk, u)
 	}
 }
 
-func (ew *entitiesWatcher) getParents(
+func (ew *EntitiesWatcher) getParents(
 	u *unstructured.Unstructured,
-) (*proto.ParentController, error) {
-
+) (*agent.ParentController, error) {
 	parent, err := kuber.GetParents(
 		u,
 		ew.observer.ParentsStore,
@@ -271,10 +268,10 @@ func (ew *entitiesWatcher) getParents(
 	return packetParent(parent), nil
 }
 
-func (ew *entitiesWatcher) deltaWrapper(
+func (ew *EntitiesWatcher) deltaWrapper(
 	gvrk kuber.GroupVersionResourceKind,
-	delta proto.PacketEntityDelta,
-) (proto.PacketEntityDelta, error) {
+	delta agent.Delta,
+) (agent.Delta, error) {
 	delta.Gvrk = packetGvrk(gvrk)
 
 	if gvrk == kuber.Pods {
@@ -291,17 +288,16 @@ func (ew *entitiesWatcher) deltaWrapper(
 	return delta, nil
 }
 
-func (ew *entitiesWatcher) OnAdd(
-	now time.Time,
+func (ew *EntitiesWatcher) OnAdd(
 	gvrk kuber.GroupVersionResourceKind,
 	obj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
 		gvrk,
-		proto.PacketEntityDelta{
-			DeltaKind: proto.EntityEventTypeUpsert,
+		agent.Delta{
+			Kind:      agent.EntityDeltaKindUpsert,
 			Data:      obj,
-			Timestamp: now,
+			Timestamp: time.Now(),
 		},
 	)
 	if err != nil {
@@ -311,17 +307,16 @@ func (ew *entitiesWatcher) OnAdd(
 	ew.deltasQueue <- delta
 }
 
-func (ew *entitiesWatcher) OnUpdate(
-	now time.Time,
+func (ew *EntitiesWatcher) OnUpdate(
 	gvrk kuber.GroupVersionResourceKind,
 	oldObj, newObj unstructured.Unstructured,
 ) {
 	delta, err := ew.deltaWrapper(
 		gvrk,
-		proto.PacketEntityDelta{
-			DeltaKind: proto.EntityEventTypeUpsert,
+		agent.Delta{
+			Kind:      agent.EntityDeltaKindUpsert,
 			Data:      newObj,
-			Timestamp: now,
+			Timestamp: time.Now(),
 		},
 	)
 	if err != nil {
@@ -331,18 +326,17 @@ func (ew *entitiesWatcher) OnUpdate(
 	ew.deltasQueue <- delta
 }
 
-func (ew *entitiesWatcher) OnDelete(
-	now time.Time,
+func (ew *EntitiesWatcher) OnDelete(
 	gvrk kuber.GroupVersionResourceKind,
 	obj unstructured.Unstructured,
 ) {
 	ew.observer.ParentsStore.Delete(obj.GetNamespace(), obj.GetKind(), obj.GetName())
 	delta, err := ew.deltaWrapper(
 		gvrk,
-		proto.PacketEntityDelta{
-			DeltaKind: proto.EntityEventTypeDelete,
+		agent.Delta{
+			Kind:      agent.EntityDeltaKindDelete,
 			Data:      obj,
-			Timestamp: now,
+			Timestamp: time.Now(),
 		},
 	)
 	if err != nil {
@@ -352,13 +346,17 @@ func (ew *entitiesWatcher) OnDelete(
 	ew.deltasQueue <- delta
 }
 
-func (ew *entitiesWatcher) deltasWorker() {
+func (ew *EntitiesWatcher) deltasWorker(ctx context.Context) {
 	// this worker should be started only once
 
+	logger.Debug("Entities Watcher deltas worker started")
+
+	// TODO: Review this logic
 	for {
-		items := map[string]proto.PacketEntityDelta{}
+		items := map[string]agent.Delta{}
 		t := time.Now()
 		shouldFlush := false
+		shouldStop := false
 		for {
 			select {
 			case item := <-ew.deltasQueue:
@@ -382,53 +380,64 @@ func (ew *entitiesWatcher) deltasWorker() {
 				}
 			case <-time.After(deltasPacketFlushAfterTime):
 				shouldFlush = true
+			case <-ctx.Done():
+				shouldFlush = true
+				shouldStop = true
 			}
 			if shouldFlush {
-				ew.sendDeltas(items)
+				deltas := make([]*agent.Delta, 0, len(items))
+				for _, item := range items {
+					deltas = append(deltas, &item)
+				}
+				// TODO: If an error happens while sending deltas, the items map should be preserved until sending succeeds
+				err := ew.sendDeltas(deltas)
+				if err != nil {
+					logger.Errorf("Failed to send %d deltas. %w", len(deltas), err)
+				}
 				break
 			}
+		}
+		if shouldStop {
+			logger.Debug("Entities watcher deltas worker stopped")
+			return
 		}
 	}
 }
 
-func (ew *entitiesWatcher) sendDeltas(deltas map[string]proto.PacketEntityDelta) {
-	if len(deltas) == 0 {
-		return
+func (ew *EntitiesWatcher) snapshotWorker(ctx context.Context) {
+	snapshotTicker := time.NewTicker(snapshotInterval)
+	resyncTicker := time.NewTicker(resyncInterval)
+
+	logger.Debug("Entities Watcher snapshot worker started")
+	// Send snapshot & resync immediately once
+	ew.sendSnapshot()
+	ew.buildAndSendSnapshotResync()
+	for {
+		select {
+		case <-ctx.Done():
+			snapshotTicker.Stop()
+			resyncTicker.Stop()
+			logger.Debug("Entities Watcher snapshot worker stopped")
+		case <-snapshotTicker.C:
+			ew.sendSnapshot()
+		case <-resyncTicker.C:
+			ew.buildAndSendSnapshotResync()
+		}
 	}
-	logger.Info("Sending deltas")
-	items := make([]proto.PacketEntityDelta, len(deltas))
-	i := 0
-	for _, item := range deltas {
-		items[i] = item
-		i++
-	}
-	packet := proto.PacketEntitiesDeltasRequest{
-		Items:     items,
-		Timestamp: time.Now().UTC(),
-	}
-	ew.client.Pipe(client.Package{
-		Kind:        proto.PacketKindEntitiesDeltasRequest,
-		ExpiryTime:  utils.After(deltasPacketExpireAfter),
-		ExpiryCount: deltasPacketExpireCount,
-		Priority:    deltasPacketPriority,
-		Retries:     deltasPacketRetries,
-		Data:        packet,
-	})
-	logger.Infof("%d deltas sent", len(deltas))
 }
 
-func packetGvrk(gvrk kuber.GroupVersionResourceKind) proto.GroupVersionResourceKind {
-	return proto.GroupVersionResourceKind{
+func packetGvrk(gvrk kuber.GroupVersionResourceKind) agent.GroupVersionResourceKind {
+	return agent.GroupVersionResourceKind{
 		GroupVersionResource: gvrk.GroupVersionResource,
 		Kind:                 gvrk.Kind,
 	}
 }
 
-func packetParent(parent *kuber.ParentController) *proto.ParentController {
+func packetParent(parent *kuber.ParentController) *agent.ParentController {
 	if parent == nil {
 		return nil
 	}
-	return &proto.ParentController{
+	return &agent.ParentController{
 		Kind:       parent.Kind,
 		Name:       parent.Name,
 		APIVersion: parent.APIVersion,
