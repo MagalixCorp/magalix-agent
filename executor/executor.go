@@ -209,7 +209,7 @@ func (executor *Executor) execute(
 
 	var container kv1.Container
 	err = utils.Transcode(c, &container)
-	lg := logger.With(
+	_logger := logger.With(
 		"automation-id", automation.ID,
 		"namespace-name", automation.NamespaceName,
 		"controller-name", automation.ControllerName,
@@ -226,7 +226,7 @@ func (executor *Executor) execute(
 	recommendedResources := buildRecommendedResourcesFromAutomation(originalResources, automation)
 
 	trace, _ := json.Marshal(recommendedResources)
-	lg.Debugw(
+	_logger.Debugw(
 		"executing automation",
 		"dry run", executor.dryRun,
 		"cpu unit", "milliCore",
@@ -283,11 +283,11 @@ func (executor *Executor) execute(
 			)
 
 			if err != nil {
-				lg.Warn("can't rollback automation")
+				_logger.Warn("can't rollback automation")
 			}
 		}
 
-		lg.Debug(msg)
+		_logger.Debug(msg)
 
 		return &proto.PacketAutomationFeedbackRequest{
 			ID:             automation.ID,
