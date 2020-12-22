@@ -25,6 +25,16 @@ spec:
           envFrom:
             - secretRef:
                 name: magalix-agent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            procMount: Default
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsUser: 1000
           livenessProbe:
             httpGet:
               path: /live
