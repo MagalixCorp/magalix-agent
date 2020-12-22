@@ -44,9 +44,10 @@ type Executor struct {
 }
 
 type Replica struct {
-	name     string
-	replicas int32
-	time     time.Time
+	name     		string
+	replicas 		int32
+	readyReplicas 	int32
+	time     		time.Time
 }
 
 // InitExecutor creates a new executor then starts it

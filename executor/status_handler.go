@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -107,18 +108,32 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 func (executor *Executor) deploymentsHandler(entityName string, namespace string) (deploymentName string, targetPods int32, err error) {
 	replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
 
-	if err != nil {
-		return "", 0, err
-	}
-
+	currentReplicas := []Replica{}
 	// get the new replicaset
 	for _, replica := range replicasets.Items {
 		if strings.Contains(replica.Name, entityName) && replica.Status.Replicas > 0 {
-			deploymentName = replica.Name
-			targetPods = *replica.Spec.Replicas
-			break
+			currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.Status.ReadyReplicas ,replica.CreationTimestamp.Local()})
 		}
 	}
+
+	sort.Slice(currentReplicas, func(i, j int) bool {
+		return currentReplicas[i].time.After(currentReplicas[j].time)
+	})
+
+	targetPods = currentReplicas[0].replicas
+
+	if currentReplicas[0].readyReplicas > 0 {
+		deploymentName = currentReplicas[0].name
+	}else{
+		for _, replica := range currentReplicas {
+			if replica.readyReplicas > 0 {
+				deploymentName = replica.name
+			}
+		}
+	}
+
+	targetPods = currentReplicas[0].replicas
+
 
 	return deploymentName, targetPods, nil
 }
