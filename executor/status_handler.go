@@ -128,6 +128,7 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 		for _, replica := range currentReplicas {
 			if replica.readyReplicas > 0 {
 				deploymentName = replica.name
+				break
 			}
 		}
 	}
