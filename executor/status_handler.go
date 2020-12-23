@@ -122,7 +122,7 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 
 	targetPods = currentReplicas[0].replicas
 
-	if currentReplicas[0].readyReplicas > 0 {
+	if currentReplicas[0].readyReplicas >= 0 {
 		deploymentName = currentReplicas[0].name
 	}else{
 		for _, replica := range currentReplicas {
