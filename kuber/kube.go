@@ -555,6 +555,24 @@ func (kube *Kube) GetDeployments() (*appsV1.DeploymentList, error) {
 	return deployments, nil
 }
 
+// GetDeployments get deployments
+func (kube *Kube) GetDeployment(namespace, name string) (*appsV1.Deployment, error) {
+	logger.Debug("retrieving list of deployments")
+	deployment, err := kube.apps.Deployments("namespace").Get(context.Background(), name , kmeta.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf(
+			"unable to retrieve deployments from all namespaces, error: %w",
+			err,
+		)
+	}
+
+	if deployment != nil {
+		maskPodSpec(&deployment.Spec.Template.Spec)
+	}
+
+	return deployment, nil
+}
+
 // GetStatefulSets get stateful sets
 func (kube *Kube) GetStatefulSets() (
 	*appsV1.StatefulSetList, error,
