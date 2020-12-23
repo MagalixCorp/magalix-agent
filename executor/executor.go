@@ -43,13 +43,6 @@ type Executor struct {
 	inProgressJobs  map[string]bool
 }
 
-type Replica struct {
-	name     		string
-	replicas 		int32
-	readyReplicas 	int32
-	time     		time.Time
-}
-
 // InitExecutor creates a new executor then starts it
 func InitExecutor(
 	client *client.Client,
