@@ -109,7 +109,7 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 	if err != nil {
 		return "", 0, err
 
-	} else {
+	}
 		// get the cuurent replicaset
 		for _, replica := range replicasets.Items {
 
@@ -133,7 +133,6 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 				break
 			}
 		}
-	}
 
 	return deploymentName, targetPods, nil
 }
