@@ -105,6 +105,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 }
 
 func (executor *Executor) deploymentsHandler(entityName string, namespace string) (deploymentName string, targetPods int32, err error) {
+
 	replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
 	deployment, err := executor.kube.GetDeploymentByName(namespace, entityName)
 
@@ -112,7 +113,7 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 	// get the cuurent replicaset
 	for _, replica := range replicasets.Items {
 
-		if replica.Annotations["revision"] == deployment.Annotations["revision"] {
+		if replica.Annotations["deployment.kubernetes.io/revision"] == deployment.Annotations["deployment.kubernetes.io/revision"] {
 			deploymentName = replica.Name
 			targetPods = *replica.Spec.Replicas
 			break
