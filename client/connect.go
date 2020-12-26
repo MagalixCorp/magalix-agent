@@ -125,7 +125,7 @@ func (client *Client) Connect(ctx context.Context, connect chan bool) error {
 	// TODO: Refactor channel package to use a context for managing go routines
 	go client.channel.Listen()
 	client.pipe.Start(10)
-	client.pipeStatus.Start( 1)
+	client.pipeStatus.Start(1)
 	return eg.Wait()
 }
 

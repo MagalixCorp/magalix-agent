@@ -87,3 +87,4 @@ func (m *Metrics) Stop() error {
 	m.cancelWorker()
 	return nil
 }
+
