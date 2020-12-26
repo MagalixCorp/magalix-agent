@@ -1,8 +1,7 @@
 package metrics
 
 import (
-	"time"
-
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -15,5 +14,5 @@ type EntitiesProvider interface {
 // in future releases. Consider using Source interface instead.
 // MetricsSource interface for metrics source
 type MetricsSource interface {
-	GetMetrics(entitiesProvider EntitiesProvider, tickTime time.Time) ([]*Metric, error)
+	GetMetrics() ([]*agent.Metric, error)
 }

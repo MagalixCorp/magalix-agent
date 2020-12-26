@@ -9,20 +9,20 @@ import (
 
 const logBatchSize = 5
 
-func (c *Client) Write(p []byte) (n int, err error) {
-	c.blockedM.Lock()
-	defer c.blockedM.Unlock()
+func (client *Client) Write(p []byte) (n int, err error) {
+	client.blockedM.Lock()
+	defer client.blockedM.Unlock()
 
-	if c.shouldSendLogs {
-		c.logBuffer = append(c.logBuffer, proto.PacketLogItem{
+	if client.shouldSendLogs {
+		client.logBuffer = append(client.logBuffer, proto.PacketLogItem{
 			Date: time.Now(),
 			Data: string(p),
 		})
 
-		if len(c.logBuffer) == logBatchSize {
-			payload := make(proto.PacketLogs, len(c.logBuffer))
-			copy(payload, c.logBuffer)
-			c.logBuffer = make(proto.PacketLogs, 0, 5)
+		if len(client.logBuffer) == logBatchSize {
+			payload := make(proto.PacketLogs, len(client.logBuffer))
+			copy(payload, client.logBuffer)
+			client.logBuffer = make(proto.PacketLogs, 0, 5)
 			pkg := Package{
 				Kind:        proto.PacketKindLogs,
 				ExpiryTime:  utils.After(10 * time.Minute),
@@ -32,12 +32,12 @@ func (c *Client) Write(p []byte) (n int, err error) {
 				Data:        payload,
 			}
 
-			c.Pipe(pkg)
+			client.Pipe(pkg)
 		}
 	}
-	return len(c.logBuffer), nil
+	return len(client.logBuffer), nil
 }
 
-func (c *Client) Sync() error {
+func (client *Client) Sync() error {
 	return nil
 }

@@ -14,13 +14,13 @@ const (
 type ProbesServer struct {
 	address string
 
-	Authorized bool
+	IsReady bool
 }
 
 func NewProbesServer(address string) *ProbesServer {
 	return &ProbesServer{
-		address:    address,
-		Authorized: false,
+		address: address,
+		IsReady: false,
 	}
 }
 
@@ -41,7 +41,7 @@ func (p *ProbesServer) livenessProbeHandler(w http.ResponseWriter, req *http.Req
 }
 
 func (p *ProbesServer) readinessProbeHandler(w http.ResponseWriter, req *http.Request) {
-	if p.Authorized {
+	if p.IsReady {
 		w.WriteHeader(200)
 	} else {
 		w.WriteHeader(503)
