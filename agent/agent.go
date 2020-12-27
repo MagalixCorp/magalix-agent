@@ -72,8 +72,8 @@ func (a *Agent) Start() error {
 	// Blocks until authorized
 	a.Gateway.WaitAuthorization()
 
-	//eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
-	//eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
+	eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
+	eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
 
 	return eg.Wait()
