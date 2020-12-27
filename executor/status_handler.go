@@ -18,7 +18,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	objectName := ""
 	result = agent.AutomationFailed
 	targetPods = 0
-	var err error = nil
+	var err error
 	flag := false
 
 	if strings.ToLower(kind) == "statefulset" {
@@ -54,7 +54,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 		result = agent.AutomationFailed
 
 	} else {
-		for time.Now().Sub(start) < automationsExecutionTimeout {
+		for time.Since(start) < automationsExecutionTimeout {
 
 			time.Sleep(podStatusSleep)
 

@@ -118,10 +118,10 @@ func (client *KubeletClient) discoverNodesAddress() (
 	}
 
 	ctx := context.TODO()
-	group, ctx := errgroup.WithContext(ctx)
+	group, _ := errgroup.WithContext(ctx)
 	once := sync.Once{}
-	found := make(chan struct{}, 0)
-	done := make(chan struct{}, 0)
+	found := make(chan struct{})
+	done := make(chan struct{})
 
 	setResult := func(fn NodePathGetter, isApiServer *bool) {
 		if isApiServer != nil {
@@ -252,6 +252,9 @@ func (client *KubeletClient) testNodeAccess(
 	}
 
 	b, err := readResponseBytes(resp)
+	if err != nil {
+		return errors.Wrapf(err, "node access test failed; node %s", node.Name)
+	}
 
 	var response interface{}
 	err = parseJSON(b, &response)

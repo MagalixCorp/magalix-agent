@@ -61,7 +61,7 @@ func (p *Pipe) start() {
 
 			logFields := logger.With(
 				"kind", pack.Kind,
-				"diff", time.Now().Sub(pack.time),
+				"diff", time.Since(pack.time),
 				"remaining", p.storage.Len(),
 			)
 			logFields.Debugf("sending packet %s ....", pack.Kind.String())

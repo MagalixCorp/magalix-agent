@@ -14,8 +14,6 @@ import (
 const (
 	ProtocolMajorVersion = 2
 	ProtocolMinorVersion = 4
-
-	logsQueueSize = 1024
 )
 
 type timeouts struct {
@@ -44,7 +42,6 @@ type Client struct {
 
 	shouldSendLogs  bool
 	logBuffer       proto.PacketLogs
-	logsQueueWorker *sync.WaitGroup
 
 	// for thread blocked on connection
 	blocked  sync.Map

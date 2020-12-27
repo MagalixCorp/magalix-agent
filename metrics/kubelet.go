@@ -83,10 +83,10 @@ type kubeletTimeouts struct {
 
 // Kubelet kubelet client
 type Kubelet struct {
-	previous      map[string]KubeletValue
-	previousMutex *sync.Mutex
-	timeouts      kubeletTimeouts
-	kubeletClient *KubeletClient
+	previous         map[string]KubeletValue
+	previousMutex    *sync.Mutex
+	timeouts         kubeletTimeouts
+	kubeletClient    *KubeletClient
 	EntitiesProvider EntitiesProvider
 }
 
@@ -98,10 +98,10 @@ func NewKubelet(
 	maxRetries int,
 ) (*Kubelet, error) {
 	kubelet := &Kubelet{
-		kubeletClient: kubeletClient,
+		kubeletClient:    kubeletClient,
 		EntitiesProvider: entitiesProvider,
-		previous:      map[string]KubeletValue{},
-		previousMutex: &sync.Mutex{},
+		previous:         map[string]KubeletValue{},
+		previousMutex:    &sync.Mutex{},
 		timeouts: kubeletTimeouts{
 			backoff: backOff{
 				sleep:      backOffSleep,
@@ -258,7 +258,7 @@ func (kubelet *Kubelet) GetMetrics() (result []*agent.Metric, err error) {
 	// to expected happen in the first time metrics are retrieved for all metrics which means it can be logged thousands
 	// of times.
 	rateErrorsCount := 0
-	defer func(count *int){
+	defer func(count *int) {
 		if rateErrorsCount > 0 {
 			logger.Warnf("Couldn't calculate rate for %d metrics", rateErrorsCount)
 		}
@@ -827,11 +827,8 @@ func (kubelet *Kubelet) GetMetrics() (result []*agent.Metric, err error) {
 		}
 	}
 
-	result = make([]*agent.Metric, 0)
-
-	for _, metrics := range metrics {
-		result = append(result, metrics)
-	}
+	result = make([]*agent.Metric, 0, len(metrics))
+	result = append(result, metrics...)
 
 	var timestamp time.Time
 	if len(metrics) > 0 {
@@ -848,7 +845,7 @@ func (kubelet *Kubelet) GetMetrics() (result []*agent.Metric, err error) {
 
 func (kubelet *Kubelet) collectGarbage() {
 	for key, previous := range kubelet.previous {
-		if time.Now().Sub(previous.Timestamp) > time.Hour {
+		if time.Since(previous.Timestamp) > time.Hour {
 			delete(kubelet.previous, key)
 		}
 	}

@@ -41,12 +41,6 @@ type Executor struct {
 	sendAutomationFeedback agent.AutomationFeedbackHandler
 }
 
-type Replica struct {
-	name     string
-	replicas int32
-	time     time.Time
-}
-
 // NewExecutor creates a new executor
 func NewExecutor(
 	kube *kuber.Kube,
@@ -114,18 +108,6 @@ func (executor *Executor) Stop() error {
 	executor.cancelWorkers()
 	executor.cancelWorkers = nil
 	return nil
-}
-
-func (executor *Executor) backoff(
-	fn func() error, sleep time.Duration, maxRetries int,
-) error {
-	return utils.WithBackoff(
-		fn,
-		utils.Backoff{
-			Sleep:      sleep,
-			MaxRetries: maxRetries,
-		},
-	)
 }
 
 func (executor *Executor) handleExecutionError(
