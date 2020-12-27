@@ -379,21 +379,22 @@ func (kubelet *Kubelet) GetMetrics() (result []*agent.Metric, err error) {
 	}
 
 	for _, node := range nodes {
+		_node := node
 		for _, measurement := range []struct {
 			Name  string
 			Time  time.Time
 			Value int64
 		}{
-			{"cpu/node_capacity", tickTime, node.Status.Capacity.Cpu().MilliValue()},
-			{"cpu/node_allocatable", tickTime, node.Status.Allocatable.Cpu().MilliValue()},
-			{"memory/node_capacity", tickTime, node.Status.Capacity.Memory().Value()},
-			{"memory/node_allocatable", tickTime, node.Status.Allocatable.Memory().Value()},
+			{"cpu/node_capacity", tickTime, _node.Status.Capacity.Cpu().MilliValue()},
+			{"cpu/node_allocatable", tickTime, _node.Status.Allocatable.Cpu().MilliValue()},
+			{"memory/node_capacity", tickTime, _node.Status.Capacity.Memory().Value()},
+			{"memory/node_allocatable", tickTime, _node.Status.Allocatable.Memory().Value()},
 		} {
 			addMetricValue(
 				TypeNode,
 				measurement.Name,
-				node.Name,
-				GetNodeIP(&node),
+				_node.Name,
+				GetNodeIP(&_node),
 				"",
 				"",
 				"",
