@@ -7,7 +7,13 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 )
 
-const logBatchSize = 5
+const (
+	logBatchSize = 5
+	logExpiryPeriod = 10 * time.Minute
+	logExpiryCount = 2
+	logPriority = 9
+	logRetryCount = 4
+)
 
 func (client *Client) Write(p []byte) (n int, err error) {
 	client.blockedM.Lock()
@@ -20,24 +26,30 @@ func (client *Client) Write(p []byte) (n int, err error) {
 		})
 
 		if len(client.logBuffer) == logBatchSize {
-			payload := make(proto.PacketLogs, len(client.logBuffer))
-			copy(payload, client.logBuffer)
-			client.logBuffer = make(proto.PacketLogs, 0, 5)
-			pkg := Package{
-				Kind:        proto.PacketKindLogs,
-				ExpiryTime:  utils.After(10 * time.Minute),
-				ExpiryCount: 2,
-				Priority:    9,
-				Retries:     4,
-				Data:        payload,
-			}
-
-			client.Pipe(pkg)
+			client.flushLogs()
 		}
 	}
 	return len(client.logBuffer), nil
 }
 
+func (client *Client) flushLogs() {
+	payload := make(proto.PacketLogs, len(client.logBuffer))
+	copy(payload, client.logBuffer)
+	client.logBuffer = make(proto.PacketLogs, 0, logBatchSize)
+	pkg := Package{
+		Kind:        proto.PacketKindLogs,
+		ExpiryTime:  utils.After(logExpiryPeriod),
+		ExpiryCount: logExpiryCount,
+		Priority:    logPriority,
+		Retries:     logRetryCount,
+		Data:        payload,
+	}
+
+	client.Pipe(pkg)
+}
+
 func (client *Client) Sync() error {
+	// TODO: Should actually wait till logs are sent
+	client.flushLogs()
 	return nil
 }
