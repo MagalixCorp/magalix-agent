@@ -387,7 +387,8 @@ func (ew *EntitiesWatcher) deltasWorker(ctx context.Context) {
 			if shouldFlush {
 				deltas := make([]*agent.Delta, 0, len(items))
 				for _, item := range items {
-					deltas = append(deltas, &item)
+					_item := item
+					deltas = append(deltas, &_item)
 				}
 				// TODO: If an error happens while sending deltas, the items map should be preserved until sending succeeds
 				err := ew.sendDeltas(deltas)
