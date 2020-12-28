@@ -25,19 +25,24 @@ func (a *Agent) handleAutomationFeedback(feedback *AutomationFeedback) error {
 
 func (a *Agent) handleRestart() error {
 	go func() {
+		logger.Info("Received restart. Stopping workers.")
 		if err := a.stopSources(); err != nil {
-			logger.Errorf("failed to stop agent sources. %w", err)
+			logger.Errorf("failed to stop agent sources. %s", err)
 		}
+
 		if err := logger.Sync(); err != nil {
-			logger.Errorf("failed to sync logs. %w", err)
+			logger.Errorf("failed to sync logs. %s", err)
 		}
+
 		if err := a.stopSinks(); err != nil {
-			logger.Errorf("failed to stop agent sinks. %w", err)
+			logger.Errorf("failed to stop agent sinks. %s", err)
 		}
+
 		// Set a random wait time of up to 600 seconds (10 minutes)
 		waitTime := time.Duration(rand.Intn(600)) * time.Second
-		logger.Infof("Agent will exit in %f seconds", waitTime.Seconds())
+		logger.Infof("Agent will exit in %s at %s", waitTime.String(), time.Now().Add(waitTime))
 		time.Sleep(waitTime)
+
 		a.Exit(0)
 	}()
 	return nil
