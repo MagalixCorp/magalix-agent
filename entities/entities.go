@@ -418,6 +418,7 @@ func (ew *EntitiesWatcher) snapshotWorker(ctx context.Context) {
 			snapshotTicker.Stop()
 			resyncTicker.Stop()
 			logger.Debug("Entities Watcher snapshot worker stopped")
+			return
 		case <-snapshotTicker.C:
 			ew.sendSnapshot()
 		case <-resyncTicker.C:
