@@ -375,7 +375,7 @@ func (ew *EntitiesWatcher) deltasWorker(ctx context.Context) {
 					}
 				}
 				if len(items) >= deltasPacketFlushAfterSize ||
-					time.Now().Sub(t) >= deltasPacketFlushAfterTime {
+					time.Since(t) >= deltasPacketFlushAfterTime {
 					shouldFlush = true
 				}
 			case <-time.After(deltasPacketFlushAfterTime):

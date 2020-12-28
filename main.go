@@ -208,7 +208,7 @@ func main() {
 	observer := kuber.NewObserver(
 		dynamicClient,
 		parentsStore,
-		make(chan struct{}, 0),
+		make(chan struct{}),
 		observerDefaultResyncTime,
 	)
 	err = observer.WaitForCacheSync()
