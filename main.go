@@ -254,7 +254,7 @@ func main() {
 		automationExecutor,
 		mgxGateway,
 		func(level *agent.LogLevel) error {
-			return ConfigureGlobalLogger(accountID, clusterID, level.Level, nil)
+			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
 	)
 
