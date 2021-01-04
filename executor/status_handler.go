@@ -1,35 +1,27 @@
 package executor
 
 import (
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixTechnologies/core/logger"
 
 	kv1 "k8s.io/api/core/v1"
 )
 
-func (executor *Executor) podsStatusHandler(entityName string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result proto.AutomationStatus, msg string, targetPods int32, runningPods int32) {
+func (executor *Executor) podsStatusHandler(entityName string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result agent.AutomationStatus, msg string, targetPods int32, runningPods int32) {
 	// short pooling to trigger pod status with max 15 minutes
 	msg = "pods restarting exceeded timout (15 min)"
 	start := time.Now()
 
 	objectName := ""
-	result = proto.AutomationFailed
+	result = agent.AutomationFailed
 	targetPods = 0
-	var err error = nil
+	var err error
 	flag := false
 
-	if strings.ToLower(kind) == "deployment" {
-		objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
-		if err != nil {
-			flag = true
-
-		}
-
-	} else if strings.ToLower(kind) == "statefulset" {
+	if strings.ToLower(kind) == "statefulset" {
 		objectName, targetPods, err = executor.statefulsetsHandler(entityName, namespace)
 		if err != nil {
 			flag = true
@@ -59,21 +51,30 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 
 	if flag {
 		msg = "failed to trigger pod status"
-		result = proto.AutomationFailed
+		result = agent.AutomationFailed
 
 	} else {
+		for time.Since(start) < automationsExecutionTimeout {
 
-		// get pods of the new controller
-		for time.Now().Sub(start) < automationsExecutionTimeout {
+			time.Sleep(podStatusSleep)
+
+			// In case of deployment we make sure to update replicaset in each iteration to get the current replica sets with ready replicas and not the previous one
+			if strings.ToLower(kind) == "deployment" {
+				objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
+				if err != nil {
+					msg = "failed to trigger pod status"
+					result = agent.AutomationFailed
+					break
+				}
+			}
 
 			status := kv1.PodPending
 
-			time.Sleep(podStatusSleep)
 			pods, err := executor.kube.GetNameSpacePods(namespace)
 
 			if err != nil {
 				msg = "failed to trigger pod status"
-				result = proto.AutomationFailed
+				result = agent.AutomationFailed
 				break
 			}
 
@@ -94,7 +95,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 
 			if runningPods == targetPods {
 				msg = statusMap[status]
-				result = proto.AutomationExecuted
+				result = agent.AutomationExecuted
 				break
 			}
 		}
@@ -108,22 +109,15 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 
 	if err != nil {
 		return "", 0, err
+	}
 
-	} else {
-		currentReplicas := []Replica{}
-		// get the new replicaset
-		for _, replica := range replicasets.Items {
-			if strings.Contains(replica.Name, entityName) && replica.Status.Replicas > 0 {
-				currentReplicas = append(currentReplicas, Replica{replica.Name, *replica.Spec.Replicas, replica.CreationTimestamp.Local()})
-			}
+	// get the new replicaset
+	for _, replica := range replicasets.Items {
+		if strings.Contains(replica.Name, entityName) && replica.Status.Replicas > 0 {
+			deploymentName = replica.Name
+			targetPods = *replica.Spec.Replicas
+			break
 		}
-
-		sort.Slice(currentReplicas, func(i, j int) bool {
-			return currentReplicas[i].time.After(currentReplicas[j].time)
-		})
-
-		deploymentName = currentReplicas[0].name
-		targetPods = currentReplicas[0].replicas
 	}
 
 	return deploymentName, targetPods, nil

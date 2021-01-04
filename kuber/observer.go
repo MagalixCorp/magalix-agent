@@ -321,7 +321,6 @@ func wrapHandler(
 ) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			now := time.Now().UTC()
 			objUn, ok := obj.(*unstructured.Unstructured)
 			if !ok {
 				logger.Error("unable to cast obj to *Unstructured")
@@ -332,11 +331,10 @@ func wrapHandler(
 					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
-				wrapped.OnAdd(now, gvrk, *objUn)
+				wrapped.OnAdd(gvrk, *objUn)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			now := time.Now().UTC()
 			// TODO: can we have a better way to suppress update events when
 			// a resync is forced because of a network error
 			oldUn, oldOk := oldObj.(*unstructured.Unstructured)
@@ -375,11 +373,10 @@ func wrapHandler(
 					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
-				wrapped.OnUpdate(now, gvrk, *oldUn, *newUn)
+				wrapped.OnUpdate(gvrk, *oldUn, *newUn)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			now := time.Now().UTC()
 			objUn, ok := obj.(*unstructured.Unstructured)
 			if !ok {
 				logger.Error("unable to cast obj to *Unstructured")
@@ -390,7 +387,7 @@ func wrapHandler(
 					logger.Errorw("unable to mask Unstructured", "error", err)
 					return
 				}
-				wrapped.OnDelete(now, gvrk, *objUn)
+				wrapped.OnDelete(gvrk, *objUn)
 			}
 		},
 	}
@@ -461,9 +458,9 @@ func maskUnstructured(
 }
 
 type ResourceEventHandler interface {
-	OnAdd(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
-	OnUpdate(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
-	OnDelete(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnAdd(gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnUpdate(gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
+	OnDelete(gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
 }
 
 // ResourceEventHandlerFuncs is an adaptor to let you easily specify as many or
@@ -471,29 +468,29 @@ type ResourceEventHandler interface {
 // ResourceEventHandler.
 type ResourceEventHandlerFuncs struct {
 	Observer   *Observer
-	AddFunc    func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
-	UpdateFunc func(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
-	DeleteFunc func(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	AddFunc    func(gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
+	UpdateFunc func(gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
+	DeleteFunc func(gvrk GroupVersionResourceKind, obj unstructured.Unstructured)
 }
 
 // OnAdd calls AddFunc if it's not nil.
-func (r ResourceEventHandlerFuncs) OnAdd(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured) {
+func (r ResourceEventHandlerFuncs) OnAdd(gvrk GroupVersionResourceKind, obj unstructured.Unstructured) {
 	if r.AddFunc != nil {
-		r.AddFunc(now, gvrk, obj)
+		r.AddFunc(gvrk, obj)
 	}
 }
 
 // OnUpdate calls UpdateFunc if it's not nil.
-func (r ResourceEventHandlerFuncs) OnUpdate(now time.Time, gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
+func (r ResourceEventHandlerFuncs) OnUpdate(gvrk GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
 	if r.UpdateFunc != nil {
-		r.UpdateFunc(now, gvrk, oldObj, newObj)
+		r.UpdateFunc(gvrk, oldObj, newObj)
 	}
 }
 
 // OnDelete calls DeleteFunc if it's not nil.
-func (r ResourceEventHandlerFuncs) OnDelete(now time.Time, gvrk GroupVersionResourceKind, obj unstructured.Unstructured) {
+func (r ResourceEventHandlerFuncs) OnDelete(gvrk GroupVersionResourceKind, obj unstructured.Unstructured) {
 	if r.DeleteFunc != nil {
-		r.DeleteFunc(now, gvrk, obj)
+		r.DeleteFunc(gvrk, obj)
 	}
 
 	r.Observer.ParentsStore.Delete(obj.GetNamespace(), obj.GetKind(), obj.GetName())

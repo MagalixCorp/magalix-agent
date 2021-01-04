@@ -10,7 +10,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -25,9 +24,6 @@ var (
 		uuid.UUID{},
 		satori.UUID{},
 		[uuid.Size]byte{},
-
-		new(watcher.Status),
-		new(watcher.ContainerStatusSource),
 
 		make(map[string]interface{}),
 		make([]interface{}, 0),

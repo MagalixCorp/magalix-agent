@@ -809,14 +809,8 @@ func (kube *Kube) SetResources(
 
 		container := totalResources.Containers[i]
 		resources := map[string]map[string]interface{}{
-			"limits": {
-				"memory": nil,
-				"cpu":    nil,
-			},
-			"requests": {
-				"memory": nil,
-				"cpu":    nil,
-			},
+			"limits":   {},
+			"requests": {},
 		}
 
 		if container.Limits.Memory != nil {
