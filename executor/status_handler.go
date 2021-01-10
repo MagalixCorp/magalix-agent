@@ -21,7 +21,14 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	var err error
 	flag := false
 
-	if strings.ToLower(kind) == "statefulset" {
+	if strings.ToLower(kind) == "deployment" {
+		objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
+		if err != nil {
+			flag = true
+
+		}
+
+	} else if strings.ToLower(kind) == "statefulset" {
 		objectName, targetPods, err = executor.statefulsetsHandler(entityName, namespace)
 		if err != nil {
 			flag = true
@@ -57,17 +64,6 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 		for time.Since(start) < automationsExecutionTimeout {
 
 			time.Sleep(podStatusSleep)
-
-			// In case of deployment we make sure to update replicaset in each iteration to get the current replica sets with ready replicas and not the previous one
-			if strings.ToLower(kind) == "deployment" {
-				objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
-				if err != nil {
-					msg = "failed to trigger pod status"
-					result = agent.AutomationFailed
-					break
-				}
-			}
-
 			status := kv1.PodPending
 
 			pods, err := executor.kube.GetNameSpacePods(namespace)
@@ -105,20 +101,37 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 }
 
 func (executor *Executor) deploymentsHandler(entityName string, namespace string) (deploymentName string, targetPods int32, err error) {
+
 	replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
+	deployment, err := executor.kube.GetDeploymentByName(namespace, entityName)
 
 	if err != nil {
 		return "", 0, err
-	}
 
-	// get the new replicaset
-	for _, replica := range replicasets.Items {
-		if strings.Contains(replica.Name, entityName) && replica.Status.Replicas > 0 {
-			deploymentName = replica.Name
-			targetPods = *replica.Spec.Replicas
-			break
-		}
 	}
+		// get the cuurent replicaset
+		for _, replica := range replicasets.Items {
+
+			replicaRevision, ok := replica.Annotations["deployment.kubernetes.io/revision"]
+
+			// can't get replicaset revision
+			if !ok {
+				return "", 0, err
+			}
+			deploymentRevision, ok := deployment.Annotations["deployment.kubernetes.io/revision"]
+
+			// can't get deployment revision
+			if !ok {
+				return "", 0, err
+			}
+
+			// get the replicaset with the same revision of the deployment
+			if replicaRevision == deploymentRevision {
+				deploymentName = replica.Name
+				targetPods = *replica.Spec.Replicas
+				break
+			}
+		}
 
 	return deploymentName, targetPods, nil
 }
