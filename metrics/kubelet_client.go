@@ -118,10 +118,10 @@ func (client *KubeletClient) discoverNodesAddress() (
 	}
 
 	ctx := context.TODO()
-	group, ctx := errgroup.WithContext(ctx)
+	group, _ := errgroup.WithContext(ctx)
 	once := sync.Once{}
-	found := make(chan struct{}, 0)
-	done := make(chan struct{}, 0)
+	found := make(chan struct{})
+	done := make(chan struct{})
 
 	setResult := func(fn NodePathGetter, isApiServer *bool) {
 		if isApiServer != nil {
@@ -252,6 +252,9 @@ func (client *KubeletClient) testNodeAccess(
 	}
 
 	b, err := readResponseBytes(resp)
+	if err != nil {
+		return errors.Wrapf(err, "node access test failed; node %s", node.Name)
+	}
 
 	var response interface{}
 	err = parseJSON(b, &response)
@@ -315,7 +318,7 @@ type NodesProvider interface {
 func NewKubeletClient(
 	nodesProvider NodesProvider,
 	kube *kuber.Kube,
-	args map[string]interface{},
+	kubeletPort string,
 ) (*KubeletClient, error) {
 
 	restClient, ok := kube.Clientset.RESTClient().(*rest.RESTClient)
@@ -332,7 +335,7 @@ func NewKubeletClient(
 		kube:       kube,
 		restClient: restClient,
 
-		httpPort: args["--kubelet-port"].(string),
+		httpPort: kubeletPort,
 	}
 
 	err := client.init()

@@ -7,37 +7,49 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 )
 
-const logBatchSize = 5
+const (
+	logBatchSize = 5
+	logExpiryPeriod = 10 * time.Minute
+	logExpiryCount = 2
+	logPriority = 9
+	logRetryCount = 4
+)
 
-func (c *Client) Write(p []byte) (n int, err error) {
-	c.blockedM.Lock()
-	defer c.blockedM.Unlock()
+func (client *Client) Write(p []byte) (n int, err error) {
+	client.blockedM.Lock()
+	defer client.blockedM.Unlock()
 
-	if c.shouldSendLogs {
-		c.logBuffer = append(c.logBuffer, proto.PacketLogItem{
+	if client.shouldSendLogs {
+		client.logBuffer = append(client.logBuffer, proto.PacketLogItem{
 			Date: time.Now(),
 			Data: string(p),
 		})
 
-		if len(c.logBuffer) == logBatchSize {
-			payload := make(proto.PacketLogs, len(c.logBuffer))
-			copy(payload, c.logBuffer)
-			c.logBuffer = make(proto.PacketLogs, 0, 5)
-			pkg := Package{
-				Kind:        proto.PacketKindLogs,
-				ExpiryTime:  utils.After(10 * time.Minute),
-				ExpiryCount: 2,
-				Priority:    9,
-				Retries:     4,
-				Data:        payload,
-			}
-
-			c.Pipe(pkg)
+		if len(client.logBuffer) == logBatchSize {
+			client.flushLogs()
 		}
 	}
-	return len(c.logBuffer), nil
+	return len(client.logBuffer), nil
 }
 
-func (c *Client) Sync() error {
+func (client *Client) flushLogs() {
+	payload := make(proto.PacketLogs, len(client.logBuffer))
+	copy(payload, client.logBuffer)
+	client.logBuffer = make(proto.PacketLogs, 0, logBatchSize)
+	pkg := Package{
+		Kind:        proto.PacketKindLogs,
+		ExpiryTime:  utils.After(logExpiryPeriod),
+		ExpiryCount: logExpiryCount,
+		Priority:    logPriority,
+		Retries:     logRetryCount,
+		Data:        payload,
+	}
+
+	client.Pipe(pkg)
+}
+
+func (client *Client) Sync() error {
+	// TODO: Should actually wait till logs are sent
+	client.flushLogs()
 	return nil
 }

@@ -3,19 +3,19 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/MagalixCorp/magalix-agent/v2/entities"
+	"github.com/MagalixCorp/magalix-agent/v2/executor"
+	"go.uber.org/zap/zapcore"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"k8s.io/client-go/util/cert"
-
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/client"
-	"github.com/MagalixCorp/magalix-agent/v2/entities"
-	"github.com/MagalixCorp/magalix-agent/v2/executor"
+	"github.com/MagalixCorp/magalix-agent/v2/gateway"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
 	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/cert"
 )
 
 var usage = `agent - magalix services agent.
@@ -89,16 +90,15 @@ Options:
                                               [default: 5m]
   --packets-v2                               Enable v2 packets (without ids). (Deprecated)
   --disable-metrics                          Disable metrics collecting and sending.
-  --disable-events                           Disable events collecting and sending(Deprecated).
-  --disable-scalar                           Disable in-agent scalar.
+  --disable-events                           Disable events collecting and sending.(Deprecated)
+  --disable-scalar                           Disable in-agent scalar. (Deprecated)
   --port <port>                              Port to start the server on for liveness and readiness probes
                                                [default: 80]
   --dry-run                                  Disable automation execution.
   --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
-  --trace-log <path>                         Write log messages to specified file
-                                              [default: trace.log]
+  --trace-log <path>                         Write log messages to specified file. (Deprecated)
   --log-level <string>                       Log level
                                               [default: warn]
   -h --help                                  Show this help.
@@ -109,45 +109,11 @@ var version = "[manual build]"
 
 var startID string
 
-func getVersion() string {
-	return strings.Join([]string{
-		"magalix agent " + version,
-		"protocol/major: " + fmt.Sprint(client.ProtocolMajorVersion),
-		"protocol/minor: " + fmt.Sprint(client.ProtocolMinorVersion),
-	}, "\n")
-}
-
-// SetLogLevel sets log level for the agent
-func SetLogLevel(c *client.Client, level string) bool {
-
-	ok := true
-	switch level {
-	case "info":
-		logger.ConfigWriterSync(logger.InfoLevel, c)
-	case "debug":
-		logger.ConfigWriterSync(logger.DebugLevel, c)
-	case "warn":
-		logger.ConfigWriterSync(logger.WarnLevel, c)
-	case "error":
-		logger.ConfigWriterSync(logger.ErrorLevel, c)
-	default:
-		ok = false
-	}
-	logger.WithGlobal("accountID", c.AccountID, "clusterID", c.ClusterID)
-	return ok
-}
-
 func main() {
-	startID = uuid.NewV4().String()
 	args, err := docopt.ParseArgs(usage, nil, getVersion())
 	if err != nil {
 		panic(err)
 	}
-
-	var (
-		accountID = utils.ExpandEnvUUID(args, "--account-id")
-		clusterID = utils.ExpandEnvUUID(args, "--cluster-id")
-	)
 
 	logger.Infow(
 		"magalix agent started.....",
@@ -155,16 +121,6 @@ func main() {
 		"args", fmt.Sprintf("%q", utils.GetSanitizedArgs()),
 	)
 
-	secret, err := base64.StdEncoding.DecodeString(
-		utils.ExpandEnv(args, "--client-secret", false),
-	)
-	if err != nil {
-		logger.Fatalw(
-			"unable to decode base64 secret specified as --client-secret flag",
-			"error", err,
-		)
-		os.Exit(1)
-	}
 	// TODO: remove
 	// a hack to set default timeout for all http requests
 	http.DefaultClient = &http.Client{
@@ -180,6 +136,22 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	startID = uuid.NewV4().String()
+
+	accountID := utils.ExpandEnvUUID(args, "--account-id")
+	clusterID := utils.ExpandEnvUUID(args, "--cluster-id")
+
+	secret, err := base64.StdEncoding.DecodeString(
+		utils.ExpandEnv(args, "--client-secret", false),
+	)
+	if err != nil {
+		logger.Fatalw(
+			"unable to decode base64 secret specified as --client-secret flag",
+			"error", err,
+		)
+		os.Exit(1)
+	}
 
 	kRestConfig, err := getKRestConfig(args)
 
@@ -200,121 +172,98 @@ func main() {
 		logger.Warnw("Failed to get agent permissions", "error", err)
 	}
 
-	connected := make(chan bool)
-	gwClient, err := client.InitClient(
-		args, version, startID, accountID, clusterID, secret, k8sServerVersion, agentPermissions, connected,
-	)
+	gatewayUrl := args["--gateway"].(string)
+	protoHandshakeTime := utils.MustParseDuration(args, "--timeout-proto-handshake")
+	protoWriteTime := utils.MustParseDuration(args, "--timeout-proto-write")
+	protoReadTime := utils.MustParseDuration(args, "--timeout-proto-read")
+	protoReconnectTime := utils.MustParseDuration(args, "--timeout-proto-reconnect")
+	protoBackoffTime := utils.MustParseDuration(args, "--timeout-proto-backoff")
+	sendLogs := !args["--no-send-logs"].(bool)
+	mgxGateway := gateway.New(
+		gatewayUrl,
+		accountID,
+		clusterID,
+		secret,
+		version,
+		startID,
+		k8sServerVersion,
+		agentPermissions,
+		protoHandshakeTime,
+		protoWriteTime,
+		protoReadTime,
+		protoReconnectTime,
+		protoBackoffTime,
+		sendLogs)
 
-	defer gwClient.WaitExit()
-	defer gwClient.Recover()
-	logger.Info("waiting for connection and authorization")
-	<-connected
-	logger.Info("Connected and authorized")
-	go gwClient.Sync()
-
-	if ok := SetLogLevel(gwClient, args["--log-level"].(string)); !ok {
-		logger.Fatalw("unsupported log level", "level", args["--log-level"].(string))
+	logLevel := args["--log-level"].(string)
+	if err := ConfigureGlobalLogger(accountID, clusterID, logLevel, mgxGateway.GetLogsWriteSyncer()); err != nil {
+		logger.Fatalw("failed to configure logger. %w", err)
+		os.Exit(1)
 	}
 	defer logger.Sync()
 
-	if err != nil {
-		logger.Fatalw("unable to connect to gateway")
-		os.Exit(1)
-	}
-
-	probes.Authorized = true
-	initAgent(args, gwClient, kRestConfig, kube, accountID, clusterID)
-}
-
-func initAgent(
-	args docopt.Opts,
-	gwClient *client.Client,
-	kRestConfig *rest.Config,
-	kube *kuber.Kube,
-	accountID uuid.UUID,
-	clusterID uuid.UUID,
-) {
-	logger.Info("Initializing Agent")
-	var (
-		metricsEnabled = !args["--disable-metrics"].(bool)
-		//scalarEnabled   = !args["--disable-scalar"].(bool)
-		executorWorkers = utils.MustParseInt(args, "--executor-workers")
-		dryRun          = args["--dry-run"].(bool)
-	)
-
 	dynamicClient, err := dynamic.NewForConfig(kRestConfig)
 	parentsStore := kuber.NewParentsStore()
+	const observerDefaultResyncTime = time.Minute * 5
 	observer := kuber.NewObserver(
 		dynamicClient,
 		parentsStore,
-		make(chan struct{}, 0),
-		time.Minute*5,
+		make(chan struct{}),
+		observerDefaultResyncTime,
 	)
-
 	err = observer.WaitForCacheSync()
 	if err != nil {
-		logger.Fatalw("unable to start entities watcher", "error", err)
+		logger.Fatalw("unable to start observer", "error", err)
+	}
+	kubeletPort := args["--kubelet-port"].(string)
+	metricsInterval := utils.MustParseDuration(args, "--metrics-interval")
+	kubeletBackoffSleepTime := utils.MustParseDuration(args, "--kubelet-backoff-sleep")
+	kubeletBackoffMaxRetries := utils.MustParseInt(args, "--kubelet-backoff-max-retries")
+	metricsSource, err := metrics.NewMetrics(
+		observer,
+		kube,
+		kubeletPort,
+		metricsInterval,
+		kubeletBackoffSleepTime,
+		kubeletBackoffMaxRetries,
+	)
+	if err != nil {
+		logger.Fatalf("unable to initialize metrics source, error: %w", err)
+		os.Exit(1)
 	}
 
 	k8sMinorVersion, err := kube.GetServerMinorVersion()
 	if err != nil {
 		logger.Warnw("failed to discover server minor version", "error", err)
 	}
+	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion)
 
-	ew := entities.NewEntitiesWatcher(observer, gwClient, k8sMinorVersion)
-
-	ew.Start()
-
-	/*if scalarEnabled {
-		scalar2.InitScalars(logger, kube, observer, dryRun)
-	}*/
-
-	e := executor.InitExecutor(
-		gwClient,
+	executorWorkers := utils.MustParseInt(args, "--executor-workers")
+	dryRun := args["--dry-run"].(bool)
+	automationExecutor := executor.NewExecutor(
 		kube,
 		observer,
 		executorWorkers,
 		dryRun,
 	)
 
-	gwClient.AddListener(proto.PacketKindAutomation, e.Listener)
-	gwClient.AddListener(proto.PacketKindRestart, func(in []byte) (out []byte, err error) {
-		var restart proto.PacketRestart
-		if err = proto.DecodeSnappy(in, &restart); err != nil {
-			return
-		}
-		go gwClient.Done(restart.Status, true)
-		return nil, nil
+	// init gateway
+	mgxAgent := agent.New(
+		metricsSource,
+		ew,
+		automationExecutor,
+		mgxGateway,
+		func(level *agent.LogLevel) error {
+			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
+		},
+	)
 
-	})
+	probes.IsReady = true
 
-	gwClient.AddListener(proto.PacketKindLogLevel, func(in []byte) (out []byte, err error) {
-		var logLevel proto.PacketLogLevel
-		if err = proto.DecodeSnappy(in, &logLevel); err != nil {
-			logger.Error("Failed to decode log level packet")
-			return nil, err
-		}
-		if ok := SetLogLevel(gwClient, logLevel.Level); !ok {
-			msg := fmt.Sprintf("Got an unsupported log level: %s", logLevel.Level)
-			logger.Warnw(msg)
-			return nil, errors.New(msg)
-		}
-		return nil, nil
-
-	})
-
-	if metricsEnabled {
-		err := metrics.InitMetrics(
-			gwClient,
-			observer,
-			observer,
-			kube,
-			args,
-		)
-		if err != nil {
-			logger.Fatalw("unable to initialize metrics sources", "error", err)
-			os.Exit(1)
-		}
+	err = mgxAgent.Start()
+	if err != nil {
+		logger.Fatal(err)
+		os.Exit(1)
 	}
 }
 
@@ -364,4 +313,32 @@ func getKRestConfig(
 	config.Timeout = utils.MustParseDuration(args, "--kube-timeout")
 
 	return
+}
+
+// ConfigureGlobalLogger sets additional info and log level for global logger
+func ConfigureGlobalLogger(accountId uuid.UUID, clusterId uuid.UUID, level string, logsSink zapcore.WriteSyncer) error {
+	var loggerLevel logger.Level
+	switch level {
+	case "info":
+		loggerLevel = logger.InfoLevel
+	case "debug":
+		loggerLevel = logger.DebugLevel
+	case "warn":
+		loggerLevel = logger.WarnLevel
+	case "error":
+		loggerLevel = logger.ErrorLevel
+	default:
+		return fmt.Errorf("unsupported log level %s", level)
+	}
+	logger.ConfigWriterSync(loggerLevel, logsSink)
+	logger.WithGlobal("accountID", accountId, "clusterID", clusterId)
+	return nil
+}
+
+func getVersion() string {
+	return strings.Join([]string{
+		"magalix agent " + version,
+		"protocol/major: " + fmt.Sprint(client.ProtocolMajorVersion),
+		"protocol/minor: " + fmt.Sprint(client.ProtocolMinorVersion),
+	}, "\n")
 }

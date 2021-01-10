@@ -3,35 +3,15 @@ package proto
 // go:generate make generate
 
 import (
-	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/watcher"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	satori "github.com/satori/go.uuid"
-)
-
-var (
-	gobTypesRegistered bool
-	gobTypes           = []interface{}{
-		uuid.UUID{},
-		satori.UUID{},
-		[uuid.Size]byte{},
-
-		new(watcher.Status),
-		new(watcher.ContainerStatusSource),
-
-		make(map[string]interface{}),
-		make([]interface{}, 0),
-	}
 )
 
 type PacketHello struct {
@@ -219,16 +199,6 @@ type PacketEntitiesResyncRequest struct {
 }
 type PacketEntitiesResyncResponse struct{}
 
-// Deprecated: Fall back to EncodeGOB. Kept only for backward compatibility. Should be removed.
-func Encode(in interface{}) (out []byte, err error) {
-	return EncodeGOB(in)
-}
-
-// Deprecated: Falls back to DecodeGOB. Kept only for backward compatibility. Should be removed.
-func Decode(in []byte, out interface{}) error {
-	return DecodeGOB(in, out)
-}
-
 func EncodeSnappy(in interface{}) (out []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -253,36 +223,10 @@ func DecodeSnappy(in []byte, out interface{}) error {
 	return json.Unmarshal(jsonIn, out)
 }
 
-func DecodeGOB(in []byte, out interface{}) error {
-	RegisterGOBTypes()
-	inBuf := bytes.NewBuffer(in)
-	dec := gob.NewDecoder(inBuf)
-	return dec.Decode(out)
-}
-
-func EncodeGOB(in interface{}) ([]byte, error) {
-	RegisterGOBTypes()
-	var outBuf bytes.Buffer
-	enc := gob.NewEncoder(&outBuf)
-	if err := enc.Encode(in); err != nil {
-		return nil, err
-	}
-	return outBuf.Bytes(), nil
-}
-
 func DecodeJSON(in []byte, out interface{}) error {
 	return json.Unmarshal(in, out)
 }
 
 func EncodeJSON(in interface{}) ([]byte, error) {
 	return json.Marshal(in)
-}
-
-func RegisterGOBTypes() {
-	if !gobTypesRegistered {
-		for _, t := range gobTypes {
-			gob.Register(t)
-		}
-		gobTypesRegistered = true
-	}
 }

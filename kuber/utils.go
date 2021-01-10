@@ -41,6 +41,8 @@ func (s *ParentsStore) SetParents(namespace string, kind string, name string, pa
 }
 
 func (s *ParentsStore) GetParents(namespace string, kind string, name string) (*ParentController, bool) {
+	s.Lock()
+	defer s.Unlock()
 	parents, found := s.parents[GetEntityKey(namespace, kind, name)]
 	return parents, found
 }
