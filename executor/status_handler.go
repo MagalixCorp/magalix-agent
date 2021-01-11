@@ -75,8 +75,10 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 			}
 
 			runningPods = 0
+
 			// TODO update the execution flow to check pods status across controllers
 			for _, pod := range pods.Items {
+
 				//handle the bug of naming convention for pods in kubernetes DEV-2046
 				if strings.Contains(pod.GenerateName, objectName) {
 					logger.Debugw("get pod status", "pod", pod.Name, "status", pod.Status.Phase)
@@ -109,7 +111,8 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 		return "", 0, err
 
 	}
-		// get the cuurent replicaset
+
+		// get the current running replicaset
 		for _, replica := range replicasets.Items {
 
 			replicaRevision, ok := replica.Annotations["deployment.kubernetes.io/revision"]
@@ -125,7 +128,7 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 				return "", 0, err
 			}
 
-			// get the replicaset with the same revision of the deployment
+			// get the current replicaset with the same revision of the deployment
 			if replicaRevision == deploymentRevision {
 				deploymentName = replica.Name
 				targetPods = *replica.Spec.Replicas
