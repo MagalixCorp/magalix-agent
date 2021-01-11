@@ -162,11 +162,11 @@ workflows:
     jobs:
       - "build & push":
           context: org-global
-      - update:
-          context: org-global
-          requires:
-            - "build & push"
-          filters:
-            branches:
-              only:
-                - dev
+      # - update:
+      #     context: org-global
+      #     requires:
+      #       - "build & push"
+      #     filters:
+      #       branches:
+      #         only:
+      #           - dev
