@@ -478,10 +478,15 @@ func getObjectMeta(u *unstructured.Unstructured) (map[string]interface{}, error)
 	if !ok {
 		return nil, fmt.Errorf("metadata is type %T, map[string]interface{} expected", meta)
 	}
+	ownerRef, ok := metadataMap["ownerReferences"].([]interface{})
+	hasOwner := false
+	if ok && len(ownerRef) > 0 {
+		hasOwner = true
+	}
 	return map[string]interface{}{
-		"namespace":       metadataMap["namespace"],
-		"name":            metadataMap["name"],
-		"ownerReferences": metadataMap["ownerReferences"],
+		"namespace": metadataMap["namespace"],
+		"name":      metadataMap["name"],
+		"hasOwner":  hasOwner,
 	}, nil
 }
 
