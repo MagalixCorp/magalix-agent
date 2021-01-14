@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/v2/entities"
-	"github.com/MagalixCorp/magalix-agent/v2/executor"
-	"go.uber.org/zap/zapcore"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/v2/entities"
+	"github.com/MagalixCorp/magalix-agent/v2/executor"
+	"go.uber.org/zap/zapcore"
+
+	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
+	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/gateway"
@@ -20,7 +25,11 @@ import (
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -236,7 +245,16 @@ func main() {
 	if err != nil {
 		logger.Warnw("failed to discover server minor version", "error", err)
 	}
-	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion)
+
+	driver := local.New()
+	backend, err := opa.NewBackend(opa.Driver(driver))
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+
+	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion, opaClient)
 
 	executorWorkers := utils.MustParseInt(args, "--executor-workers")
 	dryRun := args["--dry-run"].(bool)
@@ -247,6 +265,32 @@ func main() {
 		dryRun,
 	)
 
+	data, err := kube.Clientset.RESTClient().
+		Get().
+		AbsPath("/apis/constraints.gatekeeper.sh/v1beta1").
+		Resource("K8sRequiredLabels").
+		Name("ns-must-have-gk").
+		DoRaw(context.TODO())
+
+	constraint := unstructured.Unstructured{}
+	json.Unmarshal(data, &constraint)
+
+	data, err = kube.Clientset.RESTClient().
+		Get().
+		AbsPath("/apis/templates.gatekeeper.sh/v1beta1").
+		Resource("constrainttemplates").
+		Name("k8srequiredlabels").
+		DoRaw(context.TODO())
+
+	template := &templates.ConstraintTemplate{}
+	json.Unmarshal(data, &template)
+
+	ctx := context.TODO()
+	opaClient.AddTemplate(ctx, template)
+	opaClient.AddConstraint(ctx, &constraint)
+
+	aud := audit.NewAuditHandler(opaClient)
+
 	// init gateway
 	mgxAgent := agent.New(
 		metricsSource,
@@ -256,6 +300,7 @@ func main() {
 		func(level *agent.LogLevel) error {
 			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
+		aud,
 	)
 
 	probes.IsReady = true

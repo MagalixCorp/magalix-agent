@@ -10,6 +10,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixTechnologies/core/logger"
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -63,11 +64,13 @@ type EntitiesWatcher struct {
 	sendEntitiesResync agent.EntitiesResyncHandler
 
 	cancelWorker context.CancelFunc
+	opa          *opa.Client
 }
 
 func NewEntitiesWatcher(
 	observer_ *kuber.Observer,
 	version int,
+	opaClient *opa.Client,
 ) *EntitiesWatcher {
 	if version >= 18 {
 		watchedResources = append(watchedResources, kuber.IngressClasses)
@@ -79,6 +82,7 @@ func NewEntitiesWatcher(
 		watchersByKind: map[string]kuber.Watcher{},
 
 		deltasQueue: make(chan agent.Delta, deltasBufferChanSize),
+		opa:         opaClient,
 	}
 	return ew
 }
@@ -301,9 +305,15 @@ func (ew *EntitiesWatcher) OnAdd(
 			Timestamp: time.Now(),
 		},
 	)
+
 	if err != nil {
 		logger.Warnw("unable to handle OnAdd delta", "error", err)
 		return
+	}
+
+	_, err = ew.opa.AddData(context.TODO(), obj)
+	if err != nil {
+		logger.Warnw("unable to add delta to opa cache", "error", err)
 	}
 	ew.deltasQueue <- delta
 }
@@ -324,6 +334,16 @@ func (ew *EntitiesWatcher) OnUpdate(
 		logger.Warnw("unable to handle onUpdate delta", "error", err)
 		return
 	}
+
+	_, err = ew.opa.AddData(context.TODO(), newObj)
+	if err != nil {
+		logger.Warnw("unable to update delta to opa cache", "error", err)
+	}
+
+	_, err = ew.opa.RemoveData(context.TODO(), oldObj)
+	if err != nil {
+		logger.Warnw("unable to update delete delta to opa cache", "error", err)
+	}
 	ew.deltasQueue <- delta
 }
 
@@ -343,6 +363,10 @@ func (ew *EntitiesWatcher) OnDelete(
 	if err != nil {
 		logger.Warnw("unable to handle OnDelete delta", "error", err)
 		return
+	}
+	_, err = ew.opa.RemoveData(context.TODO(), obj)
+	if err != nil {
+		logger.Warnw("unable to remove delta from opa cache", "error", err)
 	}
 	ew.deltasQueue <- delta
 }

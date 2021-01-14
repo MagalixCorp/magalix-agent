@@ -2,9 +2,11 @@ package agent
 
 import (
 	"context"
+	"os"
+
+	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
 	"github.com/MagalixTechnologies/uuid-go"
 	"golang.org/x/sync/errgroup"
-	"os"
 )
 
 type LogLevel struct {
@@ -20,6 +22,7 @@ type Agent struct {
 	EntitiesSource     EntitiesSource
 	AutomationExecutor AutomationExecutor
 	Gateway            Gateway
+	AuditHandler       audit.AuditHandler
 
 	changeLogLevel ChangeLogLevelHandler
 
@@ -34,6 +37,7 @@ func New(
 	automationExecutor AutomationExecutor,
 	gateway Gateway,
 	logLevelHandler ChangeLogLevelHandler,
+	auditHandler audit.AuditHandler,
 ) *Agent {
 	return &Agent{
 		MetricsSource:      metricsSource,
@@ -41,6 +45,7 @@ func New(
 		AutomationExecutor: automationExecutor,
 		Gateway:            gateway,
 		changeLogLevel:     logLevelHandler,
+		AuditHandler:       auditHandler,
 	}
 }
 
@@ -75,6 +80,7 @@ func (a *Agent) Start() error {
 	eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
+	eg.Go(func() error { return a.AuditHandler.Start(sourcesCtx) })
 
 	return eg.Wait()
 }
