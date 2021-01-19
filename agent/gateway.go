@@ -1,6 +1,9 @@
 package agent
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type AutomationHandler func(automation *Automation) error
 type RestartHandler func() error
@@ -8,7 +11,7 @@ type ChangeLogLevelHandler func(level *LogLevel) error
 
 type Gateway interface {
 	Start(ctx context.Context) error
-	WaitAuthorization()
+	WaitAuthorization(timeout time.Duration) error
 	// TODO: Add Sync() function to ensure all buffered data is sent before exit
 
 	SendMetrics(metrics []*Metric) error
