@@ -99,7 +99,7 @@ jobs:
               export VERSION=dev
             fi
 
-            make image tag-file=new-tag version-file=new-version VERSION=$VERSION
+            make image VERSION=$VERSION
       - run:
           name: Scan The Image
           command: |
