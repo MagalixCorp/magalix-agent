@@ -147,6 +147,17 @@ func (kube *Kube) GetNodes() (*kv1.NodeList, error) {
 	return nodes, nil
 }
 
+func (kube *Kube) GetNamespace(name string) (*kv1.Namespace, error) {
+	namespace, err := kube.core.Namespaces().Get(context.Background(), name, kmeta.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf(
+			"unable to get namespace: %s, error: %w",
+			name, err,
+		)
+	}
+	return namespace, nil
+}
+
 func (kube *Kube) GetResources() (
 	pods []kv1.Pod,
 	limitRanges []kv1.LimitRange,
@@ -558,7 +569,7 @@ func (kube *Kube) GetDeployments() (*appsV1.DeploymentList, error) {
 // GetDeployments get deployments
 func (kube *Kube) GetDeploymentByName(namespace, name string) (*appsV1.Deployment, error) {
 	logger.Debug("retrieving list of deployments")
-	deployment, err := kube.apps.Deployments(namespace).Get(context.Background(), name , kmeta.GetOptions{})
+	deployment, err := kube.apps.Deployments(namespace).Get(context.Background(), name, kmeta.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf(
 			"unable to retrieve deployments from all namespaces, error: %w",

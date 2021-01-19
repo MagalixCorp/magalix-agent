@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
+	"github.com/MagalixCorp/magalix-agent/v2/admission/webhook"
 	"github.com/MagalixTechnologies/uuid-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -23,6 +24,7 @@ type Agent struct {
 	AutomationExecutor AutomationExecutor
 	Gateway            Gateway
 	AuditHandler       audit.AuditHandler
+	WebHookHandler     webhook.WebHookHandler
 
 	changeLogLevel ChangeLogLevelHandler
 
@@ -38,6 +40,7 @@ func New(
 	gateway Gateway,
 	logLevelHandler ChangeLogLevelHandler,
 	auditHandler audit.AuditHandler,
+	webhookHandler webhook.WebHookHandler,
 ) *Agent {
 	return &Agent{
 		MetricsSource:      metricsSource,
@@ -46,6 +49,7 @@ func New(
 		Gateway:            gateway,
 		changeLogLevel:     logLevelHandler,
 		AuditHandler:       auditHandler,
+		WebHookHandler:     webhookHandler,
 	}
 }
 
@@ -81,6 +85,7 @@ func (a *Agent) Start() error {
 	eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
 	eg.Go(func() error { return a.AuditHandler.Start(sourcesCtx) })
+	eg.Go(func() error { return a.WebHookHandler.Start(sourcesCtx) })
 
 	return eg.Wait()
 }

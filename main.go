@@ -15,7 +15,9 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
+	"github.com/MagalixCorp/magalix-agent/v2/admission/certificate"
 	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
+	"github.com/MagalixCorp/magalix-agent/v2/admission/webhook"
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/gateway"
@@ -29,8 +31,10 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/pkg/errors"
+	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/cert"
@@ -289,7 +293,31 @@ func main() {
 	opaClient.AddTemplate(ctx, template)
 	opaClient.AddConstraint(ctx, &constraint)
 
+	validatinggrvk := schema.GroupVersionResource{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}
+
+	validating, err := dynamicClient.Resource(validatinggrvk).Get(ctx, "ali.gate.com", kmeta.GetOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	certPem, err := certificate.Generate()
+	if err != nil {
+		logger.Fatalw("Error while generating webhook server certificate", "errror", err)
+	}
+
+	webhooks, _, _ := unstructured.NestedSlice(validating.Object, "webhooks")
+	hook := webhooks[0].(map[string]interface{})
+	unstructured.SetNestedField(hook, base64.StdEncoding.EncodeToString(certPem), "clientConfig", "caBundle")
+	webhooks[0] = hook
+	unstructured.SetNestedSlice(validating.Object, webhooks, "webhooks")
+
+	_, err = dynamicClient.Resource(validatinggrvk).Update(ctx, validating, kmeta.UpdateOptions{})
+	if err != nil {
+		panic(err)
+	}
+
 	aud := audit.NewAuditHandler(opaClient)
+	webhookHandler := webhook.NewWebHookHandler(opaClient, kube)
 
 	// init gateway
 	mgxAgent := agent.New(
@@ -301,6 +329,7 @@ func main() {
 			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
 		aud,
+		webhookHandler,
 	)
 
 	probes.IsReady = true
