@@ -81,8 +81,49 @@ jobs:
 
       - setup_remote_docker
 
+      - run:
+          name: Build docker image
+          command: |
+            if [[ ! "$SHOULD_PUSH" ]]; then
+              echo :: no push
+
+              exit 0
+            fi
+            cd $SOURCE_PATH
+
+            if [[ "$CIRCLE_BRANCH" == "master" ]]; then
+              export VERSION=latest
+            fi
+
+            if [[ "$CIRCLE_BRANCH" == "dev" ]]; then
+              export VERSION=dev
+            fi
+
+            make image VERSION=$VERSION
+      - run:
+          name: Scan The Image
+          command: |
+            if [[ ! "$SHOULD_PUSH" ]]; then
+              echo :: no push
+
+              exit 0
+            fi
+            if [[ "$CIRCLE_BRANCH" == "master" ]]; then
+              export VERSION=latest
+            fi
+
+            if [[ "$CIRCLE_BRANCH" == "dev" ]]; then
+              export VERSION=dev
+            fi
+
+            cd $SOURCE_PATH
+            make anchore_scan VERSION=$VERSION
+
+      - store_artifacts:
+          path: anchore-reports/
+
       - deploy:
-          name: Build image & Push to Docker Registry
+          name: Push to Docker Registry
           command: |
             if [[ ! "$SHOULD_PUSH" ]]; then
               echo :: no push
@@ -102,7 +143,8 @@ jobs:
               export VERSION=dev
             fi
 
-            make image push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
+            make push@magalixcorp tag-file=new-tag version-file=new-version VERSION=$VERSION
+
       - deploy:
           name: Build image & Push to GCR Registry
           command: |
