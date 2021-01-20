@@ -73,7 +73,7 @@ func (a *Agent) Start() error {
 	// Add a context to Gateway to manage the numerous go routines in the client
 	eg.Go(func() error { return a.Gateway.Start(sinksCtx) })
 	// Blocks until authorized. Uses a long timeout to slowdown agents that are no longer authorized.
-	err := a.Gateway.WaitAuthorization(10 * time.Second)
+	err := a.Gateway.WaitAuthorization(AuthorizationTimeoutDuration)
 	if err != nil {
 		return err
 	}
