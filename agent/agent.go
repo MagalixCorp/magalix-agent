@@ -5,7 +5,10 @@ import (
 	"github.com/MagalixTechnologies/uuid-go"
 	"golang.org/x/sync/errgroup"
 	"os"
+	"time"
 )
+
+const AuthorizationTimeoutDuration = 2 * time.Hour
 
 type LogLevel struct {
 	Level string
@@ -69,8 +72,11 @@ func (a *Agent) Start() error {
 	eg, _ := errgroup.WithContext(allCtx)
 	// Add a context to Gateway to manage the numerous go routines in the client
 	eg.Go(func() error { return a.Gateway.Start(sinksCtx) })
-	// Blocks until authorized
-	a.Gateway.WaitAuthorization()
+	// Blocks until authorized. Uses a long timeout to slowdown agents that are no longer authorized.
+	err := a.Gateway.WaitAuthorization(AuthorizationTimeoutDuration)
+	if err != nil {
+		return err
+	}
 
 	eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })

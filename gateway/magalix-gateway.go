@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixTechnologies/core/logger"
@@ -108,14 +109,21 @@ func (g *MagalixGateway) Stop() error {
 	return nil
 }
 
-func (g *MagalixGateway) WaitAuthorization() {
+func (g *MagalixGateway) WaitAuthorization(timeout time.Duration) error {
 	logger.Info("waiting for connection and authorization")
 	if g.gwClient.IsReady() {
-		return
+		return nil
 	}
-	// Intentionally used without a timeout so it blocks indefinitely when not authorized
-	<-g.connectedChan
-	logger.Info("Connected and authorized")
+
+	select {
+	case <-g.connectedChan:
+		logger.Info("Connected and authorized")
+		return nil
+	case <-time.After(timeout):
+		err := errors.New("authorization timeout")
+		logger.Error(err)
+		return err
+	}
 }
 
 func (g *MagalixGateway) GetLogsWriteSyncer() zapcore.WriteSyncer {
