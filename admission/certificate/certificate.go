@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// @TODO: change to agent service name
 var dnsNames = []string{"host.minikube.internal"}
 
 const commonName = "magalix-CA"

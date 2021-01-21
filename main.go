@@ -113,7 +113,7 @@ Options:
 
 var version = "[manual build]"
 
-// Should be changed to be unique per cluster/account id
+// @TODO: Should be changed to be unique per cluster/account id
 const webHookName = "com.magalix.webhook"
 
 var startID string
@@ -265,7 +265,7 @@ func main() {
 		dryRun,
 	)
 
-	// Replace below logic with logic for getting templates and constraints from policy service and adding it to opa cache
+	// @TODO: Replace below logic with logic for getting templates and constraints from policy service and adding it to opa cache
 
 	// data, err := kube.Clientset.RESTClient().
 	// 	Get().
