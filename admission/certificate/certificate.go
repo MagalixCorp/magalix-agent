@@ -18,7 +18,6 @@ var dnsNames = []string{"host.minikube.internal"}
 const commonName = "magalix-CA"
 
 func Generate() ([]byte, error) {
-	var caPEM, serverCertPEM, serverPrivKeyPEM *bytes.Buffer
 	caTmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(0),
 		Subject: pkix.Name{
@@ -41,7 +40,7 @@ func Generate() ([]byte, error) {
 		return nil, err
 	}
 
-	caPEM = &bytes.Buffer{}
+	caPEM := &bytes.Buffer{}
 	err = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caCert,
@@ -74,7 +73,7 @@ func Generate() ([]byte, error) {
 		return nil, err
 	}
 
-	serverCertPEM = &bytes.Buffer{}
+	serverCertPEM := &bytes.Buffer{}
 	err = pem.Encode(serverCertPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: serverCert,
@@ -83,7 +82,7 @@ func Generate() ([]byte, error) {
 		return nil, err
 	}
 
-	serverPrivKeyPEM = &bytes.Buffer{}
+	serverPrivKeyPEM := &bytes.Buffer{}
 	err = pem.Encode(serverPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(serverPrivKey),

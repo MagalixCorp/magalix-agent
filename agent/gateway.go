@@ -1,6 +1,10 @@
 package agent
 
-import "context"
+import (
+	"context"
+
+	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+)
 
 type AutomationHandler func(automation *Automation) error
 type RestartHandler func() error
@@ -19,4 +23,5 @@ type Gateway interface {
 	SetAutomationHandler(handler AutomationHandler)
 	SetRestartHandler(handler RestartHandler)
 	SetChangeLogLevelHandler(handler ChangeLogLevelHandler)
+	SendRecs(recommendations []*types.Result) error
 }

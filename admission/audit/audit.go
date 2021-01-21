@@ -2,24 +2,28 @@ package audit
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixTechnologies/core/logger"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-const auditInterval = time.Minute
+const auditInterval = 24 * time.Hour
 
 type AuditHandler struct {
-	opa *opa.Client
+	opa      *opa.Client
+	sendRecs agent.RecsHandler
 }
 
-func NewAuditHandler(opaClient *opa.Client) AuditHandler {
-	return AuditHandler{opa: opaClient}
+func NewAuditHandler(opaClient *opa.Client) *AuditHandler {
+	return &AuditHandler{opa: opaClient}
+}
+
+func (ah *AuditHandler) SetRecommendationHandler(handler agent.RecsHandler) {
+	ah.sendRecs = handler
 }
 
 func (ah *AuditHandler) audit(ctx context.Context) ([]*types.Result, error) {
@@ -28,12 +32,14 @@ func (ah *AuditHandler) audit(ctx context.Context) ([]*types.Result, error) {
 		logger.Errorw("Error while performing audit", "error", err)
 		return nil, err
 	}
-	for _, r := range resp.Results() {
-		obj := r.Resource.(*unstructured.Unstructured)
-		logger.Infof("Found audit violation: %s for %s", r.Msg, obj.GetName())
-		fmt.Println("Found violation for", r.Msg, obj.GetName())
+	results := resp.Results()
+
+	err = ah.sendRecs(results)
+	if err != nil {
+		logger.Errorw("Error while sending recommendations", "error", err)
+		return nil, err
 	}
-	return resp.Results(), nil
+	return results, nil
 }
 
 func (ah *AuditHandler) Start(ctx context.Context) error {
@@ -57,4 +63,9 @@ func (ah *AuditHandler) StartAuditTicker(ctx context.Context) error {
 			return err
 		}
 	}
+}
+
+func (ah *AuditHandler) Stop() error {
+	// TODO
+	return nil
 }

@@ -199,6 +199,18 @@ type PacketEntitiesResyncRequest struct {
 }
 type PacketEntitiesResyncResponse struct{}
 
+type PacketRecommendationItem struct {
+	Constraint *unstructured.Unstructured `json:"constraint"`
+	Resource   *unstructured.Unstructured `json:"resource"`
+	Message    string                     `json:"message"`
+	Enforced   bool                       `json:"enforced"`
+}
+
+type PacketRecommendationItemRequest struct {
+	Items     []PacketRecommendationItem `json:"items"`
+	Timestamp time.Time                  `json:"timestamp"`
+}
+
 func EncodeSnappy(in interface{}) (out []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {

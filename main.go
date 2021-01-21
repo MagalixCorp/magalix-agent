@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,7 +13,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
-	"github.com/MagalixCorp/magalix-agent/v2/admission/certificate"
 	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
 	"github.com/MagalixCorp/magalix-agent/v2/admission/webhook"
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
@@ -29,12 +26,8 @@ import (
 	"github.com/docopt/docopt-go"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/pkg/errors"
-	kmeta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/cert"
@@ -119,6 +112,9 @@ Options:
 `
 
 var version = "[manual build]"
+
+// Should be changed to be unique per cluster/account id
+const webHookName = "com.magalix.webhook"
 
 var startID string
 
@@ -269,55 +265,37 @@ func main() {
 		dryRun,
 	)
 
-	data, err := kube.Clientset.RESTClient().
-		Get().
-		AbsPath("/apis/constraints.gatekeeper.sh/v1beta1").
-		Resource("K8sRequiredLabels").
-		Name("ns-must-have-gk").
-		DoRaw(context.TODO())
+	// Replace below logic with logic for getting templates and constraints from policy service and adding it to opa cache
 
-	constraint := unstructured.Unstructured{}
-	json.Unmarshal(data, &constraint)
+	// data, err := kube.Clientset.RESTClient().
+	// 	Get().
+	// 	AbsPath("/apis/constraints.gatekeeper.sh/v1beta1").
+	// 	Resource("K8sRequiredLabels").
+	// 	Name("ns-must-have-gk").
+	// 	DoRaw(context.TODO())
 
-	data, err = kube.Clientset.RESTClient().
-		Get().
-		AbsPath("/apis/templates.gatekeeper.sh/v1beta1").
-		Resource("constrainttemplates").
-		Name("k8srequiredlabels").
-		DoRaw(context.TODO())
+	// constraint := unstructured.Unstructured{}
+	// json.Unmarshal(data, &constraint)
 
-	template := &templates.ConstraintTemplate{}
-	json.Unmarshal(data, &template)
+	// data, err = kube.Clientset.RESTClient().
+	// 	Get().
+	// 	AbsPath("/apis/templates.gatekeeper.sh/v1beta1").
+	// 	Resource("constrainttemplates").
+	// 	Name("k8srequiredlabels").
+	// 	DoRaw(context.TODO())
 
-	ctx := context.TODO()
-	opaClient.AddTemplate(ctx, template)
-	opaClient.AddConstraint(ctx, &constraint)
+	// template := &templates.ConstraintTemplate{}
+	// json.Unmarshal(data, &template)
 
-	validatinggrvk := schema.GroupVersionResource{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}
-
-	validating, err := dynamicClient.Resource(validatinggrvk).Get(ctx, "ali.gate.com", kmeta.GetOptions{})
-	if err != nil {
-		panic(err)
-	}
-
-	certPem, err := certificate.Generate()
-	if err != nil {
-		logger.Fatalw("Error while generating webhook server certificate", "errror", err)
-	}
-
-	webhooks, _, _ := unstructured.NestedSlice(validating.Object, "webhooks")
-	hook := webhooks[0].(map[string]interface{})
-	unstructured.SetNestedField(hook, base64.StdEncoding.EncodeToString(certPem), "clientConfig", "caBundle")
-	webhooks[0] = hook
-	unstructured.SetNestedSlice(validating.Object, webhooks, "webhooks")
-
-	_, err = dynamicClient.Resource(validatinggrvk).Update(ctx, validating, kmeta.UpdateOptions{})
-	if err != nil {
-		panic(err)
-	}
+	// ctx := context.TODO()
+	// opaClient.AddTemplate(ctx, template)
+	// opaClient.AddConstraint(ctx, &constraint)
 
 	aud := audit.NewAuditHandler(opaClient)
-	webhookHandler := webhook.NewWebHookHandler(opaClient, kube)
+	webhookHandler, err := webhook.NewWebHookHandler(webHookName, opaClient, kube)
+	if err != nil {
+		logger.Fatalw("Error while creating validating webhook server", "errror", err)
+	}
 
 	// init gateway
 	mgxAgent := agent.New(

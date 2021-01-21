@@ -3,6 +3,7 @@ package kuber
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -58,6 +59,12 @@ type ContainerResourcesRequirements struct {
 	Name     string
 	Requests *RequestLimit
 	Limits   *RequestLimit
+}
+
+type patch struct {
+	Op    string `json:"op"`
+	Path  string `json:"path"`
+	Value string `json:"value"`
 }
 
 // TotalResources service resources and replicas
@@ -982,4 +989,21 @@ func (kube *Kube) GetAgentPermissions() (string, error) {
 
 	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
 	return string(rules), nil
+}
+
+func (kube *Kube) UpdateValidatingWebhookCaBundle(name string, certPem []byte) error {
+	payload := []patch{{
+		Op:    "replace",
+		Path:  "/webhooks/0/clientConfig/caBundle",
+		Value: base64.StdEncoding.EncodeToString(certPem),
+	}}
+	payloadBytes, _ := json.Marshal(payload)
+
+	_, err := kube.Clientset.AdmissionregistrationV1().
+		ValidatingWebhookConfigurations().
+		Patch(context.Background(), name, types.JSONPatchType, payloadBytes, kmeta.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("Unable to update web hook's client ca bundle, error: %w", err)
+	}
+	return nil
 }

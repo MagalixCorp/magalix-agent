@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MagalixCorp/magalix-agent/v2/admission/certificate"
 	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"golang.org/x/sync/errgroup"
-	v1 "k8s.io/api/admission/v1"
 	"k8s.io/api/admission/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,8 +29,16 @@ type WebHookHandler struct {
 	kube *kuber.Kube
 }
 
-func NewWebHookHandler(opaClient *opa.Client, kube *kuber.Kube) WebHookHandler {
-	return WebHookHandler{opa: opaClient, kube: kube}
+func NewWebHookHandler(name string, opaClient *opa.Client, kube *kuber.Kube) (*WebHookHandler, error) {
+	certPem, err := certificate.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("Error while generating webhook server certificate, errror: %w", err)
+	}
+	err = kube.UpdateValidatingWebhookCaBundle(name, certPem)
+	if err != nil {
+		return nil, err
+	}
+	return &WebHookHandler{opa: opaClient, kube: kube}, nil
 }
 
 func (wh WebHookHandler) Review(ctx context.Context, request v1beta1.AdmissionRequest) (*types.Responses, error) {
@@ -74,8 +82,8 @@ func (wh WebHookHandler) HandleReq(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	admissionReviewResponse := v1.AdmissionReview{
-		Response: &v1.AdmissionResponse{
+	admissionReviewResponse := v1beta1.AdmissionReview{
+		Response: &v1beta1.AdmissionResponse{
 			UID: admissionReview.Request.UID,
 		},
 	}
@@ -96,19 +104,22 @@ func (wh WebHookHandler) HandleReq(writer http.ResponseWriter, request *http.Req
 	}
 	violations := resp.Results()
 
-	if len(violations) == 0 {
-		admissionReviewResponse.Response.Allowed = true
-	} else {
-		var responses []string
-		for _, violation := range violations {
+	var responses []string
+	for _, violation := range violations {
+		if violation.EnforcementAction == "deny" {
 			responses = append(responses, fmt.Sprintf("[denied by %s] %s", violation.Constraint.GetName(), violation.Msg))
 		}
+	}
+
+	if len(responses) == 0 {
+		admissionReviewResponse.Response.Allowed = true
+	} else {
 		admissionReviewResponse.Response.Allowed = false
 		admissionReviewResponse.Response.Result = &metav1.Status{
 			Message: strings.Join(responses, "\n"),
 		}
-
 	}
+
 	writeResponse(writer, admissionReviewResponse, http.StatusOK)
 }
 

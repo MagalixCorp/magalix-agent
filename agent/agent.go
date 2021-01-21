@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
 	"github.com/MagalixCorp/magalix-agent/v2/admission/webhook"
 	"github.com/MagalixTechnologies/uuid-go"
 	"golang.org/x/sync/errgroup"
@@ -19,12 +18,12 @@ type Agent struct {
 	ClusterID uuid.UUID
 	AgentID   uuid.UUID
 
-	MetricsSource      MetricsSource
-	EntitiesSource     EntitiesSource
-	AutomationExecutor AutomationExecutor
-	Gateway            Gateway
-	AuditHandler       audit.AuditHandler
-	WebHookHandler     webhook.WebHookHandler
+	MetricsSource         MetricsSource
+	EntitiesSource        EntitiesSource
+	AutomationExecutor    AutomationExecutor
+	Gateway               Gateway
+	RecommendationsSource RecommendationsSource
+	WebHookHandler        *webhook.WebHookHandler
 
 	changeLogLevel ChangeLogLevelHandler
 
@@ -39,17 +38,17 @@ func New(
 	automationExecutor AutomationExecutor,
 	gateway Gateway,
 	logLevelHandler ChangeLogLevelHandler,
-	auditHandler audit.AuditHandler,
-	webhookHandler webhook.WebHookHandler,
+	recommendationsSource RecommendationsSource,
+	webhookHandler *webhook.WebHookHandler,
 ) *Agent {
 	return &Agent{
-		MetricsSource:      metricsSource,
-		EntitiesSource:     entitiesSource,
-		AutomationExecutor: automationExecutor,
-		Gateway:            gateway,
-		changeLogLevel:     logLevelHandler,
-		AuditHandler:       auditHandler,
-		WebHookHandler:     webhookHandler,
+		MetricsSource:         metricsSource,
+		EntitiesSource:        entitiesSource,
+		AutomationExecutor:    automationExecutor,
+		Gateway:               gateway,
+		changeLogLevel:        logLevelHandler,
+		RecommendationsSource: recommendationsSource,
+		WebHookHandler:        webhookHandler,
 	}
 }
 
@@ -75,6 +74,8 @@ func (a *Agent) Start() error {
 
 	a.MetricsSource.SetMetricsHandler(a.handleMetrics)
 
+	a.RecommendationsSource.SetRecommendationHandler(a.handleRecs)
+
 	eg, _ := errgroup.WithContext(allCtx)
 	// Add a context to Gateway to manage the numerous go routines in the client
 	eg.Go(func() error { return a.Gateway.Start(sinksCtx) })
@@ -84,7 +85,7 @@ func (a *Agent) Start() error {
 	eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
-	eg.Go(func() error { return a.AuditHandler.Start(sourcesCtx) })
+	eg.Go(func() error { return a.RecommendationsSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.WebHookHandler.Start(sourcesCtx) })
 
 	return eg.Wait()
