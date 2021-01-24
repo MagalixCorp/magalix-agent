@@ -130,6 +130,7 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 
 			// get the current replicaset with the same revision of the deployment
 			if replicaRevision == deploymentRevision {
+				logger.Debugw("deployment revision: " + deploymentRevision + "& replicaset revision: ", replicaRevision , "& replicaset revision: ", replicaRevision)
 				deploymentName = replica.Name
 				targetPods = *replica.Spec.Replicas
 				break
