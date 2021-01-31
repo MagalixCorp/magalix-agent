@@ -21,6 +21,8 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	var err error
 	flag := false
 
+	time.Sleep(3 * time.Second)
+
 	if strings.ToLower(kind) == "deployment" {
 		objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
 		if err != nil {
@@ -130,7 +132,7 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 
 			// get the current replicaset with the same revision of the deployment
 			if replicaRevision == deploymentRevision {
-				logger.Debugw("deployment revision: " + deploymentRevision + "& replicaset revision: ", replicaRevision , "& replicaset revision: ", replicaRevision)
+				logger.Debugw("deployment revision: " + deploymentRevision + "& replicaset revision: " +  replicaRevision , "& replicaset revision: ", replicaRevision)
 				deploymentName = replica.Name
 				targetPods = *replica.Spec.Replicas
 				break
