@@ -21,6 +21,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	var err error
 	flag := false
 
+	// wait 3 sec to make sure that the controller already changed and it's revision changed
 	time.Sleep(3 * time.Second)
 
 	if strings.ToLower(kind) == "deployment" {
@@ -104,7 +105,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	return result, msg, targetPods, runningPods
 }
 
-func (executor *Executor) deploymentsHandler(entityName string, namespace string) (deploymentName string, targetPods int32, err error) {
+func (executor *Executor) deploymentsHandler(entityName string, namespace string) (replicasetName string, targetPods int32, err error) {
 
 	replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
 	deployment, err := executor.kube.GetDeploymentByName(namespace, entityName)
@@ -133,13 +134,13 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 			// get the current replicaset with the same revision of the deployment
 			if replicaRevision == deploymentRevision {
 				logger.Debugw("deployment revision: " + deploymentRevision + "& replicaset revision: " +  replicaRevision , "& replicaset revision: ", replicaRevision)
-				deploymentName = replica.Name
+				replicasetName = replica.Name
 				targetPods = *replica.Spec.Replicas
 				break
 			}
 		}
 
-	return deploymentName, targetPods, nil
+	return replicasetName, targetPods, nil
 }
 
 func (executor *Executor) statefulsetsHandler(entityName string, namespace string) (statefulsetName string, targetPods int32, err error) {
