@@ -182,7 +182,7 @@ jobs:
 
   update:
     docker:
-      - image: mgxinternal/go-10-helm-kubectl:1
+      - image: mgxinternal/mgx-circle-deployer:1
         auth:
           username: $DOCKERHUB_USERNAME
           password: $DOCKERHUB_PASSWORD

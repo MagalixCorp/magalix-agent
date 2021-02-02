@@ -21,7 +21,7 @@ const (
 	automationsBufferTimeout = 10 * time.Second
 
 	automationsExecutionTimeout = 15 * time.Minute
-	podStatusSleep              = 15 * time.Second
+	podStatusSleep              = 10 * time.Second
 )
 
 type EntitiesFinder interface {
