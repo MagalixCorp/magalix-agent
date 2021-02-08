@@ -3,8 +3,9 @@ package entities
 import (
 	"context"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
@@ -174,8 +175,8 @@ func (ew *EntitiesWatcher) buildAndSendSnapshotResync() {
 		var items = make([]*unstructured.Unstructured, len(ret))
 		for i := range ret {
 			u := *ret[i].(*unstructured.Unstructured)
-			meta, found, err := unstructured.NestedFieldNoCopy(u.Object, "metadata")
-			if !found || err != nil {
+			meta, err := getObjectMeta(&u)
+			if err != nil {
 				logger.Errorw(
 					"unable to find metadata field",
 					"error", err,
@@ -466,6 +467,27 @@ func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionReso
 	default:
 		return nil, nil
 	}
+}
+
+func getObjectMeta(u *unstructured.Unstructured) (map[string]interface{}, error) {
+	meta, found, err := unstructured.NestedFieldNoCopy(u.Object, "metadata")
+	if !found || err != nil {
+		return nil, fmt.Errorf("unable to obtain metadata, error: %w", err)
+	}
+	metadataMap, ok := meta.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("metadata is type %T, map[string]interface{} expected", meta)
+	}
+	ownerRef, ok := metadataMap["ownerReferences"].([]interface{})
+	hasOwner := false
+	if ok && len(ownerRef) > 0 {
+		hasOwner = true
+	}
+	return map[string]interface{}{
+		"namespace": metadataMap["namespace"],
+		"name":      metadataMap["name"],
+		"hasOwner":  hasOwner,
+	}, nil
 }
 
 func getNodeInternalIP(node *unstructured.Unstructured) (string, bool, error) {

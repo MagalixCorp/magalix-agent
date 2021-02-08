@@ -44,6 +44,10 @@ image: strip
 	@echo :: building image $(NAME):$(VERSION)
 	@docker build -t $(NAME):$(VERSION) -f Dockerfile .
 
+anchore_scan: 
+	@echo :: scanning image $(NAME):$(VERSION)
+	@curl -s https://ci-tools.anchore.io/inline_scan-latest | bash -s -- -f -r "$(NAME):$(VERSION)"
+
 push@%:
 	$(eval VERSION ?= latest)
 	$(eval TAG ?= $*/$(NAME):$(VERSION))

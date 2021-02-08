@@ -40,8 +40,8 @@ type Client struct {
 	connected  bool
 	authorized bool
 
-	shouldSendLogs  bool
-	logBuffer       proto.PacketLogs
+	shouldSendLogs bool
+	logBuffer      proto.PacketLogs
 
 	// for thread blocked on connection
 	blocked  sync.Map
@@ -170,16 +170,10 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 		req []byte
 		err error
 	)
-	if kind == proto.PacketKindHello {
-		req, err = proto.EncodeGOB(in)
-		if err != nil {
-			return err
-		}
-	} else {
-		req, err = proto.EncodeSnappy(in)
-		if err != nil {
-			return err
-		}
+
+	req, err = proto.EncodeSnappy(in)
+	if err != nil {
+		return err
 	}
 
 	res, err := client.channel.Send(kind.String(), req)
@@ -195,9 +189,6 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 		return nil
 	}
 
-	if kind == proto.PacketKindHello {
-		return proto.DecodeGOB(res, out)
-	}
 	return proto.DecodeSnappy(res, out)
 }
 
