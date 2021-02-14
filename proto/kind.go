@@ -26,6 +26,7 @@ const (
 
 	PacketKindLogLevel                  PacketKind = "loglevel"
 	PacketKindRecommendationItemRequest PacketKind = "recommendation"
+	PacketKindPolicies                  PacketKind = "policies"
 )
 
 const (
