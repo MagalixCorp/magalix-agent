@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	policies_client "github.com/MagalixTechnologies/policies-service/client"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -208,8 +209,15 @@ type PacketRecommendationItem struct {
 
 type PacketRecommendationItemRequest struct {
 	Items     []PacketRecommendationItem `json:"items"`
-	Timestamp time.Time                  `json:"timestamp"`
+	Timestamp time.Time                  `json:"timeautomationstamp"`
 }
+
+type PacketPolicies struct {
+	Timestamp time.Time
+	Policies  []policies_client.ConstraintRuntime
+}
+
+type PacketPoliciesResponse struct{}
 
 func EncodeSnappy(in interface{}) (out []byte, err error) {
 	defer func() {
