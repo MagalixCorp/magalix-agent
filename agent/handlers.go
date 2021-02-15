@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 )
 
 func (a *Agent) handleDeltas(deltas []*Delta) error {
@@ -24,8 +23,8 @@ func (a *Agent) handleAutomationFeedback(feedback *AutomationFeedback) error {
 	return a.Gateway.SendAutomationFeedback(feedback)
 }
 
-func (a *Agent) handleRecs(recommendations []*types.Result) error {
-	return a.Gateway.SendRecs(recommendations)
+func (a *Agent) handleAuditResult(auditResult []*AuditResult) error {
+	return a.Gateway.SendAuditResults(auditResult)
 }
 
 func (a *Agent) handleRestart() error {

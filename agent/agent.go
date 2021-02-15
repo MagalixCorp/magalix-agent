@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/admission/webhook"
 	"github.com/MagalixTechnologies/uuid-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -21,12 +20,12 @@ type Agent struct {
 	ClusterID uuid.UUID
 	AgentID   uuid.UUID
 
-	MetricsSource         MetricsSource
-	EntitiesSource        EntitiesSource
-	AutomationExecutor    AutomationExecutor
-	Gateway               Gateway
-	RecommendationsSource RecommendationsSource
-	WebHookHandler        *webhook.WebHookHandler
+	MetricsSource      MetricsSource
+	EntitiesSource     EntitiesSource
+	AutomationExecutor AutomationExecutor
+	Gateway            Gateway
+	Auditor            Auditor
+	//WebHookHandler     *webhook.WebHookHandler
 
 	changeLogLevel ChangeLogLevelHandler
 
@@ -41,17 +40,17 @@ func New(
 	automationExecutor AutomationExecutor,
 	gateway Gateway,
 	logLevelHandler ChangeLogLevelHandler,
-	recommendationsSource RecommendationsSource,
-	webhookHandler *webhook.WebHookHandler,
+	auditor Auditor,
+	//webhookHandler *webhook.WebHookHandler,
 ) *Agent {
 	return &Agent{
-		MetricsSource:         metricsSource,
-		EntitiesSource:        entitiesSource,
-		AutomationExecutor:    automationExecutor,
-		Gateway:               gateway,
-		changeLogLevel:        logLevelHandler,
-		RecommendationsSource: recommendationsSource,
-		WebHookHandler:        webhookHandler,
+		MetricsSource:      metricsSource,
+		EntitiesSource:     entitiesSource,
+		AutomationExecutor: automationExecutor,
+		Gateway:            gateway,
+		changeLogLevel:     logLevelHandler,
+		Auditor:            auditor,
+		//WebHookHandler:     webhookHandler,
 	}
 }
 
@@ -65,11 +64,6 @@ func (a *Agent) Start() error {
 	sinksCtx, cancelSinks := context.WithCancel(allCtx)
 	a.cancelSinks = cancelSinks
 
-	// Initialize and authenticate gateway
-	a.Gateway.SetAutomationHandler(a.AutomationExecutor.SubmitAutomation)
-	a.Gateway.SetRestartHandler(a.handleRestart)
-	a.Gateway.SetChangeLogLevelHandler(a.handleLogLevelChange)
-
 	a.AutomationExecutor.SetAutomationFeedbackHandler(a.handleAutomationFeedback)
 
 	a.EntitiesSource.SetDeltasHandler(a.handleDeltas)
@@ -77,7 +71,13 @@ func (a *Agent) Start() error {
 
 	a.MetricsSource.SetMetricsHandler(a.handleMetrics)
 
-	a.RecommendationsSource.SetRecommendationHandler(a.handleRecs)
+	a.Auditor.SetAuditResultHandler(a.handleAuditResult)
+
+	// Initialize and authenticate gateway
+	a.Gateway.SetAutomationHandler(a.AutomationExecutor.SubmitAutomation)
+	a.Gateway.SetConstraintsHandler(a.Auditor.AddConstraints)
+	a.Gateway.SetRestartHandler(a.handleRestart)
+	a.Gateway.SetChangeLogLevelHandler(a.handleLogLevelChange)
 
 	eg, _ := errgroup.WithContext(allCtx)
 	// Add a context to Gateway to manage the numerous go routines in the client
@@ -91,8 +91,8 @@ func (a *Agent) Start() error {
 	eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
 	eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
-	eg.Go(func() error { return a.RecommendationsSource.Start(sourcesCtx) })
-	eg.Go(func() error { return a.WebHookHandler.Start(sourcesCtx) })
+	eg.Go(func() error { return a.Auditor.Start(sourcesCtx) })
+	//eg.Go(func() error { return a.WebHookHandler.Start(sourcesCtx) })
 
 	return eg.Wait()
 }

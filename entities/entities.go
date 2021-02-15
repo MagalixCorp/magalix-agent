@@ -10,10 +10,10 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixTechnologies/core/logger"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -311,6 +311,8 @@ func (ew *EntitiesWatcher) OnAdd(
 		return
 	}
 
+	logger.Info("===ADDING objects", obj.GetKind(), obj.GetName())
+
 	_, err = ew.opa.AddData(context.TODO(), obj)
 	if err != nil {
 		logger.Warnw("unable to add delta to opa cache", "error", err)
@@ -340,10 +342,6 @@ func (ew *EntitiesWatcher) OnUpdate(
 		logger.Warnw("unable to update delta to opa cache", "error", err)
 	}
 
-	_, err = ew.opa.RemoveData(context.TODO(), oldObj)
-	if err != nil {
-		logger.Warnw("unable to update delete delta to opa cache", "error", err)
-	}
 	ew.deltasQueue <- delta
 }
 

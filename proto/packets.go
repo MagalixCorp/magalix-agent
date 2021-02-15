@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	policies_client "github.com/MagalixTechnologies/policies-service/client"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -200,24 +199,52 @@ type PacketEntitiesResyncRequest struct {
 }
 type PacketEntitiesResyncResponse struct{}
 
-type PacketRecommendationItem struct {
-	Constraint *unstructured.Unstructured `json:"constraint"`
-	Resource   *unstructured.Unstructured `json:"resource"`
-	Message    string                     `json:"message"`
-	Enforced   bool                       `json:"enforced"`
+type PacketAuditResultItem struct {
+	TemplateID   uuid.UUID `json:"template_id"`
+	ConstraintID uuid.UUID `json:"constraint_id"`
+
+	HasViolation bool   `json:"has_violation"`
+	Msg          string `json:"msg"`
+
+	EntityName    *string `json:"entity_name"`
+	EntityKind    *string `json:"entity_kind"`
+	NamespaceName *string `json:"namespace_name,omitempty"`
+	ParentName    *string `json:"parent_name,omitempty"`
+	ParentKind    *string `json:"parent_kind,omitempty"`
+	NodeIP        *string `json:"node_ip,omitempty"`
 }
 
-type PacketRecommendationItemRequest struct {
-	Items     []PacketRecommendationItem `json:"items"`
-	Timestamp time.Time                  `json:"timeautomationstamp"`
+type PacketAuditResultRequest struct {
+	Items     []*PacketAuditResultItem `json:"items"`
+	Timestamp time.Time                `json:"timestamp"`
 }
 
-type PacketPolicies struct {
-	Timestamp time.Time
-	Policies  []policies_client.ConstraintRuntime
+type Match struct {
+	Namespaces []string `json:"namespaces"`
+	Kinds      []string `json:"kinds"`
 }
 
-type PacketPoliciesResponse struct{}
+type PacketConstraintItem struct {
+	Id         uuid.UUID `json:"id"`
+	TemplateId uuid.UUID `json:"template_id"`
+	AccountId  uuid.UUID `json:"account_id"`
+	ClusterId  uuid.UUID `json:"cluster_id"`
+
+	Name         string                 `json:"name"`
+	TemplateName string                 `json:"template_name"`
+	Parameters   map[string]interface{} `json:"parameters"`
+	Match        Match                  `json:"match"`
+	Code         string                 `json:"code"`
+
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type PacketConstraintsRequest struct {
+	Timestamp   time.Time              `json:"timestamp"`
+	Constraints []PacketConstraintItem `json:"constraints"`
+}
+
+type PacketConstraintsResponse struct{}
 
 func EncodeSnappy(in interface{}) (out []byte, err error) {
 	defer func() {

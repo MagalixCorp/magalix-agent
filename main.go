@@ -8,15 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/entities"
-	"github.com/MagalixCorp/magalix-agent/v2/executor"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
 	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
-	"github.com/MagalixCorp/magalix-agent/v2/admission/webhook"
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v2/entities"
+	"github.com/MagalixCorp/magalix-agent/v2/executor"
 	"github.com/MagalixCorp/magalix-agent/v2/gateway"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
 	"github.com/MagalixCorp/magalix-agent/v2/metrics"
@@ -24,13 +21,15 @@ import (
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/pkg/errors"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/cert"
+
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 )
 
 var usage = `agent - magalix services agent.
@@ -288,11 +287,11 @@ func main() {
 	// json.Unmarshal(data, &template)
 
 	// ctx := context.TODO()
-	// opaClient.AddTemplate(ctx, template)
+	// opaClient.AddConstraint(ctx, template)
 	// opaClient.AddConstraint(ctx, &constraint)
 
-	aud := audit.NewAuditHandler(opaClient)
-	webhookHandler, err := webhook.NewWebHookHandler(webHookName, opaClient, kube)
+	auditor := audit.NewAuditor(opaClient, parentsStore)
+	//webhookHandler, err := webhook.NewWebHookHandler(webHookName, opaClient, kube)
 	if err != nil {
 		logger.Fatalw("Error while creating validating webhook server", "errror", err)
 	}
@@ -306,8 +305,8 @@ func main() {
 		func(level *agent.LogLevel) error {
 			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
-		aud,
-		webhookHandler,
+		auditor,
+		//webhookHandler,
 	)
 
 	probes.IsReady = true

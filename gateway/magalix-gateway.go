@@ -36,6 +36,7 @@ type MagalixGateway struct {
 	connectedChan    chan bool
 	cancelWorkers    context.CancelFunc
 	submitAutomation agent.AutomationHandler
+	addConstraints   agent.ConstraintsHandler
 	triggerRestart   agent.RestartHandler
 	changeLogLevel   agent.ChangeLogLevelHandler
 }

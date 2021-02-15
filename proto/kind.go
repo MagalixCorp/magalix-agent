@@ -24,9 +24,9 @@ const (
 
 	PacketKindRawStoreRequest PacketKind = "raw/store"
 
-	PacketKindLogLevel                  PacketKind = "loglevel"
-	PacketKindRecommendationItemRequest PacketKind = "recommendation"
-	PacketKindPolicies                  PacketKind = "policies"
+	PacketKindLogLevel           PacketKind = "loglevel"
+	PacketKindConstraintsRequest PacketKind = "audit/constraints"
+	PacketKindAuditResultRequest PacketKind = "audit/result"
 )
 
 const (

@@ -20,12 +20,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+const (
+	TargetName = "admission.k8s.gatekeeper.sh"
+)
+
 var _ client.TargetHandler = &K8sValidationTarget{}
 
 type K8sValidationTarget struct{}
 
 func (h *K8sValidationTarget) GetName() string {
-	return "admission.k8s.gatekeeper.sh"
+	return TargetName
 }
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
