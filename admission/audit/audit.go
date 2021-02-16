@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
@@ -54,27 +55,25 @@ func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
 	a.sendAuditResult = handler
 }
 
-func (a *Auditor) AddConstraints(constraints []*agent.Constraint) error {
+func (a *Auditor) AddConstraint(constraint *agent.Constraint) error {
 	// TODO: Handle delete
 
-	for _, constraint := range constraints {
-		logger.Info("===RECEIVED CONSTRAINT", constraint)
+	logger.Info("===RECEIVED CONSTRAINT", constraint)
 
-		opaTemplate, opaConstraint, err := convertMgxConstraintToOpaTemplateAndConstraint(constraint)
-		if err != nil {
-			return fmt.Errorf("couldn't convert mgx constraint to opa template and constraint. %w", err)
-		}
-		_, err = a.opa.AddTemplate(a.ctx, opaTemplate)
-		if err != nil {
-			return fmt.Errorf("couldn't add opa template. %w", err)
-		}
-		logger.Info("=====Entering Constraint")
-		_, err = a.opa.AddConstraint(a.ctx, opaConstraint)
-		if err != nil {
-			return fmt.Errorf("couldn't add opa constraint. %w", err)
-		}
-		logger.Info("=====Exiting Constraint")
+	opaTemplate, opaConstraint, err := convertMgxConstraintToOpaTemplateAndConstraint(constraint)
+	if err != nil {
+		return fmt.Errorf("couldn't convert mgx constraint to opa template and constraint. %w", err)
 	}
+	_, err = a.opa.AddTemplate(a.ctx, opaTemplate)
+	if err != nil {
+		return fmt.Errorf("couldn't add opa template. %w", err)
+	}
+	logger.Info("=====Entering Constraint")
+	_, err = a.opa.AddConstraint(a.ctx, opaConstraint)
+	if err != nil {
+		return fmt.Errorf("couldn't add opa constraint. %w", err)
+	}
+	logger.Info("=====Exiting Constraint")
 	return nil
 }
 
@@ -220,18 +219,29 @@ func getUuidFromAnnotation(obj *unstructured.Unstructured, key string) (uuid.UUI
 	return id, nil
 }
 
+const letterBytes = "abcdefghijklmnopqrstuvwxyz"
+
+func generateName() string {
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
+}
+
 func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint) (
 	*opaTemplates.ConstraintTemplate,
 	*unstructured.Unstructured,
 	error,
 ) {
+	name := generateName()
 	opaTemplate := opaTemplates.ConstraintTemplate{
 		TypeMeta: k8sV1.TypeMeta{
 			Kind:       CrdKindConstraintTemplate,
 			APIVersion: CrdAPIVersionGkTemplateV1Beta1,
 		},
 		ObjectMeta: k8sV1.ObjectMeta{
-			Name: constraint.TemplateName,
+			Name: name,
 			UID:  k8sTypes.UID(constraint.TemplateId.String()),
 			Annotations: map[string]string{
 				AnnotationKeyTemplateId: constraint.TemplateId.String(),
@@ -241,7 +251,7 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 			CRD: opaTemplates.CRD{
 				Spec: opaTemplates.CRDSpec{
 					Names: opaTemplates.Names{
-						Kind: constraint.TemplateName,
+						Kind: name,
 					},
 				},
 			},
@@ -259,12 +269,18 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 		return nil, nil, fmt.Errorf("couldn't build kind matcher. %w", err)
 	}
 
+	namespacesMatcher, err := convertNamespacesListToNAmespacesMatcher(constraint.Match.Namespaces)
+	if err != nil {
+		return nil, nil, fmt.Errorf("couldn't build namespaces matcher. %w", err)
+	}
+	logger.Info("%%$$%%%((***&&^%$$$$####", namespacesMatcher, kindsMatcher)
+
 	opaConstraint := unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": CrdAPIVersionGkConstraintV1Beta1,
-			"kind":       constraint.TemplateName,
+			"kind":       name,
 			"metadata": map[string]interface{}{
-				"name": constraint.Name,
+				"name": name,
 				"uid":  constraint.Id.String(),
 				"annotations": map[string]interface{}{
 					AnnotationKeyTemplateId:   constraint.TemplateId.String(),
@@ -274,7 +290,7 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 			"spec": map[string]interface{}{
 				"match": map[string]interface{}{
 					"kinds":      kindsMatcher,
-					"namespaces": constraint.Match.Namespaces,
+					"namespaces": namespacesMatcher,
 				},
 				"parameters": constraint.Parameters,
 			},
@@ -294,19 +310,34 @@ func convertKindsListToKindsMatcher(kinds []string) ([]interface{}, error) {
 	apiGroups := []interface{}{"*"}
 	matchedKinds := make([]interface{}, 0)
 
-	for _, k := range kinds {
-		gvrk, err := kuber.KindToGvrk(k)
-		if err != nil {
-			return nil, fmt.Errorf("unsupported kind %s", k)
-		}
+	if len(kinds) == 0 {
+		matchedKinds = []interface{}{"*"}
+	} else {
+		for _, k := range kinds {
+			gvrk, err := kuber.KindToGvrk(k)
+			if err != nil {
+				return nil, fmt.Errorf("unsupported kind %s", k)
+			}
 
-		// TODO: Handle repeated kinds and api groups
-		//apiGroups = append(apiGroups, gvrk.Group)
-		matchedKinds = append(matchedKinds, gvrk.Kind)
+			// TODO: Handle repeated kinds and api groups
+			//apiGroups = append(apiGroups, gvrk.Group)
+			matchedKinds = append(matchedKinds, gvrk.Kind)
+		}
 	}
 
 	return []interface{}{map[string]interface{}{
 		"apiGroups": apiGroups,
 		"kinds":     matchedKinds,
 	}}, nil
+}
+
+func convertNamespacesListToNAmespacesMatcher(namespaces []string) ([]interface{}, error) {
+	if len(namespaces) == 0 {
+		return []interface{}{"*"}, nil
+	}
+	result := make([]interface{}, len(namespaces))
+	for i, namespace := range namespaces {
+		result[i] = namespace
+	}
+	return result, nil
 }

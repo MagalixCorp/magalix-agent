@@ -8,7 +8,7 @@ import (
 )
 
 type Match struct {
-	Namespaces []interface{}
+	Namespaces []string
 	Kinds      []string
 }
 
@@ -16,7 +16,7 @@ type Constraint struct {
 	Id         uuid.UUID
 	TemplateId uuid.UUID
 	AccountId  uuid.UUID
-	//ClusterId  uuid.UUID
+	ClusterId  uuid.UUID
 
 	Name         string
 	TemplateName string
@@ -48,6 +48,6 @@ type Auditor interface {
 	Start(ctx context.Context) error
 	Stop() error
 
-	AddConstraints(constraint []*Constraint) error
+	AddConstraint(constraint *Constraint) error
 	SetAuditResultHandler(handler AuditResultHandler)
 }

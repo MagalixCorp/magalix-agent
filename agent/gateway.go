@@ -8,7 +8,7 @@ import (
 type AutomationHandler func(automation *Automation) error
 type RestartHandler func() error
 type ChangeLogLevelHandler func(level *LogLevel) error
-type ConstraintsHandler func(constraints []*Constraint) error
+type ConstraintHandler func(constraint *Constraint) error
 
 type Gateway interface {
 	Start(ctx context.Context) error
@@ -24,5 +24,5 @@ type Gateway interface {
 	SetAutomationHandler(handler AutomationHandler)
 	SetRestartHandler(handler RestartHandler)
 	SetChangeLogLevelHandler(handler ChangeLogLevelHandler)
-	SetConstraintsHandler(handler ConstraintsHandler)
+	SetConstraintHandler(handler ConstraintHandler)
 }
