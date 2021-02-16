@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
 	"time"
+
+	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
 
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/kuber"
@@ -56,7 +57,6 @@ func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
 func (a *Auditor) AddConstraints(constraints []*agent.Constraint) error {
 	// TODO: Handle delete
 
-
 	for _, constraint := range constraints {
 		logger.Info("===RECEIVED CONSTRAINT", constraint)
 
@@ -68,10 +68,12 @@ func (a *Auditor) AddConstraints(constraints []*agent.Constraint) error {
 		if err != nil {
 			return fmt.Errorf("couldn't add opa template. %w", err)
 		}
+		logger.Info("=====Entering Constraint")
 		_, err = a.opa.AddConstraint(a.ctx, opaConstraint)
 		if err != nil {
 			return fmt.Errorf("couldn't add opa constraint. %w", err)
 		}
+		logger.Info("=====Exiting Constraint")
 	}
 	return nil
 }
@@ -175,7 +177,7 @@ func (a *Auditor) convertGkAuditResultToMgxAuditResult(in []*opaTypes.Result) ([
 		name := resource.GetName()
 		parent, found := a.parentsStore.GetParents(namespace, kind, name)
 		var parentName, parentKind string
-		if found {
+		if found && parent != nil {
 			// RootParent func should move outside kuber
 			topParent := kuber.RootParent(parent)
 			parentName = topParent.Name
@@ -207,7 +209,7 @@ func (a *Auditor) convertGkAuditResultToMgxAuditResult(in []*opaTypes.Result) ([
 
 func getUuidFromAnnotation(obj *unstructured.Unstructured, key string) (uuid.UUID, error) {
 	val, ok := obj.GetAnnotations()[key]
-	if ! ok {
+	if !ok {
 		return uuid.UUID{}, fmt.Errorf("couldn't find %s in annotations", key)
 	}
 	id, err := uuid.FromString(val)
@@ -252,7 +254,6 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 		},
 	}
 
-
 	kindsMatcher, err := convertKindsListToKindsMatcher(constraint.Match.Kinds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("couldn't build kind matcher. %w", err)
@@ -265,7 +266,7 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 			"metadata": map[string]interface{}{
 				"name": constraint.Name,
 				"uid":  constraint.Id.String(),
-				"annotations": map[string]string{
+				"annotations": map[string]interface{}{
 					AnnotationKeyTemplateId:   constraint.TemplateId.String(),
 					AnnotationKeyConstraintId: constraint.Id.String(),
 				},
@@ -288,10 +289,10 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 	return &opaTemplate, &opaConstraint, nil
 }
 
-func convertKindsListToKindsMatcher(kinds []string) (map[string][]string, error) {
+func convertKindsListToKindsMatcher(kinds []string) ([]interface{}, error) {
 	//apiGroups := make([]string, 0)
-	apiGroups := []string{"*"}
-	matchedKinds := make([]string, 0)
+	apiGroups := []interface{}{"*"}
+	matchedKinds := make([]interface{}, 0)
 
 	for _, k := range kinds {
 		gvrk, err := kuber.KindToGvrk(k)
@@ -301,11 +302,11 @@ func convertKindsListToKindsMatcher(kinds []string) (map[string][]string, error)
 
 		// TODO: Handle repeated kinds and api groups
 		//apiGroups = append(apiGroups, gvrk.Group)
-		matchedKinds = append(kinds, gvrk.Kind)
+		matchedKinds = append(matchedKinds, gvrk.Kind)
 	}
 
-	return map[string][]string{
+	return []interface{}{map[string]interface{}{
 		"apiGroups": apiGroups,
 		"kinds":     matchedKinds,
-	}, nil
+	}}, nil
 }

@@ -1,10 +1,11 @@
 package gateway
 
 import (
-	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixTechnologies/uuid-go"
 	"math"
 	"time"
+
+	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixTechnologies/uuid-go"
 
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
@@ -66,7 +67,8 @@ violation[{"msg": msg, "details": {"missing_labels": missing}}] {
   provided := {label | input.review.object.metadata.labels[label]}
   required := {label | label := input.parameters.labels[_]}
   missing := required - provided
-  msg := sprintf("you must provide labels: %v %v %v", [provided, required, missing])`
+  msg := sprintf("you must provide labels: %v %v %v", [provided, required, missing])
+  }`
 		updatedAt, _ := time.Parse(time.RFC3339, "2021-02-11T16:02:52.738Z")
 
 		logger.Info("===WAITING TO SEND CONSTRAINT")
@@ -79,16 +81,16 @@ violation[{"msg": msg, "details": {"missing_labels": missing}}] {
 				Name:         "testtheredirection",
 				TemplateName: "tgreedlongdescriptiontemplateandhowtoresolveupdate",
 				Parameters: map[string]interface{}{
-					"lables": []string{
+					"lables": []interface{}{
 						"nonexistinglabel",
 					},
 				},
-				Match:        agent.Match{
-					Namespaces: []string{"dis"},
+				Match: agent.Match{
+					Namespaces: []interface{}{"gatekeeper-system"},
 					Kinds:      []string{kuber.Deployments.Kind},
 				},
-				Code:         code,
-				UpdatedAt:    updatedAt,
+				Code:      code,
+				UpdatedAt: updatedAt,
 			},
 		})
 		logger.Info("===CONSTRAINT SENT")
@@ -112,7 +114,7 @@ func (g *MagalixGateway) SendAuditResults(auditResults []*agent.AuditResult) err
 }
 
 func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult) {
-	items := make([]*proto.PacketAuditResultItem, len(auditResult))
+	items := make([]*proto.PacketAuditResultItem, 0, len(auditResult))
 	for _, r := range auditResult {
 		item := proto.PacketAuditResultItem{
 			TemplateID:    r.TemplateID,

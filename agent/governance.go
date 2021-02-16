@@ -8,7 +8,7 @@ import (
 )
 
 type Match struct {
-	Namespaces []string
+	Namespaces []interface{}
 	Kinds      []string
 }
 

@@ -311,8 +311,6 @@ func (ew *EntitiesWatcher) OnAdd(
 		return
 	}
 
-	logger.Info("===ADDING objects", obj.GetKind(), obj.GetName())
-
 	_, err = ew.opa.AddData(context.TODO(), obj)
 	if err != nil {
 		logger.Warnw("unable to add delta to opa cache", "error", err)
