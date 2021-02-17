@@ -48,6 +48,6 @@ type Auditor interface {
 	Start(ctx context.Context) error
 	Stop() error
 
-	AddConstraint(constraint *Constraint) error
+	HandleConstraints(constraint []*Constraint) map[string]error
 	SetAuditResultHandler(handler AuditResultHandler)
 }

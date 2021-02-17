@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
+	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v2/utils"
 	"github.com/MagalixTechnologies/core/logger"
 )
 
@@ -18,17 +20,18 @@ const (
 	auditResultsBatchMaxSize = 1000
 )
 
-func (g *MagalixGateway) SetConstraintHandler(handler agent.ConstraintHandler) {
+func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler) {
 	if handler == nil {
 		panic("constraints handler is nil")
 	}
-	g.addConstraint = handler
+	g.addConstraints = handler
 	g.gwClient.AddListener(proto.PacketKindConstraintsRequest, func(in []byte) ([]byte, error) {
 		var constraintsRequest proto.PacketConstraintsRequest
 		if err := proto.DecodeSnappy(in, &constraintsRequest); err != nil {
 			return nil, err
 		}
 
+		constraints := make([]*agent.Constraint, 0, len(constraintsRequest.Constraints))
 		for _, c := range constraintsRequest.Constraints {
 			constraint := &agent.Constraint{
 				Id:           c.Id,
@@ -45,9 +48,13 @@ func (g *MagalixGateway) SetConstraintHandler(handler agent.ConstraintHandler) {
 				Code:      c.Code,
 				UpdatedAt: c.UpdatedAt,
 			}
-			err := g.addConstraint(constraint)
-			if err != nil {
-				logger.Errorw("Couldn't add constraint", "error", err, "constraint-id", c.Id)
+			constraints = append(constraints, constraint)
+		}
+		errMap := g.addConstraints(constraints)
+		if errMap != nil && len(errMap) > 0 {
+			// TODO: Send errors and ids in constraint response
+			for id, err := range errMap {
+				logger.Errorf("Couldn't add constraint", "error", err, "constraint-id", id)
 			}
 		}
 
@@ -95,14 +102,14 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 		Items:     items,
 		Timestamp: time.Now().UTC(),
 	}
-	//g.gwClient.Pipe(client.Package{
-	//	Kind:        proto.PacketKindAuditResultRequest,
-	//	ExpiryTime:  utils.After(auditResultPacketExpireAfter),
-	//	ExpiryCount: auditResultPacketExpireCount,
-	//	Priority:    auditResultPacketPriority,
-	//	Retries:     auditResultPacketRetries,
-	//	Data:        packet,
-	//})
+	g.gwClient.Pipe(client.Package{
+		Kind:        proto.PacketKindAuditResultRequest,
+		ExpiryTime:  utils.After(auditResultPacketExpireAfter),
+		ExpiryCount: auditResultPacketExpireCount,
+		Priority:    auditResultPacketPriority,
+		Retries:     auditResultPacketRetries,
+		Data:        packet,
+	})
 
 	logger.Info("===RECEIVED AUDIT RESULT", packet)
 }

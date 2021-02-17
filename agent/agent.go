@@ -75,7 +75,7 @@ func (a *Agent) Start() error {
 
 	// Initialize and authenticate gateway
 	a.Gateway.SetAutomationHandler(a.AutomationExecutor.SubmitAutomation)
-	a.Gateway.SetConstraintHandler(a.Auditor.AddConstraint)
+	a.Gateway.SetConstraintsHandler(a.Auditor.HandleConstraints)
 	a.Gateway.SetRestartHandler(a.handleRestart)
 	a.Gateway.SetChangeLogLevelHandler(a.handleLogLevelChange)
 

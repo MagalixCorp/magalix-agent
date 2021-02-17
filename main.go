@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/admission/audit"
-	"github.com/MagalixCorp/magalix-agent/v2/admission/target"
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
+	"github.com/MagalixCorp/magalix-agent/v2/auditor"
+	"github.com/MagalixCorp/magalix-agent/v2/auditor/target"
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixCorp/magalix-agent/v2/entities"
 	"github.com/MagalixCorp/magalix-agent/v2/executor"
@@ -290,7 +290,7 @@ func main() {
 	// opaClient.AddConstraint(ctx, template)
 	// opaClient.AddConstraint(ctx, &constraint)
 
-	auditor := audit.NewAuditor(opaClient, parentsStore)
+	auditor := auditor.NewAuditor(opaClient, parentsStore)
 	//webhookHandler, err := webhook.NewWebHookHandler(webHookName, opaClient, kube)
 	if err != nil {
 		logger.Fatalw("Error while creating validating webhook server", "errror", err)
