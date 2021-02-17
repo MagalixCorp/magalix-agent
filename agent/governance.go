@@ -24,7 +24,9 @@ type Constraint struct {
 	Match        Match
 	Code         string
 
-	UpdatedAt time.Time
+	UpdatedAt  time.Time
+	CategoryId uuid.UUID
+	Severity   string
 }
 
 type AuditResult struct {
@@ -40,6 +42,8 @@ type AuditResult struct {
 	ParentName    *string
 	ParentKind    *string
 	NodeIP        *string
+	CategoryID    uuid.UUID
+	Severity      string
 }
 
 type AuditResultHandler func(auditResult []*AuditResult) error

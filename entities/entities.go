@@ -63,8 +63,9 @@ type EntitiesWatcher struct {
 	sendDeltas         agent.DeltasHandler
 	sendEntitiesResync agent.EntitiesResyncHandler
 
-	cancelWorker context.CancelFunc
-	opa          *opa.Client
+	cancelWorker  context.CancelFunc
+	opa           *opa.Client
+	WaitCacheSync chan struct{}
 }
 
 func NewEntitiesWatcher(
@@ -81,8 +82,9 @@ func NewEntitiesWatcher(
 		watchers:       map[kuber.GroupVersionResourceKind]kuber.Watcher{},
 		watchersByKind: map[string]kuber.Watcher{},
 
-		deltasQueue: make(chan agent.Delta, deltasBufferChanSize),
-		opa:         opaClient,
+		deltasQueue:   make(chan agent.Delta, deltasBufferChanSize),
+		opa:           opaClient,
+		WaitCacheSync: make(chan struct{}),
 	}
 	return ew
 }
@@ -109,6 +111,7 @@ func (ew *EntitiesWatcher) Start(ctx context.Context) error {
 
 	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
 	err := ew.observer.WaitForCacheSync()
+	ew.WaitCacheSync <- struct{}{}
 	if err != nil {
 		logger.Warnf("timeout due to missing permissions with error %s ", err.Error())
 	}

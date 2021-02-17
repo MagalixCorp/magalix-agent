@@ -1,7 +1,6 @@
 package auditor
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
@@ -31,6 +30,15 @@ func getUuidFromAnnotation(obj *unstructured.Unstructured, key string) (uuid.UUI
 	}
 
 	return id, nil
+}
+
+func getStringFromAnnotation(obj *unstructured.Unstructured, key string) (string, error) {
+	val, ok := obj.GetAnnotations()[key]
+	if !ok {
+		return "", fmt.Errorf("couldn't find %s in annotations", key)
+	}
+
+	return val, nil
 }
 
 func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint) (
@@ -79,10 +87,12 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 				"name": validConstraintName,
 				"uid":  constraint.Id.String(),
 				"annotations": map[string]interface{}{
-					AnnotationKeyTemplateId:     constraint.TemplateId.String(),
-					AnnotationKeyTemplateName:   constraint.TemplateName,
-					AnnotationKeyConstraintId:   constraint.Id.String(),
-					AnnotationKeyConstraintName: constraint.Name,
+					AnnotationKeyTemplateId:           constraint.TemplateId.String(),
+					AnnotationKeyTemplateName:         constraint.TemplateName,
+					AnnotationKeyConstraintId:         constraint.Id.String(),
+					AnnotationKeyConstraintName:       constraint.Name,
+					AnnotationKeyConstraintCategoryId: constraint.CategoryId,
+					AnnotationKeyConstraintSeverity:   constraint.Severity,
 				},
 			},
 			"spec": map[string]interface{}{
@@ -94,11 +104,6 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 			},
 		},
 	}
-
-	tempJson, err := json.Marshal(opaTemplate)
-	logger.Info("===OPA TEMPLATE: \n", string(tempJson), err)
-	constJson, err := json.Marshal(opaConstraint)
-	logger.Info("===OPA CONSTRAINT: \n", string(constJson), err)
 
 	return &opaTemplate, &opaConstraint, nil
 }

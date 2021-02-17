@@ -45,8 +45,10 @@ func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler)
 					Namespaces: c.Match.Namespaces,
 					Kinds:      c.Match.Kinds,
 				},
-				Code:      c.Code,
-				UpdatedAt: c.UpdatedAt,
+				Code:       c.Code,
+				UpdatedAt:  c.UpdatedAt,
+				CategoryId: c.CategoryId,
+				Severity:   c.Severity,
 			}
 			constraints = append(constraints, constraint)
 		}
@@ -92,6 +94,8 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 			ParentName:    r.ParentName,
 			ParentKind:    r.ParentKind,
 			NodeIP:        r.NodeIP,
+			CategoryID:    r.CategoryID,
+			Severity:      r.Severity,
 		}
 
 		items = append(items, &item)
@@ -111,5 +115,4 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 		Data:        packet,
 	})
 
-	logger.Info("===RECEIVED AUDIT RESULT", packet)
 }

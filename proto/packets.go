@@ -206,12 +206,14 @@ type PacketAuditResultItem struct {
 	HasViolation bool   `json:"has_violation"`
 	Msg          string `json:"msg"`
 
-	EntityName    *string `json:"entity_name"`
-	EntityKind    *string `json:"entity_kind"`
-	NamespaceName *string `json:"namespace_name,omitempty"`
-	ParentName    *string `json:"parent_name,omitempty"`
-	ParentKind    *string `json:"parent_kind,omitempty"`
-	NodeIP        *string `json:"node_ip,omitempty"`
+	EntityName    *string   `json:"entity_name"`
+	EntityKind    *string   `json:"entity_kind"`
+	NamespaceName *string   `json:"namespace_name,omitempty"`
+	ParentName    *string   `json:"parent_name,omitempty"`
+	ParentKind    *string   `json:"parent_kind,omitempty"`
+	NodeIP        *string   `json:"node_ip,omitempty"`
+	CategoryID    uuid.UUID `json:"category_id"`
+	Severity      string    `json:"severity"`
 }
 
 type PacketAuditResultRequest struct {
@@ -236,7 +238,9 @@ type PacketConstraintItem struct {
 	Match        Match                  `json:"match"`
 	Code         string                 `json:"code"`
 
-	UpdatedAt time.Time `json:"updated_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	CategoryId uuid.UUID `json:"category_id"`
+	Severity   string    `json:"severity"`
 }
 
 type PacketConstraintsRequest struct {

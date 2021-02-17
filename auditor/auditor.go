@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	// TODO DO NOT ACCEPT IF NOT 24 HOURS!
-	auditInterval           = 10 * time.Second
+	auditInterval           = 24 * time.Hour
 	handleConstraintTimeout = 10 * time.Second
 	gateKeeperActionDeny    = "deny"
 
@@ -24,10 +23,12 @@ const (
 	CrdAPIVersionGkTemplateV1Beta1   = "templates.gatekeeper.sh/v1beta1"
 	CrdAPIVersionGkConstraintV1Beta1 = "constraints.gatekeeper.sh/v1beta1"
 
-	AnnotationKeyTemplateId     = "mgx-template-id"
-	AnnotationKeyTemplateName   = "mgx-template-name"
-	AnnotationKeyConstraintId   = "mgx-constraint-id"
-	AnnotationKeyConstraintName = "mgx-constraint-name"
+	AnnotationKeyTemplateId           = "mgx-template-id"
+	AnnotationKeyTemplateName         = "mgx-template-name"
+	AnnotationKeyConstraintId         = "mgx-constraint-id"
+	AnnotationKeyConstraintName       = "mgx-constraint-name"
+	AnnotationKeyConstraintCategoryId = "mgx-constraint-category-id"
+	AnnotationKeyConstraintSeverity   = "mgx-constraint-category-severity"
 )
 
 type Auditor struct {
@@ -36,17 +37,19 @@ type Auditor struct {
 	constraintsRegistry ConstraintRegistry
 	sendAuditResult     agent.AuditResultHandler
 
-	updated      chan struct{}
-	ctx          context.Context
-	cancelWorker context.CancelFunc
+	updated               chan struct{}
+	ctx                   context.Context
+	cancelWorker          context.CancelFunc
+	waitEntitiesCacheSync chan struct{}
 }
 
-func NewAuditor(opaClient *opa.Client, parentsStore *kuber.ParentsStore) *Auditor {
+func NewAuditor(opaClient *opa.Client, parentsStore *kuber.ParentsStore, waitEntitiesCacheSync chan struct{}) *Auditor {
 	return &Auditor{
-		opa:                 opaClient,
-		parentsStore:        parentsStore,
-		constraintsRegistry: NewConstraintRegistry(),
-		updated:             make(chan struct{}),
+		opa:                   opaClient,
+		parentsStore:          parentsStore,
+		constraintsRegistry:   NewConstraintRegistry(),
+		updated:               make(chan struct{}),
+		waitEntitiesCacheSync: waitEntitiesCacheSync,
 	}
 }
 
@@ -55,7 +58,6 @@ func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
 }
 
 func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]error {
-	logger.Info("===RECEIVED CONSTRAINT", constraints)
 
 	errorsMap := make(map[string]error, 0)
 	changed := false
@@ -107,12 +109,10 @@ func (a *Auditor) addConstraint(constraint *agent.Constraint) error {
 	if err != nil {
 		return fmt.Errorf("couldn't add opa template. %w", err)
 	}
-	logger.Info("=====Entering Constraint")
 	_, err = a.opa.AddConstraint(timedCtx, opaConstraint)
 	if err != nil {
 		return fmt.Errorf("couldn't add opa constraint. %w", err)
 	}
-	logger.Info("=====Exiting Constraint")
 
 	return nil
 }
@@ -141,7 +141,6 @@ func (a *Auditor) deleteConstraint(info *ConstrainInfo) error {
 }
 
 func (a *Auditor) audit(ctx context.Context) ([]*opaTypes.Result, error) {
-	logger.Info("===Auditing")
 
 	resp, err := a.opa.Audit(ctx)
 	if err != nil {
@@ -149,8 +148,6 @@ func (a *Auditor) audit(ctx context.Context) ([]*opaTypes.Result, error) {
 		return nil, err
 	}
 	results := resp.Results()
-
-	logger.Info("===Audit complete ", results)
 
 	return results, nil
 }
@@ -172,6 +169,8 @@ func (a *Auditor) Start(ctx context.Context) error {
 		case <-cancelCtx.Done():
 			return nil
 		case <-a.updated:
+			shouldAudit = true
+		case <-a.waitEntitiesCacheSync:
 			shouldAudit = true
 		case <-auditTicker.C:
 			shouldAudit = true
@@ -232,6 +231,14 @@ func (a *Auditor) convertGkAuditResultToMgxAuditResult(in []*opaTypes.Result) ([
 		if err != nil {
 			return nil, fmt.Errorf("couldn't get constraint id from constraint annotations. %w", err)
 		}
+		categoryId, err := getUuidFromAnnotation(gkRes.Constraint, AnnotationKeyConstraintCategoryId)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't get constraint category id from constraint annotations. %w", err)
+		}
+		severity, err := getStringFromAnnotation(gkRes.Constraint, AnnotationKeyConstraintSeverity)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't get constraint severity from constraint annotations. %w", err)
+		}
 
 		hasViolation := gkRes.EnforcementAction == gateKeeperActionDeny
 		msg := gkRes.Msg
@@ -270,6 +277,8 @@ func (a *Auditor) convertGkAuditResultToMgxAuditResult(in []*opaTypes.Result) ([
 			ParentKind:    &parentKind,
 			NamespaceName: &namespace,
 			NodeIP:        &nodeIp,
+			CategoryID:    categoryId,
+			Severity:      severity,
 		}
 		out = append(out, &mgxRes)
 	}

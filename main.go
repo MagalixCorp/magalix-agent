@@ -113,7 +113,7 @@ Options:
 var version = "[manual build]"
 
 // @TODO: Should be changed to be unique per cluster/account id
-const webHookName = "com.magalix.webhook"
+// const webHookName = "com.magalix.webhook"
 
 var startID string
 
@@ -264,33 +264,7 @@ func main() {
 		dryRun,
 	)
 
-	// @TODO: Replace below logic with logic for getting templates and constraints from policy service and adding it to opa cache
-
-	// data, err := kube.Clientset.RESTClient().
-	// 	Get().
-	// 	AbsPath("/apis/constraints.gatekeeper.sh/v1beta1").
-	// 	Resource("K8sRequiredLabels").
-	// 	Name("ns-must-have-gk").
-	// 	DoRaw(context.TODO())
-
-	// constraint := unstructured.Unstructured{}
-	// json.Unmarshal(data, &constraint)
-
-	// data, err = kube.Clientset.RESTClient().
-	// 	Get().
-	// 	AbsPath("/apis/templates.gatekeeper.sh/v1beta1").
-	// 	Resource("constrainttemplates").
-	// 	Name("k8srequiredlabels").
-	// 	DoRaw(context.TODO())
-
-	// template := &templates.ConstraintTemplate{}
-	// json.Unmarshal(data, &template)
-
-	// ctx := context.TODO()
-	// opaClient.AddConstraint(ctx, template)
-	// opaClient.AddConstraint(ctx, &constraint)
-
-	auditor := auditor.NewAuditor(opaClient, parentsStore)
+	auditor := auditor.NewAuditor(opaClient, parentsStore, ew.WaitCacheSync)
 	//webhookHandler, err := webhook.NewWebHookHandler(webHookName, opaClient, kube)
 	if err != nil {
 		logger.Fatalw("Error while creating validating webhook server", "errror", err)

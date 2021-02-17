@@ -26,8 +26,6 @@ func (i *ConstrainInfo) ToOpaConstraint() *unstructured.Unstructured {
 	constraint := unstructured.Unstructured{}
 	constraint.SetName(forceDns1035Compatible(i.Id))
 	constraint.SetGroupVersionKind(k8sSchema.GroupVersionKind{
-		// TODO: Find proper value for Group
-		Group:   "",
 		Version: CrdAPIVersionGkConstraintV1Beta1,
 		Kind:    forceDns1035Compatible(i.TemplateId),
 	})
