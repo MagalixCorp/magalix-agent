@@ -91,15 +91,12 @@ func convertMgxConstraintToOpaTemplateAndConstraint(constraint *agent.Constraint
 					AnnotationKeyTemplateName:         constraint.TemplateName,
 					AnnotationKeyConstraintId:         constraint.Id.String(),
 					AnnotationKeyConstraintName:       constraint.Name,
-					AnnotationKeyConstraintCategoryId: constraint.CategoryId,
+					AnnotationKeyConstraintCategoryId: constraint.CategoryId.String(),
 					AnnotationKeyConstraintSeverity:   constraint.Severity,
 				},
 			},
 			"spec": map[string]interface{}{
-				"match": map[string]interface{}{
-					"kinds":      convertKindsListToKindsMatcher(constraint.Match.Kinds),
-					"namespaces": convertNamespacesListToNamespacesMatcher(constraint.Match.Namespaces),
-				},
+				"match":      buildMatcher(constraint),
 				"parameters": constraint.Parameters,
 			},
 		},
@@ -126,16 +123,21 @@ func convertKindsListToKindsMatcher(kinds []string) []interface{} {
 }
 
 func convertNamespacesListToNamespacesMatcher(namespaces []string) []interface{} {
-	if len(namespaces) == 0 {
-		return []interface{}{"*"}
-	}
-
 	matchedNamespaces := make([]interface{}, 0, len(namespaces))
 	for i, ns := range namespaces {
 		matchedNamespaces[i] = ns
 	}
 
 	return matchedNamespaces
+}
+
+func buildMatcher(constraint *agent.Constraint) map[string]interface{} {
+	match := make(map[string]interface{})
+	match["kinds"] = convertKindsListToKindsMatcher(constraint.Match.Kinds)
+	if len(constraint.Match.Namespaces) > 0 {
+		match["namespaces"] = convertNamespacesListToNamespacesMatcher(constraint.Match.Namespaces)
+	}
+	return match
 }
 
 func getNodeIpFromUnstructured(node *unstructured.Unstructured) (string, error) {

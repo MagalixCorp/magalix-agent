@@ -111,7 +111,6 @@ func (ew *EntitiesWatcher) Start(ctx context.Context) error {
 
 	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
 	err := ew.observer.WaitForCacheSync()
-	ew.WaitCacheSync <- struct{}{}
 	if err != nil {
 		logger.Warnf("timeout due to missing permissions with error %s ", err.Error())
 	}
@@ -437,6 +436,7 @@ func (ew *EntitiesWatcher) snapshotWorker(ctx context.Context) {
 	// Send snapshot & resync immediately once
 	ew.sendSnapshot()
 	ew.buildAndSendSnapshotResync()
+	ew.WaitCacheSync <- struct{}{}
 	for {
 		select {
 		case <-ctx.Done():

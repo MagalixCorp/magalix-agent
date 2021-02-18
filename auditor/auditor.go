@@ -88,6 +88,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 		if err != nil {
 			logger.Errorf("couldn't delete constraint %s. %w", info, err)
 		}
+		changed = true
 	}
 
 	if changed {
