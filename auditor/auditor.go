@@ -64,7 +64,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 	for _, constraint := range constraints {
 		shouldUpdate, err := a.constraintsRegistry.ShouldUpdate(constraint)
 		if err != nil {
-			logger.Errorf("couldn't check constraint. %w", err)
+			logger.Errorw("Couldn't check constraint", "error", err)
 			continue
 		}
 
@@ -78,7 +78,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 
 			err = a.constraintsRegistry.RegisterConstraint(constraint)
 			if err != nil {
-				logger.Errorf("couldn't register constraint. %w", err)
+				logger.Errorw("Couldn't register constraint", "error", err)
 			}
 		}
 	}
@@ -86,7 +86,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 	for _, info := range a.constraintsRegistry.FindConstraintsToDelete(constraints) {
 		err := a.deleteConstraint(info)
 		if err != nil {
-			logger.Errorf("couldn't delete constraint %s. %w", info, err)
+			logger.Errorw("couldn't delete constraint", "constraint-info", info, "error", err)
 		}
 		changed = true
 	}
