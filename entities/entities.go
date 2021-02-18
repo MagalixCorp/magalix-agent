@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -62,12 +63,15 @@ type EntitiesWatcher struct {
 	sendDeltas         agent.DeltasHandler
 	sendEntitiesResync agent.EntitiesResyncHandler
 
-	cancelWorker context.CancelFunc
+	cancelWorker  context.CancelFunc
+	opa           *opa.Client
+	WaitCacheSync chan struct{}
 }
 
 func NewEntitiesWatcher(
 	observer_ *kuber.Observer,
 	version int,
+	opaClient *opa.Client,
 ) *EntitiesWatcher {
 	if version >= 18 {
 		watchedResources = append(watchedResources, kuber.IngressClasses)
@@ -78,7 +82,9 @@ func NewEntitiesWatcher(
 		watchers:       map[kuber.GroupVersionResourceKind]kuber.Watcher{},
 		watchersByKind: map[string]kuber.Watcher{},
 
-		deltasQueue: make(chan agent.Delta, deltasBufferChanSize),
+		deltasQueue:   make(chan agent.Delta, deltasBufferChanSize),
+		opa:           opaClient,
+		WaitCacheSync: make(chan struct{}),
 	}
 	return ew
 }
@@ -301,9 +307,15 @@ func (ew *EntitiesWatcher) OnAdd(
 			Timestamp: time.Now(),
 		},
 	)
+
 	if err != nil {
 		logger.Warnw("unable to handle OnAdd delta", "error", err)
 		return
+	}
+
+	_, err = ew.opa.AddData(context.TODO(), obj)
+	if err != nil {
+		logger.Warnw("unable to add delta to opa cache", "error", err)
 	}
 	ew.deltasQueue <- delta
 }
@@ -324,6 +336,12 @@ func (ew *EntitiesWatcher) OnUpdate(
 		logger.Warnw("unable to handle onUpdate delta", "error", err)
 		return
 	}
+
+	_, err = ew.opa.AddData(context.TODO(), newObj)
+	if err != nil {
+		logger.Warnw("unable to update delta to opa cache", "error", err)
+	}
+
 	ew.deltasQueue <- delta
 }
 
@@ -343,6 +361,10 @@ func (ew *EntitiesWatcher) OnDelete(
 	if err != nil {
 		logger.Warnw("unable to handle OnDelete delta", "error", err)
 		return
+	}
+	_, err = ew.opa.RemoveData(context.TODO(), obj)
+	if err != nil {
+		logger.Warnw("unable to remove delta from opa cache", "error", err)
 	}
 	ew.deltasQueue <- delta
 }
@@ -414,6 +436,7 @@ func (ew *EntitiesWatcher) snapshotWorker(ctx context.Context) {
 	// Send snapshot & resync immediately once
 	ew.sendSnapshot()
 	ew.buildAndSendSnapshotResync()
+	ew.WaitCacheSync <- struct{}{}
 	for {
 		select {
 		case <-ctx.Done():

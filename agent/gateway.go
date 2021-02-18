@@ -8,6 +8,7 @@ import (
 type AutomationHandler func(automation *Automation) error
 type RestartHandler func() error
 type ChangeLogLevelHandler func(level *LogLevel) error
+type ConstraintsHandler func(constraints []*Constraint) map[string]error
 
 type Gateway interface {
 	Start(ctx context.Context) error
@@ -18,8 +19,10 @@ type Gateway interface {
 	SendEntitiesDeltas(deltas []*Delta) error
 	SendEntitiesResync(resync *EntitiesResync) error
 	SendAutomationFeedback(feedback *AutomationFeedback) error
+	SendAuditResults(auditResult []*AuditResult) error
 
 	SetAutomationHandler(handler AutomationHandler)
 	SetRestartHandler(handler RestartHandler)
 	SetChangeLogLevelHandler(handler ChangeLogLevelHandler)
+	SetConstraintsHandler(handler ConstraintsHandler)
 }

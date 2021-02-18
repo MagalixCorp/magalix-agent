@@ -23,6 +23,10 @@ func (a *Agent) handleAutomationFeedback(feedback *AutomationFeedback) error {
 	return a.Gateway.SendAutomationFeedback(feedback)
 }
 
+func (a *Agent) handleAuditResult(auditResult []*AuditResult) error {
+	return a.Gateway.SendAuditResults(auditResult)
+}
+
 func (a *Agent) handleRestart() error {
 	go func() {
 		logger.Info("Received restart. Stopping workers.")

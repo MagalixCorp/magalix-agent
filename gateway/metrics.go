@@ -12,23 +12,23 @@ import (
 const metricsBatchMaxSize = 1000
 
 func (g *MagalixGateway) SendMetrics(metrics []*agent.Metric) error {
-	noOfBatches := int(math.Ceil(float64(len(metrics))/float64(metricsBatchMaxSize)))
+	noOfBatches := int(math.Ceil(float64(len(metrics)) / float64(metricsBatchMaxSize)))
 	lastBatchSize := len(metrics) % metricsBatchMaxSize
 	for i := 0; i < noOfBatches; i++ {
 		start := i * metricsBatchMaxSize
 		var end int
-		if i == noOfBatches- 1 && lastBatchSize > 0 {
+		if i == noOfBatches-1 && lastBatchSize > 0 {
 			end = start + lastBatchSize
 		} else {
 			end = start + metricsBatchMaxSize
 		}
-		g.sendMetricsBatch(g.gwClient, metrics[start:end])
+		g.sendMetricsBatch(metrics[start:end])
 	}
 	return nil
 }
 
 // SendMetrics bulk send metrics
-func (g *MagalixGateway) sendMetricsBatch(c *client.Client, metrics []*agent.Metric) {
+func (g *MagalixGateway) sendMetricsBatch(metrics []*agent.Metric) {
 	var packet interface{}
 	var packetKind proto.PacketKind
 
@@ -48,12 +48,10 @@ func (g *MagalixGateway) sendMetricsBatch(c *client.Client, metrics []*agent.Met
 			PodName:        metric.PodName,
 			AdditionalTags: metric.AdditionalTags,
 		})
-
 	}
 	packet = req
 	packetKind = proto.PacketKindMetricsStoreV2Request
-
-	c.Pipe(client.Package{
+	g.gwClient.Pipe(client.Package{
 		Kind:        packetKind,
 		ExpiryTime:  utils.After(2 * time.Hour),
 		ExpiryCount: 100,

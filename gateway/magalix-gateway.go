@@ -3,12 +3,13 @@ package gateway
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"github.com/MagalixCorp/magalix-agent/v2/client"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"go.uber.org/zap/zapcore"
-	"time"
 )
 
 type MagalixGateway struct {
@@ -36,6 +37,7 @@ type MagalixGateway struct {
 	connectedChan    chan bool
 	cancelWorkers    context.CancelFunc
 	submitAutomation agent.AutomationHandler
+	addConstraints   agent.ConstraintsHandler
 	triggerRestart   agent.RestartHandler
 	changeLogLevel   agent.ChangeLogLevelHandler
 }
