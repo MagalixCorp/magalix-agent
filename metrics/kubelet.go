@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
 	"math"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
 
 	"github.com/MagalixTechnologies/alltogether-go"
 	"github.com/MagalixTechnologies/core/logger"

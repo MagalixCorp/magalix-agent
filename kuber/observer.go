@@ -8,7 +8,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/labels"
 
-	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixCorp/magalix-agent/v3/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

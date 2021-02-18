@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MagalixCorp/magalix-agent/v2/admission/certificate"
-	"github.com/MagalixCorp/magalix-agent/v2/auditor/target"
-	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v3/admission/certificate"
+	"github.com/MagalixCorp/magalix-agent/v3/auditor/target"
+	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"golang.org/x/sync/errgroup"

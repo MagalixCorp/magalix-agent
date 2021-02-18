@@ -1,8 +1,9 @@
-module github.com/MagalixCorp/magalix-agent/v2
+module github.com/MagalixCorp/magalix-agent/v3
 
 go 1.13
 
 require (
+	github.com/MagalixCorp/magalix-agent/v2 v2.9.0
 	github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759
 	github.com/MagalixTechnologies/channel v1.1.0
 	github.com/MagalixTechnologies/core/logger v1.0.3

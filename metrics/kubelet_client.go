@@ -14,8 +14,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 
-	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixCorp/magalix-agent/v3/kuber"
+	"github.com/MagalixCorp/magalix-agent/v3/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

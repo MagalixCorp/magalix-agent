@@ -1,8 +1,8 @@
 package gateway
 
 import (
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
 	"github.com/MagalixTechnologies/core/logger"
 )
 
@@ -19,7 +19,7 @@ func (g *MagalixGateway) SetChangeLogLevelHandler(handler agent.ChangeLogLevelHa
 		}
 
 		err := g.changeLogLevel(&agent.LogLevel{
-			Level:logLevel.Level,
+			Level: logLevel.Level,
 		})
 
 		return nil, err

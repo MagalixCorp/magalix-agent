@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	corev1 "k8s.io/api/core/v1"
 )
 

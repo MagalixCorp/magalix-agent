@@ -3,16 +3,16 @@ package client
 import (
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
+	"github.com/MagalixCorp/magalix-agent/v3/utils"
 )
 
 const (
-	logBatchSize = 5
+	logBatchSize    = 5
 	logExpiryPeriod = 10 * time.Minute
-	logExpiryCount = 2
-	logPriority = 9
-	logRetryCount = 4
+	logExpiryCount  = 2
+	logPriority     = 9
+	logRetryCount   = 4
 )
 
 func (client *Client) Write(p []byte) (n int, err error) {
