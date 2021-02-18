@@ -3,10 +3,11 @@ package metrics
 import (
 	"context"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
-	"github.com/MagalixCorp/magalix-agent/v2/kuber"
-	"github.com/MagalixTechnologies/core/logger"
 	"time"
+
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/kuber"
+	"github.com/MagalixTechnologies/core/logger"
 )
 
 type Metrics struct {
@@ -87,4 +88,3 @@ func (m *Metrics) Stop() error {
 	m.cancelWorker()
 	return nil
 }
-

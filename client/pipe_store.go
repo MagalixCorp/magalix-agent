@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
 )
 
 // Package structure used to send packages over the channel

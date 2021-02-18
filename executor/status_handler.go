@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixTechnologies/core/logger"
 
 	kv1 "k8s.io/api/core/v1"
@@ -115,30 +115,30 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 
 	}
 
-		// get the current running replicaset
-		for _, replica := range replicasets.Items {
+	// get the current running replicaset
+	for _, replica := range replicasets.Items {
 
-			replicaRevision, ok := replica.Annotations["deployment.kubernetes.io/revision"]
+		replicaRevision, ok := replica.Annotations["deployment.kubernetes.io/revision"]
 
-			// can't get replicaset revision
-			if !ok {
-				return "", 0, err
-			}
-			deploymentRevision, ok := deployment.Annotations["deployment.kubernetes.io/revision"]
-
-			// can't get deployment revision
-			if !ok {
-				return "", 0, err
-			}
-
-			// get the current replicaset with the same revision of the deployment
-			if replicaRevision == deploymentRevision {
-				logger.Debugw("deployment revision: " + deploymentRevision + "& replicaset revision: " +  replicaRevision , "& replicaset revision: ", replicaRevision)
-				replicasetName = replica.Name
-				targetPods = *replica.Spec.Replicas
-				break
-			}
+		// can't get replicaset revision
+		if !ok {
+			return "", 0, err
 		}
+		deploymentRevision, ok := deployment.Annotations["deployment.kubernetes.io/revision"]
+
+		// can't get deployment revision
+		if !ok {
+			return "", 0, err
+		}
+
+		// get the current replicaset with the same revision of the deployment
+		if replicaRevision == deploymentRevision {
+			logger.Debugw("deployment revision: "+deploymentRevision+"& replicaset revision: "+replicaRevision, "& replicaset revision: ", replicaRevision)
+			replicasetName = replica.Name
+			targetPods = *replica.Spec.Replicas
+			break
+		}
+	}
 
 	return replicasetName, targetPods, nil
 }

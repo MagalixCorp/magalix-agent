@@ -1,4 +1,4 @@
-module github.com/MagalixCorp/magalix-agent/v2
+module github.com/MagalixCorp/magalix-agent/v3
 
 go 1.13
 
@@ -13,6 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/reconquest/sign-go v0.0.0-20181113092801-8d4f8c5854ae
 	go.uber.org/zap v1.15.0
+	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6 // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	k8s.io/api v0.18.15
 	k8s.io/apiextensions-apiserver v0.18.15

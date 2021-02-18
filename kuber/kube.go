@@ -13,7 +13,7 @@ import (
 
 	"k8s.io/client-go/discovery"
 
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
 	"github.com/MagalixTechnologies/core/logger"
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/apps/v1"

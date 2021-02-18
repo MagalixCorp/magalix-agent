@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	opaTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"

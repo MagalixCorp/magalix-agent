@@ -4,10 +4,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
-	"github.com/MagalixCorp/magalix-agent/v2/client"
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
-	"github.com/MagalixCorp/magalix-agent/v2/utils"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/client"
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
+	"github.com/MagalixCorp/magalix-agent/v3/utils"
 	"github.com/MagalixTechnologies/core/logger"
 )
 

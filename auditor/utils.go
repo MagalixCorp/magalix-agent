@@ -3,8 +3,8 @@ package auditor
 import (
 	"fmt"
 
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
-	"github.com/MagalixCorp/magalix-agent/v2/auditor/target"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/auditor/target"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
