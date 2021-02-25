@@ -56,7 +56,7 @@ func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler)
 		if errMap != nil && len(errMap) > 0 {
 			// TODO: Send errors and ids in constraint response
 			for id, err := range errMap {
-				logger.Errorf("Couldn't add constraint", "error", err, "constraint-id", id)
+				logger.Errorw("Couldn't add constraint", "error", err, "constraint-id", id)
 			}
 		}
 
@@ -99,7 +99,6 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 		}
 
 		items = append(items, &item)
-
 	}
 	logger.Infof("Sending  %d audit results", len(auditResult))
 	packet := proto.PacketAuditResultRequest{

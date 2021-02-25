@@ -33,10 +33,16 @@ func (i *ConstrainInfo) ToOpaConstraint() *unstructured.Unstructured {
 	return &constraint
 }
 
-type ConstraintRegistry map[string]*ConstrainInfo
+type ConstraintRegistry struct {
+	constraintsInfo map[string]*ConstrainInfo
+	templatesInfo   map[string]int
+}
 
 func NewConstraintRegistry() ConstraintRegistry {
-	return make(map[string]*ConstrainInfo)
+	return ConstraintRegistry{
+		constraintsInfo: make(map[string]*ConstrainInfo),
+		templatesInfo:   make(map[string]int),
+	}
 }
 
 func (r ConstraintRegistry) RegisterConstraint(c *agent.Constraint) error {
@@ -44,11 +50,12 @@ func (r ConstraintRegistry) RegisterConstraint(c *agent.Constraint) error {
 		return fmt.Errorf("trying to register a nil constraint")
 	}
 
-	r[c.Id.String()] = &ConstrainInfo{
+	r.constraintsInfo[c.Id.String()] = &ConstrainInfo{
 		Id:         c.Id.String(),
 		TemplateId: c.TemplateId.String(),
 		UpdatedAt:  c.UpdatedAt,
 	}
+	r.templatesInfo[c.TemplateId.String()]++
 
 	return nil
 }
@@ -58,7 +65,8 @@ func (r ConstraintRegistry) UnregisterConstraint(c *ConstrainInfo) error {
 		return fmt.Errorf("trying to unregister a nil constraint")
 	}
 
-	delete(r, c.Id)
+	delete(r.constraintsInfo, c.Id)
+	r.templatesInfo[c.TemplateId]--
 
 	return nil
 }
@@ -68,7 +76,7 @@ func (r ConstraintRegistry) CheckConstraint(c *agent.Constraint) (*ConstrainInfo
 		return nil, false, fmt.Errorf("trying to check a nil constraint")
 	}
 
-	info, found := r[c.Id.String()]
+	info, found := r.constraintsInfo[c.Id.String()]
 	return info, found, nil
 }
 
@@ -85,6 +93,18 @@ func (r ConstraintRegistry) ShouldUpdate(c *agent.Constraint) (bool, error) {
 	return false, nil
 }
 
+func (r ConstraintRegistry) ShouldDeleteTemplate(templateId string) (bool, error) {
+	count, ok := r.templatesInfo[templateId]
+	if !ok {
+		return false, fmt.Errorf("Tempalate: %s not found in agent cache", templateId)
+	}
+	return count == 0, nil
+}
+
+func (r ConstraintRegistry) UnregisterTemplate(tempateId string) {
+	delete(r.templatesInfo, tempateId)
+}
+
 func (r ConstraintRegistry) FindConstraintsToDelete(constraints []*agent.Constraint) []*ConstrainInfo {
 	toDelete := make([]*ConstrainInfo, 0, len(constraints))
 	constraintsMap := make(map[string]*agent.Constraint)
@@ -92,7 +112,7 @@ func (r ConstraintRegistry) FindConstraintsToDelete(constraints []*agent.Constra
 		constraintsMap[c.Id.String()] = c
 	}
 
-	for id, info := range r {
+	for id, info := range r.constraintsInfo {
 		if _, found := constraintsMap[id]; !found {
 			toDelete = append(toDelete, info)
 		}
