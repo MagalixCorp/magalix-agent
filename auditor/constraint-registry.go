@@ -50,12 +50,15 @@ func (r ConstraintRegistry) RegisterConstraint(c *agent.Constraint) error {
 		return fmt.Errorf("trying to register a nil constraint")
 	}
 
+	_, exists := r.constraintsInfo[c.Id.String()]
 	r.constraintsInfo[c.Id.String()] = &ConstrainInfo{
 		Id:         c.Id.String(),
 		TemplateId: c.TemplateId.String(),
 		UpdatedAt:  c.UpdatedAt,
 	}
-	r.templatesInfo[c.TemplateId.String()]++
+	if !exists {
+		r.templatesInfo[c.TemplateId.String()]++
+	}
 
 	return nil
 }
