@@ -34,7 +34,7 @@ const (
 type Auditor struct {
 	opa                 *opa.Client
 	parentsStore        *kuber.ParentsStore
-	constraintsRegistry ConstraintRegistry
+	constraintsRegistry *ConstraintRegistry
 	sendAuditResult     agent.AuditResultHandler
 
 	updated               chan struct{}
@@ -88,7 +88,6 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 		if err != nil {
 			logger.Errorw("couldn't delete constraint", "constraint-info", info, "error", err)
 		}
-		changed = true
 	}
 
 	if changed {
@@ -121,34 +120,40 @@ func (a *Auditor) addConstraint(constraint *agent.Constraint) error {
 func (a *Auditor) deleteConstraint(info *ConstrainInfo) error {
 	timedCtx, cancel := context.WithTimeout(a.ctx, handleConstraintTimeout)
 	defer cancel()
-
 	constraint := info.ToOpaConstraint()
-	template := info.ToOpaTemplate()
-	_, err := a.opa.RemoveTemplate(timedCtx, template)
-	if err != nil {
-		return fmt.Errorf("couldn't remove template. %w", err)
-	}
-	_, err = a.opa.RemoveConstraint(timedCtx, constraint)
+	_, err := a.opa.RemoveConstraint(timedCtx, constraint)
 	if err != nil {
 		return fmt.Errorf("couldn't remove constraint. %w", err)
 	}
-
 	err = a.constraintsRegistry.UnregisterConstraint(info)
 	if err != nil {
 		return fmt.Errorf("couldn't unregister constraint. %w", err)
+	}
+	shouldDelete, err := a.constraintsRegistry.ShouldDeleteTemplate(info.TemplateId)
+	if err != nil {
+		return err
+	}
+	if shouldDelete {
+		template := info.ToOpaTemplate()
+		_, err = a.opa.RemoveTemplate(timedCtx, template)
+		if err != nil {
+			return fmt.Errorf("couldn't remove template. %w", err)
+		}
+		a.constraintsRegistry.UnregisterTemplate(info.TemplateId)
 	}
 
 	return nil
 }
 
 func (a *Auditor) audit(ctx context.Context) ([]*opaTypes.Result, error) {
-
+	logger.Info("Audit started")
 	resp, err := a.opa.Audit(ctx)
 	if err != nil {
 		logger.Errorw("Error while performing audit", "error", err)
 		return nil, err
 	}
 	results := resp.Results()
+	logger.Infof("Audit finished with %d audit results", len(results))
 
 	return results, nil
 }
