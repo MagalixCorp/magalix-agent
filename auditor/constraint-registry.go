@@ -38,14 +38,14 @@ type ConstraintRegistry struct {
 	templatesInfo   map[string]int
 }
 
-func NewConstraintRegistry() ConstraintRegistry {
-	return ConstraintRegistry{
+func NewConstraintRegistry() *ConstraintRegistry {
+	return &ConstraintRegistry{
 		constraintsInfo: make(map[string]*ConstrainInfo),
 		templatesInfo:   make(map[string]int),
 	}
 }
 
-func (r ConstraintRegistry) RegisterConstraint(c *agent.Constraint) error {
+func (r *ConstraintRegistry) RegisterConstraint(c *agent.Constraint) error {
 	if c == nil {
 		return fmt.Errorf("trying to register a nil constraint")
 	}
@@ -63,7 +63,7 @@ func (r ConstraintRegistry) RegisterConstraint(c *agent.Constraint) error {
 	return nil
 }
 
-func (r ConstraintRegistry) UnregisterConstraint(c *ConstrainInfo) error {
+func (r *ConstraintRegistry) UnregisterConstraint(c *ConstrainInfo) error {
 	if c == nil {
 		return fmt.Errorf("trying to unregister a nil constraint")
 	}
@@ -74,7 +74,7 @@ func (r ConstraintRegistry) UnregisterConstraint(c *ConstrainInfo) error {
 	return nil
 }
 
-func (r ConstraintRegistry) CheckConstraint(c *agent.Constraint) (*ConstrainInfo, bool, error) {
+func (r *ConstraintRegistry) CheckConstraint(c *agent.Constraint) (*ConstrainInfo, bool, error) {
 	if c == nil {
 		return nil, false, fmt.Errorf("trying to check a nil constraint")
 	}
@@ -83,7 +83,7 @@ func (r ConstraintRegistry) CheckConstraint(c *agent.Constraint) (*ConstrainInfo
 	return info, found, nil
 }
 
-func (r ConstraintRegistry) ShouldUpdate(c *agent.Constraint) (bool, error) {
+func (r *ConstraintRegistry) ShouldUpdate(c *agent.Constraint) (bool, error) {
 	info, found, err := r.CheckConstraint(c)
 	if err != nil {
 		return false, err
@@ -96,7 +96,7 @@ func (r ConstraintRegistry) ShouldUpdate(c *agent.Constraint) (bool, error) {
 	return false, nil
 }
 
-func (r ConstraintRegistry) ShouldDeleteTemplate(templateId string) (bool, error) {
+func (r *ConstraintRegistry) ShouldDeleteTemplate(templateId string) (bool, error) {
 	count, ok := r.templatesInfo[templateId]
 	if !ok {
 		return false, fmt.Errorf("Tempalate: %s not found in agent cache", templateId)
@@ -104,11 +104,11 @@ func (r ConstraintRegistry) ShouldDeleteTemplate(templateId string) (bool, error
 	return count == 0, nil
 }
 
-func (r ConstraintRegistry) UnregisterTemplate(tempateId string) {
+func (r *ConstraintRegistry) UnregisterTemplate(tempateId string) {
 	delete(r.templatesInfo, tempateId)
 }
 
-func (r ConstraintRegistry) FindConstraintsToDelete(constraints []*agent.Constraint) []*ConstrainInfo {
+func (r *ConstraintRegistry) FindConstraintsToDelete(constraints []*agent.Constraint) []*ConstrainInfo {
 	toDelete := make([]*ConstrainInfo, 0, len(constraints))
 	constraintsMap := make(map[string]*agent.Constraint)
 	for _, c := range constraints {

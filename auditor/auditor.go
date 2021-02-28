@@ -34,7 +34,7 @@ const (
 type Auditor struct {
 	opa                 *opa.Client
 	parentsStore        *kuber.ParentsStore
-	constraintsRegistry ConstraintRegistry
+	constraintsRegistry *ConstraintRegistry
 	sendAuditResult     agent.AuditResultHandler
 
 	updated               chan struct{}
