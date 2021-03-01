@@ -64,6 +64,23 @@ func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler)
 	})
 }
 
+func (g *MagalixGateway) SetAuditCommandHandler(handler agent.AuditCommandHandler) {
+	if handler == nil {
+		panic("audi command handler is nil")
+	}
+	g.handleAuditCommand = handler
+	g.gwClient.AddListener(proto.PacketKindAuditCommand, func(in []byte) ([]byte, error) {
+		// Packet is empty so no need to decode
+
+		err := g.handleAuditCommand()
+		if err != nil {
+			logger.Errorw("Couldn't run audit", "error", err)
+		}
+
+		return nil, err
+	})
+}
+
 func (g *MagalixGateway) SendAuditResults(auditResults []*agent.AuditResult) error {
 	noOfBatches := int(math.Ceil(float64(len(auditResults)) / float64(auditResultsBatchMaxSize)))
 	lastBatchSize := len(auditResults) % auditResultsBatchMaxSize

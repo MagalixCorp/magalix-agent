@@ -53,5 +53,6 @@ type Auditor interface {
 	Stop() error
 
 	HandleConstraints(constraint []*Constraint) map[string]error
+	HandleAuditCommand() error
 	SetAuditResultHandler(handler AuditResultHandler)
 }
