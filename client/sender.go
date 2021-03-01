@@ -3,7 +3,7 @@ package client
 import (
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/proto"
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/pkg/errors"

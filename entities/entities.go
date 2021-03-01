@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
-	"github.com/MagalixCorp/magalix-agent/v2/kuber"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/MagalixTechnologies/core/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"

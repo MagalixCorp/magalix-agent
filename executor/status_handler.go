@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixTechnologies/core/logger"
 
 	kv1 "k8s.io/api/core/v1"

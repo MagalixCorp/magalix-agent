@@ -3,8 +3,8 @@ package gateway
 import (
 	"context"
 	"errors"
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
-	"github.com/MagalixCorp/magalix-agent/v2/client"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/client"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"go.uber.org/zap/zapcore"

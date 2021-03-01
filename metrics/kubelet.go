@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/v2/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"math"
 	"runtime/debug"
 	"strings"
