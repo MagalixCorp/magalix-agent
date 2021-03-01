@@ -25,8 +25,10 @@ const (
 	PacketKindRawStoreRequest PacketKind = "raw/store"
 
 	PacketKindLogLevel           PacketKind = "loglevel"
+
 	PacketKindConstraintsRequest PacketKind = "audit/constraints"
 	PacketKindAuditResultRequest PacketKind = "audit/result"
+	PacketKindAuditCommand PacketKind = "audit/audit_command"
 )
 
 const (

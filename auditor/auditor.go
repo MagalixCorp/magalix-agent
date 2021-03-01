@@ -37,7 +37,7 @@ type Auditor struct {
 	constraintsRegistry ConstraintRegistry
 	sendAuditResult     agent.AuditResultHandler
 
-	updated               chan struct{}
+	auditEvents           chan struct{}
 	ctx                   context.Context
 	cancelWorker          context.CancelFunc
 	waitEntitiesCacheSync chan struct{}
@@ -48,7 +48,7 @@ func NewAuditor(opaClient *opa.Client, parentsStore *kuber.ParentsStore, waitEnt
 		opa:                   opaClient,
 		parentsStore:          parentsStore,
 		constraintsRegistry:   NewConstraintRegistry(),
-		updated:               make(chan struct{}),
+		auditEvents:           make(chan struct{}),
 		waitEntitiesCacheSync: waitEntitiesCacheSync,
 	}
 }
@@ -58,7 +58,6 @@ func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
 }
 
 func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]error {
-
 	errorsMap := make(map[string]error, 0)
 	changed := false
 	for _, constraint := range constraints {
@@ -92,10 +91,18 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 	}
 
 	if changed {
-		a.updated <- struct{}{}
+		logger.Info("Detected policies change. firing audit event")
+		a.auditEvents <- struct{}{}
 	}
 
 	return errorsMap
+}
+
+func (a *Auditor) HandleAuditCommand() error {
+	logger.Info("Received audit command. firing audit event")
+	a.auditEvents <- struct{}{}
+	
+	return nil
 }
 
 func (a *Auditor) addConstraint(constraint *agent.Constraint) error {
@@ -169,7 +176,7 @@ func (a *Auditor) Start(ctx context.Context) error {
 		select {
 		case <-cancelCtx.Done():
 			return nil
-		case <-a.updated:
+		case <-a.auditEvents:
 			shouldAudit = true
 		case <-a.waitEntitiesCacheSync:
 			shouldAudit = true

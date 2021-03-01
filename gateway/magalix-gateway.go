@@ -33,13 +33,14 @@ type MagalixGateway struct {
 
 	ShouldSendLogs bool
 
-	gwClient         *client.Client
-	connectedChan    chan bool
-	cancelWorkers    context.CancelFunc
-	submitAutomation agent.AutomationHandler
-	addConstraints   agent.ConstraintsHandler
-	triggerRestart   agent.RestartHandler
-	changeLogLevel   agent.ChangeLogLevelHandler
+	gwClient           *client.Client
+	connectedChan      chan bool
+	cancelWorkers      context.CancelFunc
+	submitAutomation   agent.AutomationHandler
+	addConstraints     agent.ConstraintsHandler
+	handleAuditCommand agent.AuditCommandHandler
+	triggerRestart     agent.RestartHandler
+	changeLogLevel     agent.ChangeLogLevelHandler
 }
 
 func New(
