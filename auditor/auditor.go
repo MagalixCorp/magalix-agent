@@ -100,7 +100,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 func (a *Auditor) HandleAuditCommand() error {
 	logger.Info("Received audit command. firing audit event")
 	a.auditEvents <- struct{}{}
-	
+
 	return nil
 }
 
@@ -236,6 +236,23 @@ func (a *Auditor) convertGkAuditResultToMgxAuditResult(in []*opaTypes.Result) ([
 			return nil, err
 		}
 
+		// Get resource identity info based on entity type
+		namespace := resource.GetNamespace()
+		kind := resource.GetKind()
+		name := resource.GetName()
+		parent, found := a.parentsStore.GetParents(namespace, kind, name)
+		var parentName, parentKind string
+		if found && parent != nil {
+			// Ignore audit result for pod with parents
+			if kind == "Pod" {
+				continue
+			}
+			// RootParent func should move outside kuber
+			topParent := kuber.RootParent(parent)
+			parentName = topParent.Name
+			parentKind = topParent.Kind
+		}
+
 		templateId, err := getUuidFromAnnotation(gkRes.Constraint, AnnotationKeyTemplateId)
 		if err != nil {
 			return nil, fmt.Errorf("couldn't get template id from constraint annotations. %w", err)
@@ -255,19 +272,6 @@ func (a *Auditor) convertGkAuditResultToMgxAuditResult(in []*opaTypes.Result) ([
 
 		hasViolation := gkRes.EnforcementAction == gateKeeperActionDeny
 		msg := gkRes.Msg
-
-		// Get resource identity info based on entity type
-		namespace := resource.GetNamespace()
-		kind := resource.GetKind()
-		name := resource.GetName()
-		parent, found := a.parentsStore.GetParents(namespace, kind, name)
-		var parentName, parentKind string
-		if found && parent != nil {
-			// RootParent func should move outside kuber
-			topParent := kuber.RootParent(parent)
-			parentName = topParent.Name
-			parentKind = topParent.Kind
-		}
 
 		var nodeIp string
 		if kind == kuber.Nodes.Kind {
