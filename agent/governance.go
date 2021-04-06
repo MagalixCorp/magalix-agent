@@ -3,8 +3,6 @@ package agent
 import (
 	"context"
 	"time"
-
-	"github.com/MagalixTechnologies/uuid-go"
 )
 
 type Match struct {
@@ -13,10 +11,10 @@ type Match struct {
 }
 
 type Constraint struct {
-	Id         uuid.UUID
-	TemplateId uuid.UUID
-	AccountId  uuid.UUID
-	ClusterId  uuid.UUID
+	Id         string
+	TemplateId string
+	AccountId  string
+	ClusterId  string
 
 	Name         string
 	TemplateName string
@@ -25,16 +23,26 @@ type Constraint struct {
 	Code         string
 
 	UpdatedAt  time.Time
-	CategoryId uuid.UUID
+	CategoryId string
 	Severity   string
 }
 
-type AuditResult struct {
-	TemplateID   uuid.UUID
-	ConstraintID uuid.UUID
+type AuditResultStatus string
 
-	HasViolation bool
-	Msg          string
+const (
+	AuditResultStatusViolating = "violation"
+	AuditResultStatusCompliant = "compliance"
+	AuditResultStatusIgnored   = "ignored"
+)
+
+type AuditResult struct {
+	TemplateID   *string
+	ConstraintID *string
+	CategoryID   *string
+	Severity     *string
+
+	Status AuditResultStatus
+	Msg    *string
 
 	EntityName    *string
 	EntityKind    *string
@@ -42,8 +50,7 @@ type AuditResult struct {
 	ParentName    *string
 	ParentKind    *string
 	NodeIP        *string
-	CategoryID    uuid.UUID
-	Severity      string
+	EntitySpec    map[string]interface{}
 }
 
 type AuditResultHandler func(auditResult []*AuditResult) error

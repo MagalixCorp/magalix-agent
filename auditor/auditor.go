@@ -2,55 +2,55 @@ package auditor
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/entities"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/MagalixTechnologies/core/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	opaTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	opa "github.com/MagalixCorp/magalix-agent/v3/auditor/opa-auditor"
 )
 
 const (
-	auditInterval           = 24 * time.Hour
-	handleConstraintTimeout = 10 * time.Second
-	gateKeeperActionDeny    = "deny"
-
-	CrdKindConstraintTemplate        = "ConstraintTemplate"
-	CrdAPIVersionGkTemplateV1Beta1   = "templates.gatekeeper.sh/v1beta1"
-	CrdAPIVersionGkConstraintV1Beta1 = "constraints.gatekeeper.sh/v1beta1"
-
-	AnnotationKeyTemplateId           = "mgx-template-id"
-	AnnotationKeyTemplateName         = "mgx-template-name"
-	AnnotationKeyConstraintId         = "mgx-constraint-id"
-	AnnotationKeyConstraintName       = "mgx-constraint-name"
-	AnnotationKeyConstraintCategoryId = "mgx-constraint-category-id"
-	AnnotationKeyConstraintSeverity   = "mgx-constraint-category-severity"
+	auditInterval = 24 * time.Hour
 )
 
-type Auditor struct {
-	opa                 *opa.Client
-	parentsStore        *kuber.ParentsStore
-	constraintsRegistry *ConstraintRegistry
-	sendAuditResult     agent.AuditResultHandler
+type AuditEventType string
 
-	auditEvents           chan struct{}
-	ctx                   context.Context
-	cancelWorker          context.CancelFunc
-	waitEntitiesCacheSync chan struct{}
+const (
+	AuditEventTypeCommand        AuditEventType = "command"
+	AuditEventTypePoliciesChange AuditEventType = "policies-change"
+	AuditEventTypeResourceUpdate AuditEventType = "resource-update"
+	AuditEventTypeResourceDelete AuditEventType = "resource-delete"
+	AuditEventTypeResourcesSync  AuditEventType = "resources-sync"
+	AuditEventTypeAuditTimer     AuditEventType = "audit-timer"
+)
+
+type AuditEvent struct {
+	Type AuditEventType
+	Data interface{}
 }
 
-func NewAuditor(opaClient *opa.Client, parentsStore *kuber.ParentsStore, waitEntitiesCacheSync chan struct{}) *Auditor {
-	return &Auditor{
-		opa:                   opaClient,
-		parentsStore:          parentsStore,
-		constraintsRegistry:   NewConstraintRegistry(),
-		auditEvents:           make(chan struct{}),
-		waitEntitiesCacheSync: waitEntitiesCacheSync,
+type Auditor struct {
+	opa             *opa.OpaAuditor
+	entitiesWatcher *entities.EntitiesWatcher
+	sendAuditResult agent.AuditResultHandler
+
+	auditEvents  chan AuditEvent
+	ctx          context.Context
+	cancelWorker context.CancelFunc
+}
+
+func NewAuditor(parentsStore *kuber.ParentsStore, entitiesWatcher *entities.EntitiesWatcher) *Auditor {
+	a := &Auditor{
+		opa:             opa.New(parentsStore),
+		auditEvents:     make(chan AuditEvent),
+		entitiesWatcher: entitiesWatcher,
 	}
+	a.entitiesWatcher.AddResourceEventsHandler(a)
+	return a
 }
 
 func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
@@ -58,111 +58,75 @@ func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
 }
 
 func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]error {
-	errorsMap := make(map[string]error, 0)
-	changed := false
-	for _, constraint := range constraints {
-		shouldUpdate, err := a.constraintsRegistry.ShouldUpdate(constraint)
-		if err != nil {
-			logger.Errorw("Couldn't check constraint", "error", err)
-			continue
-		}
+	updated, errs := a.opa.UpdateConstraints(constraints)
 
-		if shouldUpdate {
-			err := a.addConstraint(constraint)
-			if err != nil {
-				errorsMap[constraint.Id.String()] = fmt.Errorf("couldn't add opa template. %w", err)
-			}
-
-			changed = true
-
-			err = a.constraintsRegistry.RegisterConstraint(constraint)
-			if err != nil {
-				logger.Errorw("Couldn't register constraint", "error", err)
-			}
-		}
-	}
-
-	for _, info := range a.constraintsRegistry.FindConstraintsToDelete(constraints) {
-		err := a.deleteConstraint(info)
-		if err != nil {
-			logger.Errorw("couldn't delete constraint", "constraint-info", info, "error", err)
-		}
-	}
-
-	if changed {
+	if len(updated) > 0 {
 		logger.Info("Detected policies change. firing audit event")
-		a.auditEvents <- struct{}{}
+		a.auditEvents <- AuditEvent{
+			Type: AuditEventTypePoliciesChange,
+			Data: updated,
+		}
 	}
 
-	return errorsMap
+	return errs
 }
 
 func (a *Auditor) HandleAuditCommand() error {
 	logger.Info("Received audit command. firing audit event")
-	a.auditEvents <- struct{}{}
+	a.auditEvents <- AuditEvent{Type: AuditEventTypeCommand}
 
 	return nil
 }
 
-func (a *Auditor) addConstraint(constraint *agent.Constraint) error {
-	timedCtx, cancel := context.WithTimeout(a.ctx, handleConstraintTimeout)
-	defer cancel()
-
-	opaTemplate, opaConstraint, err := convertMgxConstraintToOpaTemplateAndConstraint(constraint)
-	if err != nil {
-		return fmt.Errorf("couldn't convert mgx constraint to opa template and constraint. %w", err)
+func (a *Auditor) OnResourceAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
+	a.auditEvents <- AuditEvent{
+		Type: AuditEventTypeResourceUpdate,
+		Data: &obj,
 	}
-	_, err = a.opa.AddTemplate(timedCtx, opaTemplate)
-	if err != nil {
-		return fmt.Errorf("couldn't add opa template. %w", err)
-	}
-	_, err = a.opa.AddConstraint(timedCtx, opaConstraint)
-	if err != nil {
-		return fmt.Errorf("couldn't add opa constraint. %w", err)
-	}
-
-	return nil
 }
 
-func (a *Auditor) deleteConstraint(info *ConstrainInfo) error {
-	timedCtx, cancel := context.WithTimeout(a.ctx, handleConstraintTimeout)
-	defer cancel()
-	constraint := info.ToOpaConstraint()
-	_, err := a.opa.RemoveConstraint(timedCtx, constraint)
-	if err != nil {
-		return fmt.Errorf("couldn't remove constraint. %w", err)
+func (a *Auditor) OnResourceUpdate(gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
+	a.auditEvents <- AuditEvent{
+		Type: AuditEventTypeResourceUpdate,
+		Data: &newObj,
 	}
-	err = a.constraintsRegistry.UnregisterConstraint(info)
-	if err != nil {
-		return fmt.Errorf("couldn't unregister constraint. %w", err)
+}
+
+func (a *Auditor) OnResourceDelete(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
+	a.auditEvents <- AuditEvent{
+		Type: AuditEventTypeResourceDelete,
+		Data: &obj,
 	}
-	shouldDelete, err := a.constraintsRegistry.ShouldDeleteTemplate(info.TemplateId)
-	if err != nil {
-		return err
+}
+
+func (a *Auditor) OnCacheSync() {
+	a.auditEvents <- AuditEvent{Type: AuditEventTypeResourcesSync}
+}
+
+func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintIds []string,  useCache bool) {
+	results, errs := a.opa.Audit(resource, constraintIds, useCache)
+	if len(errs) > 0 {
+		logger.Errorw("errors while auditing resource", "errors-count", len(errs), "errors", errs)
 	}
-	if shouldDelete {
-		template := info.ToOpaTemplate()
-		_, err = a.opa.RemoveTemplate(timedCtx, template)
+
+	if len(results) > 0 {
+		err := a.sendAuditResult(results)
 		if err != nil {
-			return fmt.Errorf("couldn't remove template. %w", err)
+			logger.Errorw("error while sending audit result", "error", err)
 		}
-		a.constraintsRegistry.UnregisterTemplate(info.TemplateId)
 	}
-
-	return nil
 }
 
-func (a *Auditor) audit(ctx context.Context) ([]*opaTypes.Result, error) {
-	logger.Info("Audit started")
-	resp, err := a.opa.Audit(ctx)
+func (a *Auditor) auditAllResources(constraintIds []string, useCache bool) {
+	resourcesByGvrk, err := a.entitiesWatcher.GetAllEntitiesByGvrk()
 	if err != nil {
-		logger.Errorw("Error while performing audit", "error", err)
-		return nil, err
+		logger.Errorw("error while getting all resources", "error", err)
 	}
-	results := resp.Results()
-	logger.Infof("Audit finished with %d audit results", len(results))
-
-	return results, nil
+	for _, resources := range resourcesByGvrk {
+		for _, r := range resources {
+			a.auditResource(&r, constraintIds, useCache)
+		}
+	}
 }
 
 func (a *Auditor) Start(ctx context.Context) error {
@@ -175,32 +139,40 @@ func (a *Auditor) Start(ctx context.Context) error {
 	a.ctx = cancelCtx
 	a.cancelWorker = cancel
 
+	entitiesSynced := false
+
 	auditTicker := time.NewTicker(auditInterval)
 	for {
-		shouldAudit := false
 		select {
 		case <-cancelCtx.Done():
 			return nil
-		case <-a.auditEvents:
-			shouldAudit = true
-		case <-a.waitEntitiesCacheSync:
-			shouldAudit = true
+		case e := <-a.auditEvents:
+			switch e.Type {
+			case AuditEventTypeResourceUpdate:
+				if entitiesSynced {
+					logger.Debugf("Received update resource audit event. Auditing resource")
+					a.auditResource(e.Data.(*unstructured.Unstructured), nil, true)
+				} else {
+					logger.Debug("Received update resource audit event. Ignoring as entities are not synced yet")
+				}
+			case AuditEventTypeResourceDelete:
+				logger.Debugf("Received delete resource audit event")
+				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
+			case AuditEventTypePoliciesChange:
+				updated := e.Data.([]string)
+				a.auditAllResources(updated, false)
+			case AuditEventTypeResourcesSync:
+				entitiesSynced = true
+				fallthrough
+			case AuditEventTypeCommand,
+				AuditEventTypeAuditTimer:
+				logger.Debugf("Received %s audit event. Auditing all resources", e.Type)
+				a.auditAllResources(nil,false)
+			default:
+				logger.Errorw("unsupported event type", "event-type", e.Type)
+			}
 		case <-auditTicker.C:
-			shouldAudit = true
-		}
-
-		if shouldAudit {
-			shouldAudit = false
-
-			results, err := a.audit(cancelCtx)
-			if err != nil {
-				return err
-			}
-
-			err = a.convertAndSendAuditResults(results)
-			if err != nil {
-				logger.Errorw("Error while sending audit results", "error", err)
-			}
+			a.auditEvents <- AuditEvent{Type: AuditEventTypeAuditTimer}
 		}
 	}
 }
@@ -212,93 +184,4 @@ func (a *Auditor) Stop() error {
 
 	a.cancelWorker()
 	return nil
-}
-
-func (a *Auditor) convertAndSendAuditResults(results []*opaTypes.Result) error {
-	mgxRes, err := a.convertGkAuditResultToMgxAuditResult(results)
-	if err != nil {
-		return fmt.Errorf("error while converting opa results to magalix audit results. %w", err)
-	}
-	err = a.sendAuditResult(mgxRes)
-	if err != nil {
-		return fmt.Errorf("error while sending audit results. %w", err)
-	}
-	return nil
-}
-
-func (a *Auditor) convertGkAuditResultToMgxAuditResult(in []*opaTypes.Result) ([]*agent.AuditResult, error) {
-	out := make([]*agent.AuditResult, 0, len(in))
-	for _, gkRes := range in {
-		resource, ok := gkRes.Resource.(*unstructured.Unstructured)
-		if !ok {
-			err := fmt.Errorf("couldn't cast result to unstructred")
-			logger.Errorw("Couldn't get resource from audit result", "error", err)
-			return nil, err
-		}
-
-		// Get resource identity info based on entity type
-		namespace := resource.GetNamespace()
-		kind := resource.GetKind()
-		name := resource.GetName()
-		parent, found := a.parentsStore.GetParents(namespace, kind, name)
-		var parentName, parentKind string
-		if found && parent != nil {
-			// Ignore audit result for pod with parents
-			if kind == "Pod" {
-				continue
-			}
-			// RootParent func should move outside kuber
-			topParent := kuber.RootParent(parent)
-			parentName = topParent.Name
-			parentKind = topParent.Kind
-		}
-
-		templateId, err := getUuidFromAnnotation(gkRes.Constraint, AnnotationKeyTemplateId)
-		if err != nil {
-			return nil, fmt.Errorf("couldn't get template id from constraint annotations. %w", err)
-		}
-		constraintId, err := getUuidFromAnnotation(gkRes.Constraint, AnnotationKeyConstraintId)
-		if err != nil {
-			return nil, fmt.Errorf("couldn't get constraint id from constraint annotations. %w", err)
-		}
-		categoryId, err := getUuidFromAnnotation(gkRes.Constraint, AnnotationKeyConstraintCategoryId)
-		if err != nil {
-			return nil, fmt.Errorf("couldn't get constraint category id from constraint annotations. %w", err)
-		}
-		severity, err := getStringFromAnnotation(gkRes.Constraint, AnnotationKeyConstraintSeverity)
-		if err != nil {
-			return nil, fmt.Errorf("couldn't get constraint severity from constraint annotations. %w", err)
-		}
-
-		hasViolation := gkRes.EnforcementAction == gateKeeperActionDeny
-		msg := gkRes.Msg
-
-		var nodeIp string
-		if kind == kuber.Nodes.Kind {
-			ip, err := getNodeIpFromUnstructured(resource)
-			if err != nil {
-				logger.Errorf("couldn't get node ip. %w", err)
-			} else {
-				nodeIp = ip
-			}
-		}
-
-		mgxRes := agent.AuditResult{
-			TemplateID:    templateId,
-			ConstraintID:  constraintId,
-			HasViolation:  hasViolation,
-			Msg:           msg,
-			EntityName:    &name,
-			EntityKind:    &kind,
-			ParentName:    &parentName,
-			ParentKind:    &parentKind,
-			NamespaceName: &namespace,
-			NodeIP:        &nodeIp,
-			CategoryID:    categoryId,
-			Severity:      severity,
-		}
-		out = append(out, &mgxRes)
-	}
-
-	return out, nil
 }

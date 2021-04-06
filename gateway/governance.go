@@ -103,7 +103,6 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 		item := proto.PacketAuditResultItem{
 			TemplateID:    r.TemplateID,
 			ConstraintID:  r.ConstraintID,
-			HasViolation:  r.HasViolation,
 			Msg:           r.Msg,
 			EntityName:    r.EntityName,
 			EntityKind:    r.EntityKind,
@@ -113,11 +112,21 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 			NodeIP:        r.NodeIP,
 			CategoryID:    r.CategoryID,
 			Severity:      r.Severity,
+			EntitySpec:    r.EntitySpec,
+		}
+
+		switch r.Status {
+		case agent.AuditResultStatusViolating:
+			item.Status = proto.AuditResultStatusViolating
+		case agent.AuditResultStatusCompliant:
+			item.Status = proto.AuditResultStatusCompliant
+		case agent.AuditResultStatusIgnored:
+			item.Status = proto.AuditResultStatusIgnored
 		}
 
 		items = append(items, &item)
 	}
-	logger.Infof("Sending  %d audit results", len(auditResult))
+	logger.Infof("Sending %d audit results", len(auditResult))
 	packet := proto.PacketAuditResultRequest{
 		Items:     items,
 		Timestamp: time.Now().UTC(),
