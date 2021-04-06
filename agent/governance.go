@@ -30,8 +30,8 @@ type Constraint struct {
 type AuditResultStatus string
 
 const (
-	AuditResultStatusViolating = "violating"
-	AuditResultStatusCompliant = "compliant"
+	AuditResultStatusViolating = "violation"
+	AuditResultStatusCompliant = "compliance"
 	AuditResultStatusIgnored   = "ignored"
 )
 

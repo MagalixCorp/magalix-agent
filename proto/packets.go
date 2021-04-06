@@ -199,14 +199,22 @@ type PacketEntitiesResyncRequest struct {
 }
 type PacketEntitiesResyncResponse struct{}
 
+type AuditResultStatus string
+
+const (
+	AuditResultStatusViolating = "violation"
+	AuditResultStatusCompliant = "compliance"
+	AuditResultStatusIgnored   = "ignored"
+)
+
 type PacketAuditResultItem struct {
 	TemplateID   *string `json:"template_id"`
 	ConstraintID *string `json:"constraint_id"`
 	CategoryID   *string `json:"category_id"`
 	Severity     *string `json:"severity"`
 
-	Status string  `json:"status"`
-	Msg    *string `json:"msg"`
+	Status AuditResultStatus `json:"status"`
+	Msg    *string           `json:"msg"`
 
 	EntityName    *string                `json:"entity_name"`
 	EntityKind    *string                `json:"entity_kind"`
@@ -239,9 +247,9 @@ type PacketConstraintItem struct {
 	Match        Match                  `json:"match"`
 	Code         string                 `json:"code"`
 
-	UpdatedAt  time.Time `json:"updated_at"`
 	CategoryId string    `json:"category_id"`
 	Severity   string    `json:"severity"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type PacketConstraintsRequest struct {

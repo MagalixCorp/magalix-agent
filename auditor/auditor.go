@@ -150,13 +150,13 @@ func (a *Auditor) Start(ctx context.Context) error {
 			switch e.Type {
 			case AuditEventTypeResourceUpdate:
 				if entitiesSynced {
-					logger.Info("Received update resource audit event. Auditing resource")
+					logger.Debugf("Received update resource audit event. Auditing resource")
 					a.auditResource(e.Data.(*unstructured.Unstructured), nil, true)
 				} else {
-					logger.Info("Received update resource audit event. Ignoring as entities are not synced yet")
+					logger.Debug("Received update resource audit event. Ignoring as entities are not synced yet")
 				}
 			case AuditEventTypeResourceDelete:
-				logger.Infof("Received delete resource audit event")
+				logger.Debugf("Received delete resource audit event")
 				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
 			case AuditEventTypePoliciesChange:
 				updated := e.Data.([]string)
@@ -166,7 +166,7 @@ func (a *Auditor) Start(ctx context.Context) error {
 				fallthrough
 			case AuditEventTypeCommand,
 				AuditEventTypeAuditTimer:
-				logger.Infof("Received %s audit event. Auditing all resources", e.Type)
+				logger.Debugf("Received %s audit event. Auditing all resources", e.Type)
 				a.auditAllResources(nil,false)
 			default:
 				logger.Errorw("unsupported event type", "event-type", e.Type)

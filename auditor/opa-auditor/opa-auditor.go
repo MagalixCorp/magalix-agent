@@ -208,7 +208,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 	if kind == kuber.Nodes.Kind {
 		ip, err := getNodeIpFromUnstructured(resource)
 		if err != nil {
-			logger.Errorf("couldn't get node ip. %w", err)
+			logger.Errorw("couldn't get node ip", "error", err)
 		} else {
 			nodeIp = ip
 		}
