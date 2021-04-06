@@ -10,7 +10,6 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixCorp/magalix-agent/v3/auditor"
-	"github.com/MagalixCorp/magalix-agent/v3/auditor/target"
 	"github.com/MagalixCorp/magalix-agent/v3/client"
 	"github.com/MagalixCorp/magalix-agent/v3/entities"
 	"github.com/MagalixCorp/magalix-agent/v3/executor"
@@ -21,15 +20,12 @@ import (
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/cert"
-
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 )
 
 var usage = `agent - magalix services agent.
@@ -245,15 +241,7 @@ func main() {
 		logger.Warnw("failed to discover server minor version", "error", err)
 	}
 
-	driver := local.New()
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		logger.Fatal(err)
-	}
-
-	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
-
-	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion, opaClient)
+	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion)
 
 	executorWorkers := utils.MustParseInt(args, "--executor-workers")
 	dryRun := args["--dry-run"].(bool)
@@ -264,11 +252,7 @@ func main() {
 		dryRun,
 	)
 
-	auditor := auditor.NewAuditor(opaClient, parentsStore, ew.WaitCacheSync)
-	//webhookHandler, err := webhook.NewWebHookHandler(webHookName, opaClient, kube)
-	if err != nil {
-		logger.Fatalw("Error while creating validating webhook server", "errror", err)
-	}
+	aud := auditor.NewAuditor(parentsStore, ew)
 
 	// init gateway
 	mgxAgent := agent.New(
@@ -279,8 +263,7 @@ func main() {
 		func(level *agent.LogLevel) error {
 			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
-		auditor,
-		//webhookHandler,
+		aud,
 	)
 
 	probes.IsReady = true

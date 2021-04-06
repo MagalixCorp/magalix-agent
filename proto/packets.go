@@ -200,20 +200,21 @@ type PacketEntitiesResyncRequest struct {
 type PacketEntitiesResyncResponse struct{}
 
 type PacketAuditResultItem struct {
-	TemplateID   uuid.UUID `json:"template_id"`
-	ConstraintID uuid.UUID `json:"constraint_id"`
+	TemplateID   *string `json:"template_id"`
+	ConstraintID *string `json:"constraint_id"`
+	CategoryID   *string `json:"category_id"`
+	Severity     *string `json:"severity"`
 
-	HasViolation bool   `json:"has_violation"`
-	Msg          string `json:"msg"`
+	Status string  `json:"status"`
+	Msg    *string `json:"msg"`
 
-	EntityName    *string   `json:"entity_name"`
-	EntityKind    *string   `json:"entity_kind"`
-	NamespaceName *string   `json:"namespace_name,omitempty"`
-	ParentName    *string   `json:"parent_name,omitempty"`
-	ParentKind    *string   `json:"parent_kind,omitempty"`
-	NodeIP        *string   `json:"node_ip,omitempty"`
-	CategoryID    uuid.UUID `json:"category_id"`
-	Severity      string    `json:"severity"`
+	EntityName    *string                `json:"entity_name"`
+	EntityKind    *string                `json:"entity_kind"`
+	NamespaceName *string                `json:"namespace_name,omitempty"`
+	ParentName    *string                `json:"parent_name,omitempty"`
+	ParentKind    *string                `json:"parent_kind,omitempty"`
+	NodeIP        *string                `json:"node_ip,omitempty"`
+	EntitySpec    map[string]interface{} `json:"entity_spec"`
 }
 
 type PacketAuditResultRequest struct {
@@ -227,10 +228,10 @@ type Match struct {
 }
 
 type PacketConstraintItem struct {
-	Id         uuid.UUID `json:"id"`
-	TemplateId uuid.UUID `json:"template_id"`
-	AccountId  uuid.UUID `json:"account_id"`
-	ClusterId  uuid.UUID `json:"cluster_id"`
+	Id         string `json:"id"`
+	TemplateId string `json:"template_id"`
+	AccountId  string `json:"account_id"`
+	ClusterId  string `json:"cluster_id"`
 
 	Name         string                 `json:"name"`
 	TemplateName string                 `json:"template_name"`
@@ -239,7 +240,7 @@ type PacketConstraintItem struct {
 	Code         string                 `json:"code"`
 
 	UpdatedAt  time.Time `json:"updated_at"`
-	CategoryId uuid.UUID `json:"category_id"`
+	CategoryId string    `json:"category_id"`
 	Severity   string    `json:"severity"`
 }
 
