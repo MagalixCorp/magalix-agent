@@ -36,7 +36,7 @@ github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759 h1:8V72GSS3c1fQTxT7vZVBTxjmSLlWtUgzTu1ffNmDFAA=
 github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759/go.mod h1:k5aVAieJKYXm5TWn/r5DX046/0TlgevYd/mWdY243Dw=
-github.com/MagalixTechnologies/channel v1.1.0 h1:qsVt/QiTr1crOgJiwxhgNWDWbRC2/vsJ0YFr9/dYwok=
+github.com/MagalixTechnologies/channel v1.1.0 h1:5JbU+f2Gu7ZQwXk+wCHp0fbHRm98sSa9oM76szRAVT8=
 github.com/MagalixTechnologies/channel v1.1.0/go.mod h1:RPmBuLy/nk8lDIDKucBb6YxCaSM4PJeUkD5Cuynna3s=
 github.com/MagalixTechnologies/core/logger v1.0.3 h1:glZZ5hpjci60FPiw+9b+hzbMUMmP1d1uwq787OsniCA=
 github.com/MagalixTechnologies/core/logger v1.0.3/go.mod h1:HUb6GF/FKiBWkVCiRNCpxo3btqIxp8Ek4HZNt4Ga0KA=
