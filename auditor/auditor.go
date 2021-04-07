@@ -118,9 +118,9 @@ func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintI
 }
 
 func (a *Auditor) auditAllResources(constraintIds []string, useCache bool) {
-	resourcesByGvrk, err := a.entitiesWatcher.GetAllEntitiesByGvrk()
-	if err != nil {
-		logger.Errorw("error while getting all resources", "error", err)
+	resourcesByGvrk, errs := a.entitiesWatcher.GetAllEntitiesByGvrk()
+	if len(errs) > 0 {
+		logger.Errorw("error while getting all resources", "error", errs)
 	}
 	for _, resources := range resourcesByGvrk {
 		for _, r := range resources {
