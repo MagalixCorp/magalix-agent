@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/MagalixCorp/magalix-agent/v3/utils"
 	"github.com/MagalixTechnologies/core/logger"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	kv1 "k8s.io/api/core/v1"

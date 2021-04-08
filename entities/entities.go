@@ -69,7 +69,7 @@ type EntitiesWatcher struct {
 	sendDeltas         agent.DeltasHandler
 	sendEntitiesResync agent.EntitiesResyncHandler
 
-	cancelWorker  context.CancelFunc
+	cancelWorker context.CancelFunc
 }
 
 func NewEntitiesWatcher(
@@ -81,10 +81,10 @@ func NewEntitiesWatcher(
 	}
 
 	ew := &EntitiesWatcher{
-		observer:       observer_,
-		watchers:       map[kuber.GroupVersionResourceKind]kuber.Watcher{},
-		watchersByKind: map[string]kuber.Watcher{},
-		deltasQueue:   make(chan agent.Delta, deltasBufferChanSize),
+		observer:              observer_,
+		watchers:              map[kuber.GroupVersionResourceKind]kuber.Watcher{},
+		watchersByKind:        map[string]kuber.Watcher{},
+		deltasQueue:           make(chan agent.Delta, deltasBufferChanSize),
 		resourceEventHandlers: make(map[ResourceEventsHandler]struct{}),
 	}
 	return ew

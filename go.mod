@@ -11,6 +11,8 @@ require (
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/golang/snappy v0.0.1
 	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/hashicorp/golang-lru v0.5.4 // indirect
+	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/reconquest/sign-go v0.0.0-20181113092801-8d4f8c5854ae
 	go.uber.org/zap v1.15.0
