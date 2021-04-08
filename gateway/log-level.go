@@ -19,7 +19,7 @@ func (g *MagalixGateway) SetChangeLogLevelHandler(handler agent.ChangeLogLevelHa
 		}
 
 		err := g.changeLogLevel(&agent.LogLevel{
-			Level:logLevel.Level,
+			Level: logLevel.Level,
 		})
 
 		return nil, err

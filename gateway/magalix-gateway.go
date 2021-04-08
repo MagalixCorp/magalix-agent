@@ -3,12 +3,13 @@ package gateway
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixCorp/magalix-agent/v3/client"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
 	"go.uber.org/zap/zapcore"
-	"time"
 )
 
 type MagalixGateway struct {
@@ -32,12 +33,14 @@ type MagalixGateway struct {
 
 	ShouldSendLogs bool
 
-	gwClient         *client.Client
-	connectedChan    chan bool
-	cancelWorkers    context.CancelFunc
-	submitAutomation agent.AutomationHandler
-	triggerRestart   agent.RestartHandler
-	changeLogLevel   agent.ChangeLogLevelHandler
+	gwClient           *client.Client
+	connectedChan      chan bool
+	cancelWorkers      context.CancelFunc
+	submitAutomation   agent.AutomationHandler
+	addConstraints     agent.ConstraintsHandler
+	handleAuditCommand agent.AuditCommandHandler
+	triggerRestart     agent.RestartHandler
+	changeLogLevel     agent.ChangeLogLevelHandler
 }
 
 func New(

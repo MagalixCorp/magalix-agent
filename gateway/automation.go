@@ -1,11 +1,12 @@
 package gateway
 
 import (
+	"time"
+
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixCorp/magalix-agent/v3/client"
 	"github.com/MagalixCorp/magalix-agent/v3/proto"
 	"github.com/MagalixCorp/magalix-agent/v3/utils"
-	"time"
 )
 
 const (
@@ -31,7 +32,7 @@ func (g *MagalixGateway) SetAutomationHandler(handler agent.AutomationHandler) {
 				CPU:    nil,
 				Memory: nil,
 			},
-			Limits:   &agent.RequestLimit{
+			Limits: &agent.RequestLimit{
 				CPU:    nil,
 				Memory: nil,
 			},

@@ -1,18 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/v3/entities"
-	"github.com/MagalixCorp/magalix-agent/v3/executor"
-	"go.uber.org/zap/zapcore"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/auditor"
 	"github.com/MagalixCorp/magalix-agent/v3/client"
+	"github.com/MagalixCorp/magalix-agent/v3/entities"
+	"github.com/MagalixCorp/magalix-agent/v3/executor"
 	"github.com/MagalixCorp/magalix-agent/v3/gateway"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/MagalixCorp/magalix-agent/v3/metrics"
@@ -21,6 +22,7 @@ import (
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/docopt/docopt-go"
 	"github.com/pkg/errors"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -107,6 +109,9 @@ Options:
 
 var version = "[manual build]"
 
+// @TODO: Should be changed to be unique per cluster/account id
+// const webHookName = "com.magalix.webhook"
+
 var startID string
 
 func main() {
@@ -166,7 +171,7 @@ func main() {
 		logger.Warnw("failed to discover server version", "error", err)
 	}
 
-	agentPermissions, err := kube.GetAgentPermissions()
+	agentPermissions, err := kube.GetAgentPermissions(context.Background())
 	if err != nil {
 		agentPermissions = err.Error()
 		logger.Warnw("Failed to get agent permissions", "error", err)
@@ -236,6 +241,7 @@ func main() {
 	if err != nil {
 		logger.Warnw("failed to discover server minor version", "error", err)
 	}
+
 	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion)
 
 	executorWorkers := utils.MustParseInt(args, "--executor-workers")
@@ -247,6 +253,8 @@ func main() {
 		dryRun,
 	)
 
+	aud := auditor.NewAuditor(parentsStore, ew)
+
 	// init gateway
 	mgxAgent := agent.New(
 		metricsSource,
@@ -256,6 +264,7 @@ func main() {
 		func(level *agent.LogLevel) error {
 			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
+		aud,
 	)
 
 	probes.IsReady = true

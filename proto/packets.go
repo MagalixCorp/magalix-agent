@@ -199,6 +199,71 @@ type PacketEntitiesResyncRequest struct {
 }
 type PacketEntitiesResyncResponse struct{}
 
+type AuditResultStatus string
+
+const (
+	AuditResultStatusViolating = "violation"
+	AuditResultStatusCompliant = "compliance"
+	AuditResultStatusIgnored   = "ignored"
+)
+
+type PacketAuditResultItem struct {
+	TemplateID   *string `json:"template_id"`
+	ConstraintID *string `json:"constraint_id"`
+	CategoryID   *string `json:"category_id"`
+	Severity     *string `json:"severity"`
+
+	Description string `json:"description"`
+	HowToSolve  string `json:"how_to_solve"`
+
+	Status AuditResultStatus `json:"status"`
+	Msg    *string           `json:"msg"`
+
+	EntityName    *string                `json:"entity_name"`
+	EntityKind    *string                `json:"entity_kind"`
+	NamespaceName *string                `json:"namespace_name,omitempty"`
+	ParentName    *string                `json:"parent_name,omitempty"`
+	ParentKind    *string                `json:"parent_kind,omitempty"`
+	NodeIP        *string                `json:"node_ip,omitempty"`
+	EntitySpec    map[string]interface{} `json:"entity_spec"`
+}
+
+type PacketAuditResultRequest struct {
+	Items     []*PacketAuditResultItem `json:"items"`
+	Timestamp time.Time                `json:"timestamp"`
+}
+
+type Match struct {
+	Namespaces []string `json:"namespaces"`
+	Kinds      []string `json:"kinds"`
+}
+
+type PacketConstraintItem struct {
+	Id         string `json:"id"`
+	TemplateId string `json:"template_id"`
+	AccountId  string `json:"account_id"`
+	ClusterId  string `json:"cluster_id"`
+
+	Name         string                 `json:"name"`
+	TemplateName string                 `json:"template_name"`
+	Parameters   map[string]interface{} `json:"parameters"`
+	Match        Match                  `json:"match"`
+	Code         string                 `json:"code"`
+	Description  string                 `json:"description"`
+	HowToSolve   string                 `json:"how_to_solve"`
+
+	CategoryId string    `json:"category_id"`
+	Severity   string    `json:"severity"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type PacketConstraintsRequest struct {
+	Timestamp   time.Time              `json:"timestamp"`
+	Constraints []PacketConstraintItem `json:"constraints"`
+}
+
+type PacketConstraintsResponse struct{}
+
 func EncodeSnappy(in interface{}) (out []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {

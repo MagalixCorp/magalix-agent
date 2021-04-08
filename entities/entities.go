@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/MagalixTechnologies/core/logger"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -52,12 +51,20 @@ var (
 	}
 )
 
+type ResourceEventsHandler interface {
+	OnResourceAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnResourceUpdate(gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
+	OnResourceDelete(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
+	OnCacheSync()
+}
+
 type EntitiesWatcher struct {
 	observer *kuber.Observer
 
-	watchers       map[kuber.GroupVersionResourceKind]kuber.Watcher
-	watchersByKind map[string]kuber.Watcher
-	deltasQueue    chan agent.Delta
+	watchers              map[kuber.GroupVersionResourceKind]kuber.Watcher
+	watchersByKind        map[string]kuber.Watcher
+	deltasQueue           chan agent.Delta
+	resourceEventHandlers map[ResourceEventsHandler]struct{}
 
 	sendDeltas         agent.DeltasHandler
 	sendEntitiesResync agent.EntitiesResyncHandler
@@ -74,11 +81,11 @@ func NewEntitiesWatcher(
 	}
 
 	ew := &EntitiesWatcher{
-		observer:       observer_,
-		watchers:       map[kuber.GroupVersionResourceKind]kuber.Watcher{},
-		watchersByKind: map[string]kuber.Watcher{},
-
-		deltasQueue: make(chan agent.Delta, deltasBufferChanSize),
+		observer:              observer_,
+		watchers:              map[kuber.GroupVersionResourceKind]kuber.Watcher{},
+		watchersByKind:        map[string]kuber.Watcher{},
+		deltasQueue:           make(chan agent.Delta, deltasBufferChanSize),
+		resourceEventHandlers: make(map[ResourceEventsHandler]struct{}),
 	}
 	return ew
 }
@@ -91,11 +98,15 @@ func (ew *EntitiesWatcher) SetEntitiesResyncHandler(handler agent.EntitiesResync
 	ew.sendEntitiesResync = handler
 }
 
+func (ew *EntitiesWatcher) AddResourceEventsHandler(handler ResourceEventsHandler) {
+	ew.resourceEventHandlers[handler] = struct{}{}
+}
+
 func (ew *EntitiesWatcher) Start(ctx context.Context) error {
 	// this method should be called only once
 
 	// TODO: if a packet expires or failed to be sent
-	// we need to force a full resync to get all new updates
+	// 	we need to force a full resync to get all new updates
 
 	for _, gvrk := range watchedResources {
 		w := ew.observer.Watch(gvrk)
@@ -103,11 +114,7 @@ func (ew *EntitiesWatcher) Start(ctx context.Context) error {
 		ew.watchersByKind[gvrk.Kind] = w
 	}
 
-	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
-	err := ew.observer.WaitForCacheSync()
-	if err != nil {
-		logger.Warnf("timeout due to missing permissions with error %s ", err.Error())
-	}
+	ew.WaitForCacheSync()
 
 	for _, watcher := range ew.watchers {
 		watcher.AddEventHandler(ew)
@@ -147,6 +154,17 @@ func (ew *EntitiesWatcher) WatcherFor(
 		)
 	}
 	return w, nil
+}
+
+func (ew *EntitiesWatcher) WaitForCacheSync() {
+	// missing permissions cause a timeout, we ignore it so the agent is not blocked when permissions are missing
+	err := ew.observer.WaitForCacheSync()
+	if err != nil {
+		logger.Warnf("timeout due to missing permissions with error %s ", err.Error())
+	}
+	for handler := range ew.resourceEventHandlers {
+		handler.OnCacheSync()
+	}
 }
 
 func (ew *EntitiesWatcher) buildAndSendSnapshotResync() {
@@ -233,6 +251,25 @@ func (ew *EntitiesWatcher) sendSnapshot() {
 	}
 }
 
+func (ew *EntitiesWatcher) GetAllEntitiesByGvrk() (map[kuber.GroupVersionResourceKind][]unstructured.Unstructured, []error) {
+	entities := make(map[kuber.GroupVersionResourceKind][]unstructured.Unstructured)
+	errs := make([]error, 0)
+	for gvrk, w := range ew.watchers {
+		resource := gvrk.Resource
+		ret, err := w.Lister().List(labels.Everything())
+		if err != nil {
+			errs = append(errs, fmt.Errorf("unable to list %s. %w", resource, err))
+		}
+		uList := make([]unstructured.Unstructured, 0, len(ret))
+		for _, obj := range ret {
+			u := *obj.(*unstructured.Unstructured)
+			uList = append(uList, u)
+		}
+		entities[gvrk] = uList
+	}
+	return entities, errs
+}
+
 func (ew *EntitiesWatcher) publishGvrk(
 	gvrk kuber.GroupVersionResourceKind,
 	w kuber.Watcher,
@@ -301,11 +338,16 @@ func (ew *EntitiesWatcher) OnAdd(
 			Timestamp: time.Now(),
 		},
 	)
+
 	if err != nil {
 		logger.Warnw("unable to handle OnAdd delta", "error", err)
 		return
 	}
 	ew.deltasQueue <- delta
+
+	for handler := range ew.resourceEventHandlers {
+		handler.OnResourceAdd(gvrk, obj)
+	}
 }
 
 func (ew *EntitiesWatcher) OnUpdate(
@@ -324,7 +366,12 @@ func (ew *EntitiesWatcher) OnUpdate(
 		logger.Warnw("unable to handle onUpdate delta", "error", err)
 		return
 	}
+
 	ew.deltasQueue <- delta
+
+	for handler := range ew.resourceEventHandlers {
+		handler.OnResourceUpdate(gvrk, oldObj, newObj)
+	}
 }
 
 func (ew *EntitiesWatcher) OnDelete(
@@ -345,6 +392,10 @@ func (ew *EntitiesWatcher) OnDelete(
 		return
 	}
 	ew.deltasQueue <- delta
+
+	for handler := range ew.resourceEventHandlers {
+		handler.OnResourceDelete(gvrk, obj)
+	}
 }
 
 func (ew *EntitiesWatcher) deltasWorker(ctx context.Context) {
