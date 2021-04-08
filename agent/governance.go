@@ -21,6 +21,8 @@ type Constraint struct {
 	Parameters   map[string]interface{}
 	Match        Match
 	Code         string
+	Description  string
+	HowToSolve   string
 
 	UpdatedAt  time.Time
 	CategoryId string
@@ -40,6 +42,9 @@ type AuditResult struct {
 	ConstraintID *string
 	CategoryID   *string
 	Severity     *string
+
+	Description string
+	HowToSolve  string
 
 	Status AuditResultStatus
 	Msg    *string

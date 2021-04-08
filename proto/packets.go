@@ -213,6 +213,9 @@ type PacketAuditResultItem struct {
 	CategoryID   *string `json:"category_id"`
 	Severity     *string `json:"severity"`
 
+	Description string `json:"description"`
+	HowToSolve  string `json:"how_to_solve"`
+
 	Status AuditResultStatus `json:"status"`
 	Msg    *string           `json:"msg"`
 
@@ -246,6 +249,8 @@ type PacketConstraintItem struct {
 	Parameters   map[string]interface{} `json:"parameters"`
 	Match        Match                  `json:"match"`
 	Code         string                 `json:"code"`
+	Description  string                 `json:"description"`
+	HowToSolve   string                 `json:"how_to_solve"`
 
 	CategoryId string    `json:"category_id"`
 	Severity   string    `json:"severity"`

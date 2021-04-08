@@ -45,10 +45,12 @@ func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler)
 					Namespaces: c.Match.Namespaces,
 					Kinds:      c.Match.Kinds,
 				},
-				Code:       c.Code,
-				UpdatedAt:  c.UpdatedAt,
-				CategoryId: c.CategoryId,
-				Severity:   c.Severity,
+				Code:        c.Code,
+				Description: c.Description,
+				HowToSolve:  c.HowToSolve,
+				UpdatedAt:   c.UpdatedAt,
+				CategoryId:  c.CategoryId,
+				Severity:    c.Severity,
 			}
 			constraints = append(constraints, constraint)
 		}
@@ -103,6 +105,10 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 		item := proto.PacketAuditResultItem{
 			TemplateID:    r.TemplateID,
 			ConstraintID:  r.ConstraintID,
+			CategoryID:    r.CategoryID,
+			Severity:      r.Severity,
+			Description:   r.Description,
+			HowToSolve:    r.HowToSolve,
 			Msg:           r.Msg,
 			EntityName:    r.EntityName,
 			EntityKind:    r.EntityKind,
@@ -110,8 +116,6 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 			ParentName:    r.ParentName,
 			ParentKind:    r.ParentKind,
 			NodeIP:        r.NodeIP,
-			CategoryID:    r.CategoryID,
-			Severity:      r.Severity,
 			EntitySpec:    r.EntitySpec,
 		}
 

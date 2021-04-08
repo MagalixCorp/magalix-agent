@@ -19,10 +19,12 @@ const (
 )
 
 type Template struct {
-	Id         string
-	Name       string
-	Policy     opa.Policy
-	UsageCount int
+	Id          string
+	Name        string
+	Policy      opa.Policy
+	Description string
+	HowToSolve  string
+	UsageCount  int
 }
 
 type Constraint struct {
@@ -84,10 +86,12 @@ func (a *OpaAuditor) AddConstraint(constraint *agent.Constraint) (bool, error) {
 			}
 
 			a.templates[tId] = &Template{
-				Id:         tId,
-				Name:       constraint.TemplateName,
-				Policy:     policy,
-				UsageCount: 1,
+				Id:          tId,
+				Name:        constraint.TemplateName,
+				Policy:      policy,
+				Description: constraint.Description,
+				HowToSolve:  constraint.HowToSolve,
+				UsageCount:  1,
 			}
 		} else {
 			t.UsageCount++
@@ -115,10 +119,12 @@ func (a *OpaAuditor) AddConstraint(constraint *agent.Constraint) (bool, error) {
 		}
 
 		a.templates[tId] = &Template{
-			Id:         tId,
-			Name:       constraint.TemplateName,
-			Policy:     policy,
-			UsageCount: t.UsageCount,
+			Id:          tId,
+			Name:        constraint.TemplateName,
+			Policy:      policy,
+			Description: constraint.Description,
+			HowToSolve:  constraint.HowToSolve,
+			UsageCount:  t.UsageCount,
 		}
 
 		updated = true
@@ -239,13 +245,16 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 			CategoryID:   &categoryId,
 			Severity:     &severity,
 
+			Description: a.templates[templateId].Description,
+			HowToSolve: a.templates[templateId].HowToSolve,
+
 			EntityName:    &name,
 			EntityKind:    &kind,
 			NamespaceName: &namespace,
 			ParentName:    &parentName,
 			ParentKind:    &parentKind,
 			NodeIP:        &nodeIp,
-			EntitySpec: resource.Object,
+			EntitySpec:    resource.Object,
 		}
 		if !match {
 			res.Status = agent.AuditResultStatusIgnored
