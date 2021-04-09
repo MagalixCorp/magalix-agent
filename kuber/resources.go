@@ -9,11 +9,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 type GroupVersionResourceKind struct {
@@ -46,6 +47,7 @@ var (
 		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("replicationcontrollers"),
 		Kind:                 "ReplicationController",
 	}
+
 	Deployments = GroupVersionResourceKind{
 		GroupVersionResource: appsv1.SchemeGroupVersion.WithResource("deployments"),
 		Kind:                 "Deployment",
@@ -62,6 +64,7 @@ var (
 		GroupVersionResource: appsv1.SchemeGroupVersion.WithResource("replicasets"),
 		Kind:                 "ReplicaSet",
 	}
+
 	Jobs = GroupVersionResourceKind{
 		GroupVersionResource: batchv1.SchemeGroupVersion.WithResource("jobs"),
 		Kind:                 "Job",
@@ -118,37 +121,59 @@ var (
 		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("serviceaccounts"),
 		Kind:                 "ServiceAccount",
 	}
-
-	kindToGVRK = map[string]*GroupVersionResourceKind{
-		Nodes.Kind:                  &Nodes,
-		Namespaces.Kind:             &Namespaces,
-		Pods.Kind:                   &Pods,
-		ReplicationControllers.Kind: &ReplicationControllers,
-		Deployments.Kind:            &Deployments,
-		StatefulSets.Kind:           &StatefulSets,
-		DaemonSets.Kind:             &DaemonSets,
-		ReplicaSets.Kind:            &ReplicaSets,
-		Jobs.Kind:                   &Jobs,
-		CronJobs.Kind:               &CronJobs,
-		Ingresses.Kind:              &Ingresses,
-		IngressClasses.Kind:         &IngressClasses,
-		NetworkPolicies.Kind:        &NetworkPolicies,
-		Services.Kind:               &Services,
-		PersistentVolumes.Kind:      &PersistentVolumes,
-		PersistentVolumeClaims.Kind: &PersistentVolumeClaims,
-		StorageClasses.Kind:         &StorageClasses,
-		Roles.Kind:                  &Roles,
-		RoleBindings.Kind:           &RoleBindings,
-		ClusterRoles.Kind:           &ClusterRoles,
-		ClusterRoleBindings.Kind:    &ClusterRoleBindings,
-		ServiceAccounts.Kind:        &ServiceAccounts,
-	}
 )
 
-func KindToGVRK(kind string) (*GroupVersionResourceKind, error) {
-	gvrk, ok := kindToGVRK[kind]
-	if !ok {
-		return nil, fmt.Errorf("unknown kind %s", kind)
+// TODO: Refactor to a map[kind]GVRK
+func KindToGvrk(kind string) (*GroupVersionResourceKind, error) {
+	switch kind {
+	case Nodes.Kind:
+		return &Nodes, nil
+	case Namespaces.Kind:
+		return &Namespaces, nil
+	case Pods.Kind:
+		return &Pods, nil
+	case ReplicationControllers.Kind:
+		return &ReplicationControllers, nil
+	case Deployments.Kind:
+		return &Deployments, nil
+	case StatefulSets.Kind:
+		return &StatefulSets, nil
+	case DaemonSets.Kind:
+		return &DaemonSets, nil
+	case ReplicaSets.Kind:
+		return &ReplicaSets, nil
+	case Jobs.Kind:
+		return &Jobs, nil
+	case CronJobs.Kind:
+		return &CronJobs, nil
+	case Ingresses.Kind:
+		return &Ingresses, nil
+	case IngressClasses.Kind:
+		return &IngressClasses, nil
+	case NetworkPolicies.Kind:
+		return &NetworkPolicies, nil
+	case Services.Kind:
+		return &Services, nil
+	case PersistentVolumes.Kind:
+		return &PersistentVolumes, nil
+	case PersistentVolumeClaims.Kind:
+		return &PersistentVolumeClaims, nil
+	case StorageClasses.Kind:
+		return &StorageClasses, nil
+	case Roles.Kind:
+		return &Roles, nil
+	case RoleBindings.Kind:
+		return &RoleBindings, nil
+	case ClusterRoles.Kind:
+		return &ClusterRoles, nil
+	case ClusterRoleBindings.Kind:
+		return &ClusterRoleBindings, nil
+	case ServiceAccounts.Kind:
+		return &ServiceAccounts, nil
+	default:
+		return nil, fmt.Errorf(
+			"unknown kind: %s",
+			kind,
+		)
 	}
-	return gvrk, nil
 }
