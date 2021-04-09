@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -171,7 +170,7 @@ func main() {
 		logger.Warnw("failed to discover server version", "error", err)
 	}
 
-	agentPermissions, err := kube.GetAgentPermissions(context.Background())
+	agentPermissions, err := kube.GetAgentPermissions()
 	if err != nil {
 		agentPermissions = err.Error()
 		logger.Warnw("Failed to get agent permissions", "error", err)
