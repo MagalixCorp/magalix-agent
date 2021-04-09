@@ -27,7 +27,12 @@ type Observer struct {
 	stopCh chan struct{}
 }
 
-func NewObserver(client dynamic.Interface, parentsStore *ParentsStore, stopCh chan struct{}, defaultResync time.Duration) *Observer {
+func NewObserver(
+	client dynamic.Interface,
+	parentsStore *ParentsStore,
+	stopCh chan struct{},
+	defaultResync time.Duration,
+) *Observer {
 	return &Observer{
 		DynamicSharedInformerFactory: dynamicinformer.NewDynamicSharedInformerFactory(client, defaultResync),
 		ParentsStore:                 parentsStore,
@@ -37,7 +42,6 @@ func NewObserver(client dynamic.Interface, parentsStore *ParentsStore, stopCh ch
 
 func (observer *Observer) Watch(gvrk GroupVersionResourceKind) *watcher {
 	logger.Debugw("subscribed on changes", "resource", gvrk.String())
-
 	watcher := observer.WatcherFor(gvrk)
 	observer.Start()
 
@@ -63,7 +67,9 @@ func (observer *Observer) WatchAndWaitForSync(gvrk GroupVersionResourceKind) (*w
 	}
 }
 
-func (observer *Observer) WatcherFor(gvrk GroupVersionResourceKind) *watcher {
+func (observer *Observer) WatcherFor(
+	gvrk GroupVersionResourceKind,
+) *watcher {
 	informer := observer.ForResource(gvrk.GroupVersionResource)
 
 	return &watcher{
@@ -144,14 +150,18 @@ func (observer *Observer) GetPods() ([]corev1.Pod, error) {
 	return pods, nil
 }
 
-func (observer *Observer) FindController(namespaceName string, controllerKind string, controllerName string) (*unstructured.Unstructured, error) {
+func (observer *Observer) FindController(
+	namespaceName string,
+	controllerKind string,
+	controllerName string,
+) (*unstructured.Unstructured, error) {
 	errMap := map[string]interface{}{
 		"namespace-name":  namespaceName,
 		"controller-kind": controllerKind,
 		"controller-name": controllerName,
 	}
 
-	gvrk, err := KindToGVRK(controllerKind)
+	gvrk, err := KindToGvrk(controllerKind)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get GVRK, error: %w with data %+v", err, errMap)
 	}
@@ -168,7 +178,12 @@ func (observer *Observer) FindController(namespaceName string, controllerKind st
 	return controller.(*unstructured.Unstructured), err
 }
 
-func (observer *Observer) FindContainer(namespaceName string, controllerKind string, controllerName string, containerName string) (*corev1.Container, error) {
+func (observer *Observer) FindContainer(
+	namespaceName string,
+	controllerKind string,
+	controllerName string,
+	containerName string,
+) (*corev1.Container, error) {
 	errMap := map[string]interface{}{
 		"namespace-name":  namespaceName,
 		"controller-kind": controllerKind,
@@ -219,7 +234,7 @@ func (observer *Observer) FindPodController(namespaceName string, podName string
 	}
 
 	parent, err := GetParents(pod.(*unstructured.Unstructured), observer.ParentsStore, func(kind string) (Watcher, bool) {
-		gvrk, err := KindToGVRK(kind)
+		gvrk, err := KindToGvrk(kind)
 		if err != nil {
 			lg.Warnw("unable to get GVRK for kind", "kind", kind, "error", err)
 			return nil, false
@@ -300,7 +315,10 @@ func (w *watcher) LastSyncResourceVersion() string {
 	return w.informer.Informer().LastSyncResourceVersion()
 }
 
-func wrapHandler(wrapped ResourceEventHandler, gvrk GroupVersionResourceKind) cache.ResourceEventHandler {
+func wrapHandler(
+	wrapped ResourceEventHandler,
+	gvrk GroupVersionResourceKind,
+) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			objUn, ok := obj.(*unstructured.Unstructured)
@@ -373,6 +391,70 @@ func wrapHandler(wrapped ResourceEventHandler, gvrk GroupVersionResourceKind) ca
 			}
 		},
 	}
+}
+
+var (
+	podSpecMap = map[string][]string{
+		Pods.Kind:                   {"spec"},
+		ReplicationControllers.Kind: {"spec", "template", "spec"},
+		Deployments.Kind:            {"spec", "template", "spec"},
+		StatefulSets.Kind:           {"spec", "template", "spec"},
+		DaemonSets.Kind:             {"spec", "template", "spec"},
+		ReplicaSets.Kind:            {"spec", "template", "spec"},
+		Jobs.Kind:                   {"spec", "template", "spec"},
+		CronJobs.Kind:               {"spec", "jobTemplate", "spec", "template", "spec"},
+	}
+)
+
+func maskUnstructured(
+	obj *unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
+	kind := obj.GetKind()
+	errMap := map[string]interface{}{
+		"kind": kind,
+	}
+	podSpecPath, ok := podSpecMap[kind]
+	if !ok {
+		// not maskable kind
+		return obj, nil
+	}
+
+	podSpecU, ok, err := unstructured.NestedFieldNoCopy(obj.Object, podSpecPath...)
+	if err != nil {
+		return nil, fmt.
+			Errorf("unable to get pod spec, error: %w with data %+v", err, errMap)
+	}
+	if !ok {
+		return nil, fmt.
+			Errorf("unable to find pod spec in specified path with data %+v", errMap)
+	}
+
+	var podSpec corev1.PodSpec
+	err = utils.Transcode(podSpecU, &podSpec)
+	if err != nil {
+		return nil, fmt.
+			Errorf("unable to transcode pod spec, error: %w with data %+v", err, errMap)
+	}
+
+	podSpec.Containers = maskContainers(podSpec.Containers)
+	podSpec.InitContainers = maskContainers(podSpec.InitContainers)
+
+	var podSpecJson map[string]interface{}
+	err = utils.Transcode(podSpec, &podSpecJson)
+	if err != nil {
+		return nil, fmt.
+			Errorf("unable to transcode pod spec, error: %w with data %+v", err, errMap)
+	}
+
+	// deep copy to not mutate the data from cash store
+	obj = obj.DeepCopy()
+	err = unstructured.SetNestedField(obj.Object, podSpecJson, podSpecPath...)
+	if err != nil {
+		return nil, fmt.
+			Errorf("unable to set pod spec, error: %w, with data %+v", err, errMap)
+	}
+
+	return obj, nil
 }
 
 type ResourceEventHandler interface {
