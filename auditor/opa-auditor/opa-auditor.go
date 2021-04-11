@@ -348,7 +348,7 @@ func getNodeIpFromUnstructured(node *unstructured.Unstructured) (string, error) 
 			return "", fmt.Errorf("couldn't cast node address to map[string]interface{}")
 		}
 
-		if ipType := addrMap["type"]; ipType == ks8CoreV1.NodeInternalIP {
+		if ipType := addrMap["type"]; ipType == string(ks8CoreV1.NodeInternalIP) {
 			return addrMap["address"].(string), nil
 		}
 	}
