@@ -239,26 +239,27 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 		severity := c.Severity
 
 		match := matchEntity(resource, c.Match)
-		res := agent.AuditResult{
-			TemplateID:   &templateId,
-			ConstraintID: &constraintId,
-			CategoryID:   &categoryId,
-			Severity:     &severity,
-
-			Description: a.templates[templateId].Description,
-			HowToSolve: a.templates[templateId].HowToSolve,
-
-			EntityName:    &name,
-			EntityKind:    &kind,
-			NamespaceName: &namespace,
-			ParentName:    &parentName,
-			ParentKind:    &parentKind,
-			NodeIP:        &nodeIp,
-			EntitySpec:    resource.Object,
-		}
 		if !match {
-			res.Status = agent.AuditResultStatusIgnored
+			continue
 		} else {
+			res := agent.AuditResult{
+				TemplateID:   &templateId,
+				ConstraintID: &constraintId,
+				CategoryID:   &categoryId,
+				Severity:     &severity,
+
+				Description: a.templates[templateId].Description,
+				HowToSolve: a.templates[templateId].HowToSolve,
+
+				EntityName:    &name,
+				EntityKind:    &kind,
+				NamespaceName: &namespace,
+				ParentName:    &parentName,
+				ParentKind:    &parentKind,
+				NodeIP:        &nodeIp,
+				EntitySpec:    resource.Object,
+			}
+
 			t := a.templates[c.TemplateId]
 			err := t.Policy.EvalGateKeeperCompliant(resource.Object, c.Parameters, PolicyQuery)
 			var opaErr opa.OPAError
@@ -289,19 +290,19 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 			} else {
 				res.Status = agent.AuditResultStatusCompliant
 			}
-		}
 
-		resourceKey := getResourceKey(resource)
-		if useCache {
-			oldStatus, found := a.cache.Get(c.Id, resourceKey)
-			if !found || oldStatus != res.Status {
+			resourceKey := getResourceKey(resource)
+			if useCache {
+				oldStatus, found := a.cache.Get(c.Id, resourceKey)
+				if !found || oldStatus != res.Status {
+					results = append(results, &res)
+				}
+			} else {
 				results = append(results, &res)
 			}
-		} else {
-			results = append(results, &res)
-		}
 
-		a.cache.Put(c.Id, resourceKey, res.Status)
+			a.cache.Put(c.Id, resourceKey, res.Status)
+		}
 	}
 	return results, errs
 }
