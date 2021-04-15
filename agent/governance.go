@@ -54,7 +54,6 @@ type AuditResult struct {
 	NamespaceName *string
 	ParentName    *string
 	ParentKind    *string
-	NodeIP        *string
 	EntitySpec    map[string]interface{}
 }
 

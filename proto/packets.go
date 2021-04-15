@@ -81,7 +81,6 @@ type MetricStoreV2Request struct {
 	Name           string    `json:"name"`
 	Type           string    `json:"type"`
 	NodeName       string    `json:"node_name"`
-	NodeIP         string    `json:"node_ip"`
 	NamespaceName  string    `json:"namespace_name"`
 	ControllerName string    `json:"controller_name"`
 	ControllerKind string    `json:"controller_kind"`
@@ -224,7 +223,6 @@ type PacketAuditResultItem struct {
 	NamespaceName *string                `json:"namespace_name,omitempty"`
 	ParentName    *string                `json:"parent_name,omitempty"`
 	ParentKind    *string                `json:"parent_kind,omitempty"`
-	NodeIP        *string                `json:"node_ip,omitempty"`
 	EntitySpec    map[string]interface{} `json:"entity_spec"`
 }
 

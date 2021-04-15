@@ -115,7 +115,6 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 			NamespaceName: r.NamespaceName,
 			ParentName:    r.ParentName,
 			ParentKind:    r.ParentKind,
-			NodeIP:        r.NodeIP,
 			EntitySpec:    r.EntitySpec,
 		}
 
