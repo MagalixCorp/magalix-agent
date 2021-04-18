@@ -25,7 +25,6 @@ const (
 	AuditEventTypeResourceUpdate AuditEventType = "resource-update"
 	AuditEventTypeResourceDelete AuditEventType = "resource-delete"
 	AuditEventTypeResourcesSync  AuditEventType = "resources-sync"
-	AuditEventTypeAuditTimer     AuditEventType = "audit-timer"
 )
 
 type AuditEvent struct {
@@ -103,7 +102,7 @@ func (a *Auditor) OnCacheSync() {
 	a.auditEvents <- AuditEvent{Type: AuditEventTypeResourcesSync}
 }
 
-func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintIds []string,  useCache bool) {
+func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintIds []string, useCache bool) {
 	results, errs := a.opa.Audit(resource, constraintIds, useCache)
 	if len(errs) > 0 {
 		logger.Errorw("errors while auditing resource", "errors-count", len(errs), "errors", errs)
@@ -164,15 +163,15 @@ func (a *Auditor) Start(ctx context.Context) error {
 			case AuditEventTypeResourcesSync:
 				entitiesSynced = true
 				fallthrough
-			case AuditEventTypeCommand,
-				AuditEventTypeAuditTimer:
-				logger.Debugf("Received %s audit event. Auditing all resources", e.Type)
-				a.auditAllResources(nil,false)
+			case AuditEventTypeCommand:
+				logger.Debug("Received audit command event. Auditing all resources")
+				a.auditAllResources(nil, false)
 			default:
 				logger.Errorw("unsupported event type", "event-type", e.Type)
 			}
 		case <-auditTicker.C:
-			a.auditEvents <- AuditEvent{Type: AuditEventTypeAuditTimer}
+			logger.Debug("Starting peridoical auditing. Auditing all resources")
+			a.auditAllResources(nil, false)
 		}
 	}
 }
