@@ -44,6 +44,7 @@ func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler)
 				Match: agent.Match{
 					Namespaces: c.Match.Namespaces,
 					Kinds:      c.Match.Kinds,
+					Labels:     c.Match.Labels,
 				},
 				Code:        c.Code,
 				Description: c.Description,

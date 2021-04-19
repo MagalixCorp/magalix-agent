@@ -8,6 +8,7 @@ import (
 type Match struct {
 	Namespaces []string
 	Kinds      []string
+	Labels     []map[string]string
 }
 
 type Constraint struct {

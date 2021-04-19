@@ -310,6 +310,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 func matchEntity(resource *unstructured.Unstructured, match agent.Match) bool {
 	var matchKind bool
 	var matchNamespace bool
+	var matchLabel bool
 
 	if len(match.Kinds) == 0 {
 		matchKind = true
@@ -334,7 +335,26 @@ func matchEntity(resource *unstructured.Unstructured, match agent.Match) bool {
 			}
 		}
 	}
-	return matchKind && matchNamespace
+
+	if len(match.Labels) == 0 {
+		matchLabel = true
+	} else {
+	outer:
+		for _, obj := range match.Labels {
+			for key, val := range obj {
+				entityVal, ok := resource.GetLabels()[key]
+				if ok {
+					if val != "*" && val != entityVal {
+						continue
+					}
+					matchLabel = true
+					break outer
+				}
+			}
+		}
+	}
+
+	return matchKind && matchNamespace && matchLabel
 }
 
 func getNodeIpFromUnstructured(node *unstructured.Unstructured) (string, error) {
