@@ -2,10 +2,11 @@ package opa_auditor
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/MagalixTechnologies/core/logger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/pkg/errors"
@@ -249,7 +250,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 				Severity:     &severity,
 
 				Description: a.templates[templateId].Description,
-				HowToSolve: a.templates[templateId].HowToSolve,
+				HowToSolve:  a.templates[templateId].HowToSolve,
 
 				EntityName:    &name,
 				EntityKind:    &kind,
@@ -285,7 +286,11 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 					res.Status = agent.AuditResultStatusViolating
 					res.Msg = &msg
 				} else {
-					errs = append(errs, fmt.Errorf("unable to evaluate resource against policy. constraint id: %s. %w", c.Id, err))
+					errMsg := "unable to evaluate resource against policy"
+					res.Status = agent.AuditResultStatusError
+					msg := fmt.Sprintf("%s. %s", errMsg, err)
+					res.Msg = &msg
+					errs = append(errs, fmt.Errorf("%s. constraint id: %s. %w", errMsg, c.Id, err))
 				}
 			} else {
 				res.Status = agent.AuditResultStatusCompliant
