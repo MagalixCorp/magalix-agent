@@ -505,7 +505,7 @@ func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionReso
 	case kuber.Nodes:
 		ip, found, err := getNodeInternalIP(obj)
 		if !found || err != nil {
-			return nil, fmt.Errorf("unable to find node internal ip, error: %w", err)
+			return nil, nil
 		}
 
 		return map[string]interface{}{

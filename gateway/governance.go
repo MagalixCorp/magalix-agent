@@ -44,6 +44,7 @@ func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler)
 				Match: agent.Match{
 					Namespaces: c.Match.Namespaces,
 					Kinds:      c.Match.Kinds,
+					Labels:     c.Match.Labels,
 				},
 				Code:        c.Code,
 				Description: c.Description,
@@ -115,7 +116,6 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 			NamespaceName: r.NamespaceName,
 			ParentName:    r.ParentName,
 			ParentKind:    r.ParentKind,
-			NodeIP:        r.NodeIP,
 			EntitySpec:    r.EntitySpec,
 		}
 
@@ -126,6 +126,8 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 			item.Status = proto.AuditResultStatusCompliant
 		case agent.AuditResultStatusIgnored:
 			item.Status = proto.AuditResultStatusIgnored
+		case agent.AuditResultStatusError:
+			item.Status = proto.AuditResultStatusError
 		}
 
 		items = append(items, &item)

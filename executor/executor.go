@@ -153,7 +153,7 @@ func (executor *Executor) executorWorker(ctx context.Context) {
 		case automation := <-executor.automationsChan:
 
 			// TODO: execute automations in batches
-			response, err := executor.execute(automation)
+			response, err := executor.execute(ctx, automation)
 			if err != nil {
 				logger.Errorw(
 					"unable to execute automation",
@@ -187,9 +187,7 @@ func (executor *Executor) executorWorker(ctx context.Context) {
 	}
 }
 
-func (executor *Executor) execute(
-	automation *agent.Automation,
-) (*agent.AutomationFeedback, error) {
+func (executor *Executor) execute(ctx context.Context, automation *agent.Automation) (*agent.AutomationFeedback, error) {
 	c, err := executor.entitiesFinder.FindContainer(
 		automation.NamespaceName,
 		automation.ControllerKind,
@@ -229,6 +227,7 @@ func (executor *Executor) execute(
 	)
 
 	skipped, err := executor.kube.SetResources(
+		ctx,
 		automation.ControllerKind,
 		automation.ControllerName,
 		automation.NamespaceName,
@@ -252,6 +251,7 @@ func (executor *Executor) execute(
 	statusMap[kv1.PodUnknown] = "pods status is unknown"
 
 	result, msg, targetPodCount, runningPods := executor.podsStatusHandler(
+		ctx,
 		automation.ControllerName,
 		automation.NamespaceName,
 		automation.ControllerKind,
@@ -266,6 +266,7 @@ func (executor *Executor) execute(
 
 		// execute the automation with old values to rollback
 		_, err := executor.kube.SetResources(
+			ctx,
 			automation.ControllerKind,
 			automation.ControllerName,
 			automation.NamespaceName,
