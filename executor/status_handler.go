@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 	kv1 "k8s.io/api/core/v1"
 )
 
-func (executor *Executor) podsStatusHandler(entityName string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result agent.AutomationStatus, msg string, targetPods int32, runningPods int32) {
+func (executor *Executor) podsStatusHandler(ctx context.Context, entityName string, namespace string, kind string, statusMap map[kv1.PodPhase]string) (result agent.AutomationStatus, msg string, targetPods int32, runningPods int32) {
 	// short pooling to trigger pod status with max 15 minutes
 	msg = "pods restarting exceeded timout (15 min)"
 	start := time.Now()
@@ -25,28 +26,28 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	time.Sleep(3 * time.Second)
 
 	if strings.ToLower(kind) == "deployment" {
-		objectName, targetPods, err = executor.deploymentsHandler(entityName, namespace)
+		objectName, targetPods, err = executor.deploymentsHandler(ctx, entityName, namespace)
 		if err != nil {
 			flag = true
 
 		}
 
 	} else if strings.ToLower(kind) == "statefulset" {
-		objectName, targetPods, err = executor.statefulsetsHandler(entityName, namespace)
+		objectName, targetPods, err = executor.statefulsetsHandler(ctx, entityName, namespace)
 		if err != nil {
 			flag = true
 
 		}
 
 	} else if strings.ToLower(kind) == "daemonset" {
-		objectName, targetPods, err = executor.daemonsetsHandler(entityName, namespace)
+		objectName, targetPods, err = executor.daemonsetsHandler(ctx, entityName, namespace)
 		if err != nil {
 			flag = true
 
 		}
 
 	} else if strings.ToLower(kind) == "job" || strings.ToLower(kind) == "cronjob" {
-		job, err := executor.kube.GetCronJob(namespace, entityName)
+		job, err := executor.kube.GetCronJob(ctx, namespace, entityName)
 
 		if err != nil {
 			flag = true
@@ -69,7 +70,7 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 			time.Sleep(podStatusSleep)
 			status := kv1.PodPending
 
-			pods, err := executor.kube.GetNameSpacePods(namespace)
+			pods, err := executor.kube.GetNameSpacePods(ctx, namespace)
 
 			if err != nil {
 				msg = "failed to trigger pod status"
@@ -105,10 +106,10 @@ func (executor *Executor) podsStatusHandler(entityName string, namespace string,
 	return result, msg, targetPods, runningPods
 }
 
-func (executor *Executor) deploymentsHandler(entityName string, namespace string) (replicasetName string, targetPods int32, err error) {
+func (executor *Executor) deploymentsHandler(ctx context.Context, entityName string, namespace string) (replicasetName string, targetPods int32, err error) {
 
-	replicasets, err := executor.kube.GetNamespaceReplicaSets(namespace)
-	deployment, err := executor.kube.GetDeploymentByName(namespace, entityName)
+	replicasets, err := executor.kube.GetNamespaceReplicaSets(ctx, namespace)
+	deployment, err := executor.kube.GetDeploymentByName(ctx, namespace, entityName)
 
 	if err != nil {
 		return "", 0, err
@@ -143,8 +144,8 @@ func (executor *Executor) deploymentsHandler(entityName string, namespace string
 	return replicasetName, targetPods, nil
 }
 
-func (executor *Executor) statefulsetsHandler(entityName string, namespace string) (statefulsetName string, targetPods int32, err error) {
-	statefulset, err := executor.kube.GetStatefulSet(namespace, entityName)
+func (executor *Executor) statefulsetsHandler(ctx context.Context, entityName string, namespace string) (statefulsetName string, targetPods int32, err error) {
+	statefulset, err := executor.kube.GetStatefulSet(ctx, namespace, entityName)
 
 	if err != nil {
 		return "", 0, err
@@ -160,9 +161,9 @@ func (executor *Executor) statefulsetsHandler(entityName string, namespace strin
 	return statefulsetName, targetPods, nil
 }
 
-func (executor *Executor) daemonsetsHandler(entityName string, namespace string) (daemonsetName string, targetPods int32, err error) {
+func (executor *Executor) daemonsetsHandler(ctx context.Context, entityName string, namespace string) (daemonsetName string, targetPods int32, err error) {
 
-	daemonSet, err := executor.kube.GetDaemonSet(namespace, entityName)
+	daemonSet, err := executor.kube.GetDaemonSet(ctx, namespace, entityName)
 
 	if err != nil {
 		return "", 0, err
