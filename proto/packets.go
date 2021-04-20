@@ -233,8 +233,9 @@ type PacketAuditResultRequest struct {
 }
 
 type Match struct {
-	Namespaces []string `json:"namespaces"`
-	Kinds      []string `json:"kinds"`
+	Namespaces []string            `json:"namespaces"`
+	Kinds      []string            `json:"kinds"`
+	Labels     []map[string]string `json:"labels"`
 }
 
 type PacketConstraintItem struct {
