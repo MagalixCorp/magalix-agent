@@ -25,7 +25,9 @@ type Agent struct {
 	AutomationExecutor AutomationExecutor
 	Gateway            Gateway
 	Auditor            Auditor
-	//WebHookHandler     *webhook.WebHookHandler
+
+	EnableMetrics    bool
+	EnableAutomation bool
 
 	changeLogLevel ChangeLogLevelHandler
 
@@ -41,7 +43,8 @@ func New(
 	gateway Gateway,
 	logLevelHandler ChangeLogLevelHandler,
 	auditor Auditor,
-	//webhookHandler *webhook.WebHookHandler,
+	enableMetrics bool,
+	enableAutomation bool,
 ) *Agent {
 	return &Agent{
 		MetricsSource:      metricsSource,
@@ -50,7 +53,8 @@ func New(
 		Gateway:            gateway,
 		changeLogLevel:     logLevelHandler,
 		Auditor:            auditor,
-		//WebHookHandler:     webhookHandler,
+		EnableMetrics:      enableMetrics,
+		EnableAutomation:   enableAutomation,
 	}
 }
 
@@ -64,17 +68,21 @@ func (a *Agent) Start() error {
 	sinksCtx, cancelSinks := context.WithCancel(allCtx)
 	a.cancelSinks = cancelSinks
 
-	a.AutomationExecutor.SetAutomationFeedbackHandler(a.handleAutomationFeedback)
+	if a.EnableAutomation {
+		a.AutomationExecutor.SetAutomationFeedbackHandler(a.handleAutomationFeedback)
+		a.Gateway.SetAutomationHandler(a.AutomationExecutor.SubmitAutomation)
+	}
+
+	if a.EnableMetrics {
+		a.MetricsSource.SetMetricsHandler(a.handleMetrics)
+	}
 
 	a.EntitiesSource.SetDeltasHandler(a.handleDeltas)
 	a.EntitiesSource.SetEntitiesResyncHandler(a.handleResync)
 
-	a.MetricsSource.SetMetricsHandler(a.handleMetrics)
-
 	a.Auditor.SetAuditResultHandler(a.handleAuditResult)
 
 	// Initialize and authenticate gateway
-	a.Gateway.SetAutomationHandler(a.AutomationExecutor.SubmitAutomation)
 	a.Gateway.SetAuditCommandHandler(a.Auditor.HandleAuditCommand)
 	a.Gateway.SetConstraintsHandler(a.Auditor.HandleConstraints)
 	a.Gateway.SetRestartHandler(a.handleRestart)
@@ -90,10 +98,13 @@ func (a *Agent) Start() error {
 	}
 
 	eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
-	eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
-	eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
+	if a.EnableMetrics {
+		eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
+	}
+	if a.EnableAutomation {
+		eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
+	}
 	eg.Go(func() error { return a.Auditor.Start(sourcesCtx) })
-	//eg.Go(func() error { return a.WebHookHandler.Start(sourcesCtx) })
 
 	return eg.Wait()
 }
