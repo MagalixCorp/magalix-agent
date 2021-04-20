@@ -39,7 +39,6 @@ func (g *MagalixGateway) sendMetricsBatch(metrics []*agent.Metric) {
 			Name:           metric.Name,
 			Type:           metric.Type,
 			NodeName:       metric.NodeName,
-			NodeIP:         metric.NodeIP,
 			NamespaceName:  metric.NamespaceName,
 			ControllerName: metric.ControllerName,
 			ControllerKind: metric.ControllerKind,
