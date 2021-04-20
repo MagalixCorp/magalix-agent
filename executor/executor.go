@@ -33,7 +33,6 @@ type EntitiesFinder interface {
 type Executor struct {
 	kube                   *kuber.Kube
 	entitiesFinder         EntitiesFinder
-	dryRun                 bool
 	workersCount           int
 	automationsChan        chan *agent.Automation
 	inProgressJobs         map[string]bool
@@ -46,12 +45,10 @@ func NewExecutor(
 	kube *kuber.Kube,
 	entitiesFinder EntitiesFinder,
 	workersCount int,
-	dryRun bool,
 ) *Executor {
 	executor := &Executor{
 		kube:           kube,
 		entitiesFinder: entitiesFinder,
-		dryRun:         dryRun,
 
 		workersCount:    workersCount,
 		inProgressJobs:  map[string]bool{},
@@ -226,77 +223,71 @@ func (executor *Executor) execute(
 	trace, _ := json.Marshal(recommendedResources)
 	_logger.Debugw(
 		"executing automation",
-		"dry run", executor.dryRun,
 		"cpu unit", "milliCore",
 		"memory unit", "mibiByte",
 		"trace", string(trace),
 	)
 
-	if executor.dryRun {
-		response := executor.handleExecutionSkipping(automation, "dry run enabled")
+	skipped, err := executor.kube.SetResources(
+		automation.ControllerKind,
+		automation.ControllerName,
+		automation.NamespaceName,
+		recommendedResources,
+	)
+	if err != nil {
+		// TODO: do we need to retry execution before fail?
+		var response *agent.AutomationFeedback
+		if skipped {
+			response = executor.handleExecutionSkipping(automation, err.Error())
+		} else {
+			response = executor.handleExecutionError(automation, err)
+		}
 		return response, nil
-	} else {
-		skipped, err := executor.kube.SetResources(
-			automation.ControllerKind,
-			automation.ControllerName,
-			automation.NamespaceName,
-			recommendedResources,
-		)
-		if err != nil {
-			// TODO: do we need to retry execution before fail?
-			var response *agent.AutomationFeedback
-			if skipped {
-				response = executor.handleExecutionSkipping(automation, err.Error())
-			} else {
-				response = executor.handleExecutionError(automation, err)
-			}
-			return response, nil
-		}
-
-		// short pooling to trigger pod status with max 15 minutes
-		statusMap := make(map[kv1.PodPhase]string)
-		statusMap[kv1.PodRunning] = "pods restarted successfully"
-		statusMap[kv1.PodFailed] = "pods failed to restart"
-		statusMap[kv1.PodUnknown] = "pods status is unknown"
-
-		result, msg, targetPodCount, runningPods := executor.podsStatusHandler(
-			automation.ControllerName,
-			automation.NamespaceName,
-			automation.ControllerKind,
-			statusMap,
-		)
-
-		//rollback in case of failed to restart all pods
-		if runningPods < targetPodCount {
-
-			msg = statusMap[kv1.PodFailed]
-			result = agent.AutomationFailed
-
-			// execute the automation with old values to rollback
-			_, err := executor.kube.SetResources(
-				automation.ControllerKind,
-				automation.ControllerName,
-				automation.NamespaceName,
-				originalResources,
-			)
-
-			if err != nil {
-				_logger.Warn("can't rollback automation")
-			}
-		}
-
-		_logger.Debug(msg)
-
-		return &agent.AutomationFeedback{
-			ID:             automation.ID,
-			NamespaceName:  automation.NamespaceName,
-			ControllerName: automation.ControllerName,
-			ControllerKind: automation.ControllerKind,
-			ContainerName:  automation.ContainerName,
-			Status:         result,
-			Message:        msg,
-		}, nil
 	}
+
+	// short pooling to trigger pod status with max 15 minutes
+	statusMap := make(map[kv1.PodPhase]string)
+	statusMap[kv1.PodRunning] = "pods restarted successfully"
+	statusMap[kv1.PodFailed] = "pods failed to restart"
+	statusMap[kv1.PodUnknown] = "pods status is unknown"
+
+	result, msg, targetPodCount, runningPods := executor.podsStatusHandler(
+		automation.ControllerName,
+		automation.NamespaceName,
+		automation.ControllerKind,
+		statusMap,
+	)
+
+	//rollback in case of failed to restart all pods
+	if runningPods < targetPodCount {
+
+		msg = statusMap[kv1.PodFailed]
+		result = agent.AutomationFailed
+
+		// execute the automation with old values to rollback
+		_, err := executor.kube.SetResources(
+			automation.ControllerKind,
+			automation.ControllerName,
+			automation.NamespaceName,
+			originalResources,
+		)
+
+		if err != nil {
+			_logger.Warn("can't rollback automation")
+		}
+	}
+
+	_logger.Debug(msg)
+
+	return &agent.AutomationFeedback{
+		ID:             automation.ID,
+		NamespaceName:  automation.NamespaceName,
+		ControllerName: automation.ControllerName,
+		ControllerKind: automation.ControllerKind,
+		ContainerName:  automation.ContainerName,
+		Status:         result,
+		Message:        msg,
+	}, nil
 }
 
 func makeAutomationFailedResponse(automation *agent.Automation, msg string) *agent.AutomationFeedback {

@@ -59,6 +59,9 @@ func (m *Metrics) Start(ctx context.Context) error {
 	m.cancelWorker = cancel
 
 	ticker := time.NewTicker(m.metricsInterval)
+
+	logger.Debug("Metrics worker started")
+
 	for {
 		select {
 		case <-cancelCtx.Done():
