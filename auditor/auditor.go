@@ -34,7 +34,7 @@ type AuditEvent struct {
 
 type Auditor struct {
 	opa             *opa.OpaAuditor
-	entitiesWatcher *entities.EntitiesWatcher
+	entitiesWatcher entities.EntitiesWatcherSource
 	sendAuditResult agent.AuditResultHandler
 
 	auditEvents  chan AuditEvent
@@ -42,9 +42,9 @@ type Auditor struct {
 	cancelWorker context.CancelFunc
 }
 
-func NewAuditor(parentsStore *kuber.ParentsStore, entitiesWatcher *entities.EntitiesWatcher) *Auditor {
+func NewAuditor(entitiesWatcher entities.EntitiesWatcherSource) *Auditor {
 	a := &Auditor{
-		opa:             opa.New(parentsStore),
+		opa:             opa.New(entitiesWatcher),
 		auditEvents:     make(chan AuditEvent),
 		entitiesWatcher: entitiesWatcher,
 	}
