@@ -51,6 +51,12 @@ var (
 	}
 )
 
+type EntitiesWatcherSource interface {
+	AddResourceEventsHandler(handler ResourceEventsHandler)
+	GetAllEntitiesByGvrk() (map[kuber.GroupVersionResourceKind][]unstructured.Unstructured, []error)
+	GetParents(namespace string, kind string, name string) (*kuber.ParentController, bool)
+}
+
 type ResourceEventsHandler interface {
 	OnResourceAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
 	OnResourceUpdate(gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
@@ -478,6 +484,10 @@ func (ew *EntitiesWatcher) snapshotWorker(ctx context.Context) {
 			ew.buildAndSendSnapshotResync()
 		}
 	}
+}
+
+func (ew *EntitiesWatcher) GetParents(namespace string, kind string, name string) (*kuber.ParentController, bool) {
+	return ew.observer.ParentsStore.GetParents(namespace, kind, name)
 }
 
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) agent.GroupVersionResourceKind {

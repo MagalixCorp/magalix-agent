@@ -16,6 +16,9 @@ version:
 
 build: build@go
 
+test:
+	go test -v ./...
+
 upx:
 	# Download UPX and install it
 	echo :: $(UPXDIST)

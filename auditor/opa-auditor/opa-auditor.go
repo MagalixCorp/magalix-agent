@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/MagalixCorp/magalix-agent/v3/entities"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -44,16 +45,16 @@ type OpaAuditor struct {
 	constraints map[string]*Constraint
 	cache       *AuditResultsCache
 
-	parentsStore *kuber.ParentsStore
+	entitiesWatcher entities.EntitiesWatcherSource
 }
 
-func New(parentsStore *kuber.ParentsStore) *OpaAuditor {
+func New(entitiesWatcher entities.EntitiesWatcherSource) *OpaAuditor {
 	return &OpaAuditor{
 		templates:   make(map[string]*Template),
 		constraints: make(map[string]*Constraint),
 		cache:       NewAuditResultsCache(),
 
-		parentsStore: parentsStore,
+		entitiesWatcher: entitiesWatcher,
 	}
 }
 
@@ -209,7 +210,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 	namespace := resource.GetNamespace()
 	kind := resource.GetKind()
 	name := resource.GetName()
-	parent, found := a.parentsStore.GetParents(namespace, kind, name)
+	parent, found := a.entitiesWatcher.GetParents(namespace, kind, name)
 	var parentName, parentKind string
 	if found && parent != nil {
 		// Ignore audit result for pod with parents

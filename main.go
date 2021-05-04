@@ -261,7 +261,7 @@ func main() {
 		)
 	}
 
-	aud := auditor.NewAuditor(parentsStore, ew)
+	aud := auditor.NewAuditor(ew)
 
 	// init gateway
 	mgxAgent := agent.New(
