@@ -44,9 +44,31 @@ func TestConstraintsCache(t *testing.T) {
 				},
 			},
 		},
+		kuber.StatefulSets: {
+			{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "StatefulSet",
+					"metadata": map[string]interface{}{
+						"name": "deployment-2",
+						"labels": map[string]interface{}{
+							"app": "deployment-2",
+						},
+					},
+				},
+			},
+		},
 	}
 
-	ew := mocks.EntitiesWatcherMock{Entities: entities}
+	parents := map[string]*kuber.ParentController{
+		kuber.GetEntityKey("", "StatefulSet", "deployment-2"): {
+			Kind:       "Deployment",
+			Name:       "deployment-2",
+			APIVersion: "apps/v1",
+		},
+	}
+
+	ew := mocks.EntitiesWatcherMock{Entities: entities, Parents: parents}
 
 	aud := auditor.NewAuditor(&ew)
 	aud.SetAuditResultHandler(func(auditResult []*agent.AuditResult) error {
@@ -72,15 +94,19 @@ func TestConstraintsCache(t *testing.T) {
 		},
 	})
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	for _, r := range results {
 		if *r.EntityName == "deployment-1" && r.Status != "Compliance" {
 			t.Errorf("expected deployment-1 status to be Compliance, found %s", r.Status)
 		}
 
-		if *r.EntityName == "deployment-2" && r.Status != "Violation" {
-			t.Errorf("expected deployment-2 status to be Violation, found %s", r.Status)
+		if *r.EntityName == "deployment-2" && *r.EntityKind == "Deployment" && r.Status != "Violation" {
+			t.Errorf("expected deployment deployment-2 status to be Violation, found %s", r.Status)
+		}
+
+		if *r.EntityName == "deployment-2" && *r.EntityKind == "StatefulSet" && r.Status != "Violation" {
+			t.Errorf("expected statefulset deployment-2 status to be Violation, found %s", r.Status)
 		}
 	}
 }
