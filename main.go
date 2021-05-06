@@ -222,7 +222,9 @@ func main() {
 		logger.Fatalw("unable to start observer", "error", err)
 	}
 
-	enableMetrics := !args["--disable-metrics"].(bool)
+	// Force disabling metrics
+	// enableMetrics := !args["--disable-metrics"].(bool)
+	enableMetrics := false
 	var metricsSource *metrics.Metrics
 	if enableMetrics {
 		kubeletPort := args["--kubelet-port"].(string)
@@ -250,7 +252,9 @@ func main() {
 
 	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion)
 
-	enableAutomation := !args["--disable-automation-execution"].(bool)
+	// force disable autimations
+	// enableAutomation := !args["--disable-automation-execution"].(bool)
+	enableAutomation := false
 	var automationExecutor *executor.Executor
 	if enableAutomation {
 		executorWorkers := utils.MustParseInt(args, "--executor-workers")
