@@ -201,10 +201,9 @@ type PacketEntitiesResyncResponse struct{}
 type AuditResultStatus string
 
 const (
-	AuditResultStatusViolating = "Violation"
-	AuditResultStatusCompliant = "Compliance"
-	AuditResultStatusIgnored   = "Ignored"
-	AuditResultStatusError     = "Error"
+	AuditResultStatusViolating = "violation"
+	AuditResultStatusCompliant = "compliance"
+	AuditResultStatusIgnored   = "ignored"
 )
 
 type PacketAuditResultItem struct {
