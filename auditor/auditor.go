@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	auditInterval = 24 * time.Hour
+	auditInterval = 23 * time.Hour
 )
 
 type AuditEventType string
