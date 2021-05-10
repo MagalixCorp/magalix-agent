@@ -204,7 +204,6 @@ const (
 	AuditResultStatusViolating = "Violation"
 	AuditResultStatusCompliant = "Compliance"
 	AuditResultStatusIgnored   = "Ignored"
-	AuditResultStatusError     = "Error"
 )
 
 type PacketAuditResultItem struct {
