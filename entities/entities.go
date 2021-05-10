@@ -51,6 +51,12 @@ var (
 	}
 )
 
+type EntitiesWatcherSource interface {
+	AddResourceEventsHandler(handler ResourceEventsHandler)
+	GetAllEntitiesByGvrk() (map[kuber.GroupVersionResourceKind][]unstructured.Unstructured, []error)
+	GetParents(namespace string, kind string, name string) (*kuber.ParentController, bool)
+}
+
 type ResourceEventsHandler interface {
 	OnResourceAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured)
 	OnResourceUpdate(gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured)
@@ -480,6 +486,10 @@ func (ew *EntitiesWatcher) snapshotWorker(ctx context.Context) {
 	}
 }
 
+func (ew *EntitiesWatcher) GetParents(namespace string, kind string, name string) (*kuber.ParentController, bool) {
+	return ew.observer.ParentsStore.GetParents(namespace, kind, name)
+}
+
 func packetGvrk(gvrk kuber.GroupVersionResourceKind) agent.GroupVersionResourceKind {
 	return agent.GroupVersionResourceKind{
 		GroupVersionResource: gvrk.GroupVersionResource,
@@ -505,7 +515,7 @@ func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionReso
 	case kuber.Nodes:
 		ip, found, err := getNodeInternalIP(obj)
 		if !found || err != nil {
-			return nil, fmt.Errorf("unable to find node internal ip, error: %w", err)
+			return nil, nil
 		}
 
 		return map[string]interface{}{

@@ -2,16 +2,15 @@ package opa_auditor
 
 import (
 	"fmt"
-	"github.com/MagalixCorp/magalix-agent/v3/kuber"
-	"github.com/MagalixTechnologies/core/logger"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
+	"github.com/MagalixCorp/magalix-agent/v3/entities"
+	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	opa "github.com/MagalixTechnologies/opa-core"
-	ks8CoreV1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -45,16 +44,16 @@ type OpaAuditor struct {
 	constraints map[string]*Constraint
 	cache       *AuditResultsCache
 
-	parentsStore *kuber.ParentsStore
+	entitiesWatcher entities.EntitiesWatcherSource
 }
 
-func New(parentsStore *kuber.ParentsStore) *OpaAuditor {
+func New(entitiesWatcher entities.EntitiesWatcherSource) *OpaAuditor {
 	return &OpaAuditor{
 		templates:   make(map[string]*Template),
 		constraints: make(map[string]*Constraint),
 		cache:       NewAuditResultsCache(),
 
-		parentsStore: parentsStore,
+		entitiesWatcher: entitiesWatcher,
 	}
 }
 
@@ -210,16 +209,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 	namespace := resource.GetNamespace()
 	kind := resource.GetKind()
 	name := resource.GetName()
-	var nodeIp string
-	if kind == kuber.Nodes.Kind {
-		ip, err := getNodeIpFromUnstructured(resource)
-		if err != nil {
-			logger.Errorw("couldn't get node ip", "error", err)
-		} else {
-			nodeIp = ip
-		}
-	}
-	parent, found := a.parentsStore.GetParents(namespace, kind, name)
+	parent, found := a.entitiesWatcher.GetParents(namespace, kind, name)
 	var parentName, parentKind string
 	if found && parent != nil {
 		// Ignore audit result for pod with parents
@@ -249,14 +239,13 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 				Severity:     &severity,
 
 				Description: a.templates[templateId].Description,
-				HowToSolve: a.templates[templateId].HowToSolve,
+				HowToSolve:  a.templates[templateId].HowToSolve,
 
 				EntityName:    &name,
 				EntityKind:    &kind,
 				NamespaceName: &namespace,
 				ParentName:    &parentName,
 				ParentKind:    &parentKind,
-				NodeIP:        &nodeIp,
 				EntitySpec:    resource.Object,
 			}
 
@@ -310,6 +299,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 func matchEntity(resource *unstructured.Unstructured, match agent.Match) bool {
 	var matchKind bool
 	var matchNamespace bool
+	var matchLabel bool
 
 	if len(match.Kinds) == 0 {
 		matchKind = true
@@ -334,27 +324,26 @@ func matchEntity(resource *unstructured.Unstructured, match agent.Match) bool {
 			}
 		}
 	}
-	return matchKind && matchNamespace
-}
 
-func getNodeIpFromUnstructured(node *unstructured.Unstructured) (string, error) {
-	addresses, found, err := unstructured.NestedSlice(node.Object, "status", "addresses")
-	if err != nil || !found {
-		logger.Errorf("couldn't get node addresses. %w")
+	if len(match.Labels) == 0 {
+		matchLabel = true
+	} else {
+	outer:
+		for _, obj := range match.Labels {
+			for key, val := range obj {
+				entityVal, ok := resource.GetLabels()[key]
+				if ok {
+					if val != "*" && val != entityVal {
+						continue
+					}
+					matchLabel = true
+					break outer
+				}
+			}
+		}
 	}
 
-	for _, addr := range addresses {
-		addrMap, ok := addr.(map[string]interface{})
-		if !ok {
-			return "", fmt.Errorf("couldn't cast node address to map[string]interface{}")
-		}
-
-		if ipType := addrMap["type"]; ipType == string(ks8CoreV1.NodeInternalIP) {
-			return addrMap["address"].(string), nil
-		}
-	}
-
-	return "", fmt.Errorf("couldn't find node ip")
+	return matchKind && matchNamespace && matchLabel
 }
 
 func getResourceKey(resource *unstructured.Unstructured) string {

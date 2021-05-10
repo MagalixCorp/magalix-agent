@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -89,13 +90,10 @@ Options:
   --opt-in-analysis-data                     Send anonymous data for analysis.(Deprecated)
   --analysis-data-interval <duration>        Analysis data send interval.(Deprecated)
                                               [default: 5m]
-  --packets-v2                               Enable v2 packets (without ids). (Deprecated)
-  --disable-metrics                          Disable metrics collecting and sending.
-  --disable-events                           Disable events collecting and sending.(Deprecated)
-  --disable-scalar                           Disable in-agent scalar. (Deprecated)
   --port <port>                              Port to start the server on for liveness and readiness probes
                                                [default: 80]
-  --dry-run                                  Disable automation execution.
+  --disable-metrics                          Disable metrics collecting and sending.
+  --disable-automation-execution              Enable execution of optimizations automated fixes.
   --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
@@ -104,6 +102,10 @@ Options:
                                               [default: warn]
   -h --help                                  Show this help.
   --version                                  Show version.
+  --packets-v2                               Enable v2 packets (without ids). (Deprecated)
+  --disable-events                           Disable events collecting and sending.(Deprecated)
+  --disable-scalar                           Disable in-agent scalar. (Deprecated)
+  --dry-run                                  Disable automation execution. (Deprecated)
 `
 
 var version = "[manual build]"
@@ -170,7 +172,7 @@ func main() {
 		logger.Warnw("failed to discover server version", "error", err)
 	}
 
-	agentPermissions, err := kube.GetAgentPermissions()
+	agentPermissions, err := kube.GetAgentPermissions(context.Background())
 	if err != nil {
 		agentPermissions = err.Error()
 		logger.Warnw("Failed to get agent permissions", "error", err)
@@ -219,21 +221,28 @@ func main() {
 	if err != nil {
 		logger.Fatalw("unable to start observer", "error", err)
 	}
-	kubeletPort := args["--kubelet-port"].(string)
-	metricsInterval := utils.MustParseDuration(args, "--metrics-interval")
-	kubeletBackoffSleepTime := utils.MustParseDuration(args, "--kubelet-backoff-sleep")
-	kubeletBackoffMaxRetries := utils.MustParseInt(args, "--kubelet-backoff-max-retries")
-	metricsSource, err := metrics.NewMetrics(
-		observer,
-		kube,
-		kubeletPort,
-		metricsInterval,
-		kubeletBackoffSleepTime,
-		kubeletBackoffMaxRetries,
-	)
-	if err != nil {
-		logger.Fatalf("unable to initialize metrics source, error: %w", err)
-		os.Exit(1)
+
+	// Force disabling metrics
+	// enableMetrics := !args["--disable-metrics"].(bool)
+	enableMetrics := false
+	var metricsSource *metrics.Metrics
+	if enableMetrics {
+		kubeletPort := args["--kubelet-port"].(string)
+		metricsInterval := utils.MustParseDuration(args, "--metrics-interval")
+		kubeletBackoffSleepTime := utils.MustParseDuration(args, "--kubelet-backoff-sleep")
+		kubeletBackoffMaxRetries := utils.MustParseInt(args, "--kubelet-backoff-max-retries")
+		metricsSource, err = metrics.NewMetrics(
+			observer,
+			kube,
+			kubeletPort,
+			metricsInterval,
+			kubeletBackoffSleepTime,
+			kubeletBackoffMaxRetries,
+		)
+		if err != nil {
+			logger.Fatalf("unable to initialize metrics source, error: %w", err)
+			os.Exit(1)
+		}
 	}
 
 	k8sMinorVersion, err := kube.GetServerMinorVersion()
@@ -243,16 +252,20 @@ func main() {
 
 	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion)
 
-	executorWorkers := utils.MustParseInt(args, "--executor-workers")
-	dryRun := args["--dry-run"].(bool)
-	automationExecutor := executor.NewExecutor(
-		kube,
-		observer,
-		executorWorkers,
-		dryRun,
-	)
+	// force disable autimations
+	// enableAutomation := !args["--disable-automation-execution"].(bool)
+	enableAutomation := false
+	var automationExecutor *executor.Executor
+	if enableAutomation {
+		executorWorkers := utils.MustParseInt(args, "--executor-workers")
+		automationExecutor = executor.NewExecutor(
+			kube,
+			observer,
+			executorWorkers,
+		)
+	}
 
-	aud := auditor.NewAuditor(parentsStore, ew)
+	aud := auditor.NewAuditor(ew)
 
 	// init gateway
 	mgxAgent := agent.New(
@@ -264,6 +277,8 @@ func main() {
 			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
 		aud,
+		enableMetrics,
+		enableAutomation,
 	)
 
 	probes.IsReady = true

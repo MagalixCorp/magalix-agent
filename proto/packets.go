@@ -81,7 +81,6 @@ type MetricStoreV2Request struct {
 	Name           string    `json:"name"`
 	Type           string    `json:"type"`
 	NodeName       string    `json:"node_name"`
-	NodeIP         string    `json:"node_ip"`
 	NamespaceName  string    `json:"namespace_name"`
 	ControllerName string    `json:"controller_name"`
 	ControllerKind string    `json:"controller_kind"`
@@ -202,9 +201,9 @@ type PacketEntitiesResyncResponse struct{}
 type AuditResultStatus string
 
 const (
-	AuditResultStatusViolating = "violation"
-	AuditResultStatusCompliant = "compliance"
-	AuditResultStatusIgnored   = "ignored"
+	AuditResultStatusViolating = "Violation"
+	AuditResultStatusCompliant = "Compliance"
+	AuditResultStatusIgnored   = "Ignored"
 )
 
 type PacketAuditResultItem struct {
@@ -224,7 +223,6 @@ type PacketAuditResultItem struct {
 	NamespaceName *string                `json:"namespace_name,omitempty"`
 	ParentName    *string                `json:"parent_name,omitempty"`
 	ParentKind    *string                `json:"parent_kind,omitempty"`
-	NodeIP        *string                `json:"node_ip,omitempty"`
 	EntitySpec    map[string]interface{} `json:"entity_spec"`
 }
 
@@ -234,8 +232,9 @@ type PacketAuditResultRequest struct {
 }
 
 type Match struct {
-	Namespaces []string `json:"namespaces"`
-	Kinds      []string `json:"kinds"`
+	Namespaces []string            `json:"namespaces"`
+	Kinds      []string            `json:"kinds"`
+	Labels     []map[string]string `json:"labels"`
 }
 
 type PacketConstraintItem struct {

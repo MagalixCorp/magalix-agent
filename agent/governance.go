@@ -8,6 +8,7 @@ import (
 type Match struct {
 	Namespaces []string
 	Kinds      []string
+	Labels     []map[string]string
 }
 
 type Constraint struct {
@@ -32,9 +33,9 @@ type Constraint struct {
 type AuditResultStatus string
 
 const (
-	AuditResultStatusViolating = "violation"
-	AuditResultStatusCompliant = "compliance"
-	AuditResultStatusIgnored   = "ignored"
+	AuditResultStatusViolating = "Violation"
+	AuditResultStatusCompliant = "Compliance"
+	AuditResultStatusIgnored   = "Ignored"
 )
 
 type AuditResult struct {
@@ -54,7 +55,6 @@ type AuditResult struct {
 	NamespaceName *string
 	ParentName    *string
 	ParentKind    *string
-	NodeIP        *string
 	EntitySpec    map[string]interface{}
 }
 

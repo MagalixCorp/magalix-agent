@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	auditInterval = 24 * time.Hour
+	auditInterval = 23 * time.Hour
 )
 
 type AuditEventType string
@@ -34,7 +34,7 @@ type AuditEvent struct {
 
 type Auditor struct {
 	opa             *opa.OpaAuditor
-	entitiesWatcher *entities.EntitiesWatcher
+	entitiesWatcher entities.EntitiesWatcherSource
 	sendAuditResult agent.AuditResultHandler
 
 	auditEvents  chan AuditEvent
@@ -42,9 +42,9 @@ type Auditor struct {
 	cancelWorker context.CancelFunc
 }
 
-func NewAuditor(parentsStore *kuber.ParentsStore, entitiesWatcher *entities.EntitiesWatcher) *Auditor {
+func NewAuditor(entitiesWatcher entities.EntitiesWatcherSource) *Auditor {
 	a := &Auditor{
-		opa:             opa.New(parentsStore),
+		opa:             opa.New(entitiesWatcher),
 		auditEvents:     make(chan AuditEvent),
 		entitiesWatcher: entitiesWatcher,
 	}
@@ -72,9 +72,14 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 
 func (a *Auditor) HandleAuditCommand() error {
 	logger.Info("Received audit command. firing audit event")
-	a.auditEvents <- AuditEvent{Type: AuditEventTypeCommand}
+
+	go a.triggerAuditCommand()
 
 	return nil
+}
+
+func (a *Auditor) triggerAuditCommand() {
+	a.auditEvents <- AuditEvent{Type: AuditEventTypeCommand}
 }
 
 func (a *Auditor) OnResourceAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
