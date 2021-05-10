@@ -72,9 +72,14 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 
 func (a *Auditor) HandleAuditCommand() error {
 	logger.Info("Received audit command. firing audit event")
-	a.auditEvents <- AuditEvent{Type: AuditEventTypeCommand}
+
+	go a.triggerAuditCommand()
 
 	return nil
+}
+
+func (a *Auditor) triggerAuditCommand() {
+	a.auditEvents <- AuditEvent{Type: AuditEventTypeCommand}
 }
 
 func (a *Auditor) OnResourceAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
