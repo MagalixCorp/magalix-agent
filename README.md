@@ -2,7 +2,9 @@
 
 
 
-[![CircleCI](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master.svg?style=svg)](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master) [![Go Report Card](https://goreportcard.com/badge/github.com/MagalixCorp/magalix-agent)](https://goreportcard.com/report/github.com/MagalixCorp/magalix-agent) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![CircleCI](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master.svg?style=svg)](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master) [![Go Report Card](https://goreportcard.com/badge/github.com/MagalixCorp/magalix-agent)](https://goreportcard.com/report/github.com/MagalixCorp/magalix-agent) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
 
 
 
