@@ -224,6 +224,7 @@ type PacketAuditResultItem struct {
 	ParentName    *string                `json:"parent_name,omitempty"`
 	ParentKind    *string                `json:"parent_kind,omitempty"`
 	EntitySpec    map[string]interface{} `json:"entity_spec"`
+	Trigger       string                 `json:"trigger"`
 }
 
 type PacketAuditResultRequest struct {
