@@ -2,6 +2,7 @@ package auditor
 
 import (
 	"context"
+	"github.com/pkg/errors"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
@@ -25,6 +26,7 @@ const (
 	AuditEventTypeResourceUpdate AuditEventType = "resource-update"
 	AuditEventTypeResourceDelete AuditEventType = "resource-delete"
 	AuditEventTypeResourcesSync  AuditEventType = "resources-sync"
+	AuditEventTypePeriodic       AuditEventType = "periodic"
 )
 
 type AuditEvent struct {
@@ -107,28 +109,30 @@ func (a *Auditor) OnCacheSync() {
 	a.auditEvents <- AuditEvent{Type: AuditEventTypeResourcesSync}
 }
 
-func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintIds []string, useCache bool) {
-	results, errs := a.opa.Audit(resource, constraintIds, useCache)
+func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintIds []string, triggerType string) ([]*agent.AuditResult, error) {
+	var err error
+	results, errs := a.opa.Audit(resource, constraintIds, triggerType)
 	if len(errs) > 0 {
 		logger.Errorw("errors while auditing resource", "errors-count", len(errs), "errors", errs)
+		err = errors.Wrap(errs[0], "errors while auditing resource")
 	}
+	return results, err
 
-	if len(results) > 0 {
-		err := a.sendAuditResult(results)
-		if err != nil {
-			logger.Errorw("error while sending audit result", "error", err)
-		}
-	}
 }
 
-func (a *Auditor) auditAllResources(constraintIds []string, useCache bool) {
+func (a *Auditor) auditAllResourcesAndSendData(constraintIds []string, triggerType string) {
 	resourcesByGvrk, errs := a.entitiesWatcher.GetAllEntitiesByGvrk()
 	if len(errs) > 0 {
 		logger.Errorw("error while getting all resources", "error", errs)
 	}
 	for _, resources := range resourcesByGvrk {
-		for _, r := range resources {
-			a.auditResource(&r, constraintIds, useCache)
+		for idx := range resources {
+			resource := resources[idx]
+			results, _ := a.auditResource(&resource, constraintIds, triggerType)
+			err := a.sendAuditResult(results)
+			if err != nil {
+				logger.Errorw("error while sending audit result", "error", err)
+			}
 		}
 	}
 }
@@ -155,7 +159,22 @@ func (a *Auditor) Start(ctx context.Context) error {
 			case AuditEventTypeResourceUpdate:
 				if entitiesSynced {
 					logger.Debugf("Received update resource audit event. Auditing resource")
-					a.auditResource(e.Data.(*unstructured.Unstructured), nil, true)
+					resource := e.Data.(*unstructured.Unstructured)
+					results, _ := a.auditResource(resource, nil, string(e.Type))
+					nResult := make([]*agent.AuditResult, 0, len(results))
+					for i := range results {
+						result := results[i]
+						if a.opa.CheckResourceStatusWithConstraint(*result.ConstraintID, resource, result.Status) {
+							nResult = append(nResult, result)
+						}
+
+					}
+					results = nResult
+					err := a.sendAuditResult(results)
+					if err != nil {
+						logger.Errorw("error while sending audit result", "error", err)
+					}
+
 				} else {
 					logger.Debug("Received update resource audit event. Ignoring as entities are not synced yet")
 				}
@@ -164,19 +183,19 @@ func (a *Auditor) Start(ctx context.Context) error {
 				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
 			case AuditEventTypePoliciesChange:
 				updated := e.Data.([]string)
-				a.auditAllResources(updated, false)
+				a.auditAllResourcesAndSendData(updated, string(e.Type))
 			case AuditEventTypeResourcesSync:
 				entitiesSynced = true
 				fallthrough
 			case AuditEventTypeCommand:
 				logger.Debug("Received audit command event. Auditing all resources")
-				a.auditAllResources(nil, false)
+				a.auditAllResourcesAndSendData(nil, string(e.Type))
 			default:
 				logger.Errorw("unsupported event type", "event-type", e.Type)
 			}
 		case <-auditTicker.C:
 			logger.Debug("Starting peridoical auditing. Auditing all resources")
-			a.auditAllResources(nil, false)
+			a.auditAllResourcesAndSendData(nil, string(AuditEventTypePeriodic))
 		}
 	}
 }

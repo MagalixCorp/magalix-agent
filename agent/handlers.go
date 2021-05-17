@@ -24,6 +24,9 @@ func (a *Agent) handleAutomationFeedback(feedback *AutomationFeedback) error {
 }
 
 func (a *Agent) handleAuditResult(auditResult []*AuditResult) error {
+	if len(auditResult) == 0 {
+		return nil
+	}
 	return a.Gateway.SendAuditResults(auditResult)
 }
 
