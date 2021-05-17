@@ -120,7 +120,7 @@ func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintI
 
 }
 
-func (a *Auditor) auditAllResources(constraintIds []string, triggerType string) {
+func (a *Auditor) auditAllResourcesAndSendData(constraintIds []string, triggerType string) {
 	resourcesByGvrk, errs := a.entitiesWatcher.GetAllEntitiesByGvrk()
 	if len(errs) > 0 {
 		logger.Errorw("error while getting all resources", "error", errs)
@@ -183,19 +183,19 @@ func (a *Auditor) Start(ctx context.Context) error {
 				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
 			case AuditEventTypePoliciesChange:
 				updated := e.Data.([]string)
-				a.auditAllResources(updated, string(e.Type))
+				a.auditAllResourcesAndSendData(updated, string(e.Type))
 			case AuditEventTypeResourcesSync:
 				entitiesSynced = true
 				fallthrough
 			case AuditEventTypeCommand:
 				logger.Debug("Received audit command event. Auditing all resources")
-				a.auditAllResources(nil, string(e.Type))
+				a.auditAllResourcesAndSendData(nil, string(e.Type))
 			default:
 				logger.Errorw("unsupported event type", "event-type", e.Type)
 			}
 		case <-auditTicker.C:
 			logger.Debug("Starting peridoical auditing. Auditing all resources")
-			a.auditAllResources(nil, string(AuditEventTypePeriodic))
+			a.auditAllResourcesAndSendData(nil, string(AuditEventTypePeriodic))
 		}
 	}
 }
