@@ -97,7 +97,7 @@ func New(
 			sendLogs,
 		),
 		auditResultsBuffer: make([]*agent.AuditResult, 0, auditResultsBatchSize),
-		auditResultChan:    make(chan *agent.AuditResult),
+		auditResultChan:    make(chan *agent.AuditResult, 50),
 	}
 }
 
