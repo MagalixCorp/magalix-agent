@@ -1,6 +1,6 @@
 module github.com/MagalixCorp/magalix-agent/v3
 
-go 1.13
+go 1.16
 
 require (
 	github.com/MagalixTechnologies/alltogether-go v0.0.0-20181206150142-f01ae5621759

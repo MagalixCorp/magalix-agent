@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const auditResultsBatchSize = 1000
+
 type MagalixGateway struct {
 	MgxAgentGatewayUrl string
 
@@ -41,6 +43,8 @@ type MagalixGateway struct {
 	handleAuditCommand agent.AuditCommandHandler
 	triggerRestart     agent.RestartHandler
 	changeLogLevel     agent.ChangeLogLevelHandler
+	auditResultsBuffer []*agent.AuditResult
+	auditResultChan    chan *agent.AuditResult
 }
 
 func New(
@@ -92,6 +96,8 @@ func New(
 			protoBackoff,
 			sendLogs,
 		),
+		auditResultsBuffer: make([]*agent.AuditResult, 0, auditResultsBatchSize),
+		auditResultChan:    make(chan *agent.AuditResult, 50),
 	}
 }
 
@@ -103,6 +109,8 @@ func (g *MagalixGateway) Start(ctx context.Context) error {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	g.cancelWorkers = cancel
 	defer g.gwClient.Recover()
+
+	go g.SendAuditResultsWorker(cancelCtx)
 
 	return g.gwClient.Connect(cancelCtx, g.connectedChan)
 }

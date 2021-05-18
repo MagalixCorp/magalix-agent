@@ -2,7 +2,7 @@ version: 2
 jobs:
   "build & push":
     docker:
-      - image: magalixcorp/circleci-golang-lite:1.14
+      - image: magalixcorp/circleci-golang-lite:1.16
 
     steps:
       - run:
@@ -19,7 +19,7 @@ jobs:
           name: Install Google Cloud SDK
           command: |
             apk update
-            apk add python
+            apk add python3
 
             # Update the package list and install the Cloud SDK
             curl https://sdk.cloud.google.com | bash -s -- --disable-prompts
