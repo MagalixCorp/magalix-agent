@@ -129,6 +129,7 @@ func (a *Auditor) auditAllResourcesAndSendData(constraintIds []string, triggerTy
 		for idx := range resources {
 			resource := resources[idx]
 			results, _ := a.auditResource(&resource, constraintIds, triggerType)
+			a.opa.UpdateCache(results)
 			err := a.sendAuditResult(results)
 			if err != nil {
 				logger.Errorw("error while sending audit result", "error", err)
@@ -170,6 +171,7 @@ func (a *Auditor) Start(ctx context.Context) error {
 
 					}
 					results = nResult
+					a.opa.UpdateCache(results)
 					err := a.sendAuditResult(results)
 					if err != nil {
 						logger.Errorw("error while sending audit result", "error", err)

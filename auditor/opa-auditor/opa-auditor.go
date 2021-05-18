@@ -192,6 +192,24 @@ func (a *OpaAuditor) CheckResourceStatusWithConstraint(constraintId string, reso
 	oldStatus, found := a.cache.Get(constraintId, getResourceKey(resource))
 	return !found || oldStatus != currentStatus
 }
+func (a *OpaAuditor) UpdateCache(results []*agent.AuditResult) {
+	for i := range results {
+		result := results[i]
+		namespace := ""
+		if result.NamespaceName != nil {
+			namespace = *result.NamespaceName
+		}
+		kind := ""
+		if result.EntityKind != nil {
+			kind = *result.EntityKind
+		}
+		name := ""
+		if result.EntityName != nil {
+			name = *result.EntityName
+		}
+		a.cache.Put(*result.ConstraintID, kuber.GetEntityKey(namespace, kind, name), result.Status)
+	}
+}
 
 // evaluate constraint, construct recommendation obj
 func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []string, triggerType string) ([]*agent.AuditResult, []error) {
@@ -276,10 +294,8 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 				res.Status = agent.AuditResultStatusCompliant
 			}
 
-			resourceKey := getResourceKey(resource)
-
 			results = append(results, &res)
-			a.cache.Put(c.Id, resourceKey, res.Status)
+
 		}
 	}
 	return results, errs
