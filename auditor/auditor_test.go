@@ -1,4 +1,4 @@
-package test
+package auditor
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
-	"github.com/MagalixCorp/magalix-agent/v3/auditor"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
 	"github.com/MagalixCorp/magalix-agent/v3/tests/mocks"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -70,7 +69,7 @@ func TestConstraintsCache(t *testing.T) {
 
 	ew := mocks.EntitiesWatcherMock{Entities: entities, Parents: parents}
 
-	aud := auditor.NewAuditor(&ew)
+	aud := NewAuditor(&ew)
 	aud.SetAuditResultHandler(func(auditResult []*agent.AuditResult) error {
 		results = append(results, auditResult...)
 		return nil
