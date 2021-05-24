@@ -56,7 +56,7 @@ func New(entitiesWatcher entities.EntitiesWatcherSource) *OpaAuditor {
 		entitiesWatcher: entitiesWatcher,
 	}
 }
-func (a *OpaAuditor) GetCachedConstraintsLength() int {
+func (a *OpaAuditor) GetConstraintsSize() int {
 	return len(a.constraints)
 }
 func (a *OpaAuditor) AddConstraint(constraint *agent.Constraint) (bool, error) {

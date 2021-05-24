@@ -61,7 +61,7 @@ func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
 
 func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]error {
 	var event AuditEvent
-	if a.opa.GetCachedConstraintsLength() == 0 {
+	if a.opa.GetConstraintsSize() == 0 {
 		event = AuditEvent{
 			Type: AuditEventTypeInitial,
 		}
@@ -76,7 +76,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 		logger.Warnw("failed to parse some constraints", "constraints-size", len(errs))
 	}
 	if len(updated) > 0 {
-		logger.Info("firing audit event")
+		logger.Infof("firing audit event of type %s", event.Type)
 		event.Data = updated
 		a.auditEvents <- event
 	}
