@@ -75,23 +75,6 @@ const (
 	ResourceRequirementKindDefaultFromLimits  = "default-from-limits"
 )
 
-type PacketMetricsStoreV2Request []MetricStoreV2Request
-
-type MetricStoreV2Request struct {
-	Name           string    `json:"name"`
-	Type           string    `json:"type"`
-	NodeName       string    `json:"node_name"`
-	NamespaceName  string    `json:"namespace_name"`
-	ControllerName string    `json:"controller_name"`
-	ControllerKind string    `json:"controller_kind"`
-	ContainerName  string    `json:"container_name"`
-	Timestamp      time.Time `json:"timestamp"`
-	Value          int64     `json:"value"`
-	PodName        string    `json:"pod_name"`
-
-	AdditionalTags map[string]interface{} `json:"additional_tags"`
-}
-
 type PacketLogs []PacketLogItem
 
 type RequestLimit struct {
@@ -102,42 +85,6 @@ type RequestLimit struct {
 type ContainerResources struct {
 	Requests *RequestLimit `json:"requests,omitempty"`
 	Limits   *RequestLimit `json:"limits,omitempty"`
-}
-
-type PacketAutomation struct {
-	ID string `json:"id"`
-
-	NamespaceName  string `json:"namespace_name"`
-	ControllerName string `json:"controller_name"`
-	ControllerKind string `json:"controller_kind"`
-	ContainerName  string `json:"container_name"`
-
-	ContainerResources ContainerResources `json:"container_resources"`
-}
-
-type PacketAutomationFeedbackRequest struct {
-	ID string `json:"id"`
-
-	NamespaceName  string `json:"namespace_name"`
-	ControllerName string `json:"controller_name"`
-	ControllerKind string `json:"controller_kind"`
-	ContainerName  string `json:"container_name"`
-
-	Status  AutomationStatus `json:"status"`
-	Message string           `json:"message"`
-}
-
-type AutomationStatus string
-
-const (
-	AutomationExecuted AutomationStatus = "executed"
-	AutomationFailed   AutomationStatus = "failed"
-	AutomationSkipped  AutomationStatus = "skipped"
-)
-
-type PacketAutomationResponse struct {
-	ID    string  `json:"id"`
-	Error *string `json:"error"`
 }
 
 type PacketRestart struct {

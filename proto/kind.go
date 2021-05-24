@@ -10,25 +10,20 @@ const (
 
 	PacketKindLogs PacketKind = "logs"
 
-	PacketKindMetricsStoreV2Request PacketKind = "metrics/store_v2"
-
 	PacketKindEntitiesDeltasRequest PacketKind = "entities/deltas"
 	PacketKindEntitiesResyncRequest PacketKind = "entities/resync"
 
 	PacketKindBye PacketKind = "bye"
 
-	PacketKindAutomation         PacketKind = "automation"
-	PacketKindAutomationFeedback PacketKind = "automation/feedback"
-
 	PacketKindRestart PacketKind = "restart"
 
 	PacketKindRawStoreRequest PacketKind = "raw/store"
 
-	PacketKindLogLevel           PacketKind = "loglevel"
+	PacketKindLogLevel PacketKind = "loglevel"
 
 	PacketKindConstraintsRequest PacketKind = "audit/constraints"
 	PacketKindAuditResultRequest PacketKind = "audit/result"
-	PacketKindAuditCommand PacketKind = "audit/audit_command"
+	PacketKindAuditCommand       PacketKind = "audit/audit_command"
 )
 
 const (

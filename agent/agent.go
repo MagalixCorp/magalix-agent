@@ -20,14 +20,9 @@ type Agent struct {
 	ClusterID uuid.UUID
 	AgentID   uuid.UUID
 
-	MetricsSource      MetricsSource
-	EntitiesSource     EntitiesSource
-	AutomationExecutor AutomationExecutor
-	Gateway            Gateway
-	Auditor            Auditor
-
-	EnableMetrics    bool
-	EnableAutomation bool
+	EntitiesSource EntitiesSource
+	Gateway        Gateway
+	Auditor        Auditor
 
 	changeLogLevel ChangeLogLevelHandler
 
@@ -36,25 +31,12 @@ type Agent struct {
 	cancelSinks   context.CancelFunc
 }
 
-func New(
-	metricsSource MetricsSource,
-	entitiesSource EntitiesSource,
-	automationExecutor AutomationExecutor,
-	gateway Gateway,
-	logLevelHandler ChangeLogLevelHandler,
-	auditor Auditor,
-	enableMetrics bool,
-	enableAutomation bool,
-) *Agent {
+func New(entitiesSource EntitiesSource, gateway Gateway, logLevelHandler ChangeLogLevelHandler, auditor Auditor) *Agent {
 	return &Agent{
-		MetricsSource:      metricsSource,
-		EntitiesSource:     entitiesSource,
-		AutomationExecutor: automationExecutor,
-		Gateway:            gateway,
-		changeLogLevel:     logLevelHandler,
-		Auditor:            auditor,
-		EnableMetrics:      enableMetrics,
-		EnableAutomation:   enableAutomation,
+		EntitiesSource: entitiesSource,
+		Gateway:        gateway,
+		changeLogLevel: logLevelHandler,
+		Auditor:        auditor,
 	}
 }
 
@@ -67,15 +49,6 @@ func (a *Agent) Start() error {
 	a.cancelSources = cancelSources
 	sinksCtx, cancelSinks := context.WithCancel(allCtx)
 	a.cancelSinks = cancelSinks
-
-	if a.EnableAutomation {
-		a.AutomationExecutor.SetAutomationFeedbackHandler(a.handleAutomationFeedback)
-		a.Gateway.SetAutomationHandler(a.AutomationExecutor.SubmitAutomation)
-	}
-
-	if a.EnableMetrics {
-		a.MetricsSource.SetMetricsHandler(a.handleMetrics)
-	}
 
 	a.EntitiesSource.SetDeltasHandler(a.handleDeltas)
 	a.EntitiesSource.SetEntitiesResyncHandler(a.handleResync)
@@ -98,12 +71,6 @@ func (a *Agent) Start() error {
 	}
 
 	eg.Go(func() error { return a.EntitiesSource.Start(sourcesCtx) })
-	if a.EnableMetrics {
-		eg.Go(func() error { return a.MetricsSource.Start(sourcesCtx) })
-	}
-	if a.EnableAutomation {
-		eg.Go(func() error { return a.AutomationExecutor.Start(sourcesCtx) })
-	}
 	eg.Go(func() error { return a.Auditor.Start(sourcesCtx) })
 
 	return eg.Wait()
