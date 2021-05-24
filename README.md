@@ -75,4 +75,3 @@ The most common issues that users face installing Magalix agent is RBAC. Please 
 
 # Questions and Support
 Please reach out to us at our [support forum](https://docs.magalix.com/discuss) or send us an email at <support@magalix.com>.
-
