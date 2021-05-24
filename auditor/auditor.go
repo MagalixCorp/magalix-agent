@@ -22,11 +22,12 @@ type AuditEventType string
 
 const (
 	AuditEventTypeCommand        AuditEventType = "command"
-	AuditEventTypePoliciesChange AuditEventType = "policies-change"
+	AuditEventTypePolicyUpdate   AuditEventType = "policy-update"
 	AuditEventTypeResourceUpdate AuditEventType = "resource-update"
 	AuditEventTypeResourceDelete AuditEventType = "resource-delete"
 	AuditEventTypeResourcesSync  AuditEventType = "resources-sync"
-	AuditEventTypePeriodic       AuditEventType = "periodic"
+	AuditEventTypePeriodic       AuditEventType = "periodic-audit"
+	AuditEventTypeInitial        AuditEventType = "initial-audit"
 )
 
 type AuditEvent struct {
@@ -59,14 +60,25 @@ func (a *Auditor) SetAuditResultHandler(handler agent.AuditResultHandler) {
 }
 
 func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]error {
-	updated, errs := a.opa.UpdateConstraints(constraints)
-
-	if len(updated) > 0 {
-		logger.Info("Detected policies change. firing audit event")
-		a.auditEvents <- AuditEvent{
-			Type: AuditEventTypePoliciesChange,
-			Data: updated,
+	var event AuditEvent
+	if a.opa.GetCachedConstraintsLength() == 0 {
+		event = AuditEvent{
+			Type: AuditEventTypeInitial,
 		}
+	} else {
+		event = AuditEvent{
+			Type: AuditEventTypePolicyUpdate,
+		}
+	}
+
+	updated, errs := a.opa.UpdateConstraints(constraints)
+	if len(errs) > 0 {
+		logger.Warnw("failed to parse some constraints", "constraints-size", len(errs))
+	}
+	if len(updated) > 0 {
+		logger.Info("firing audit event")
+		event.Data = updated
+		a.auditEvents <- event
 	}
 
 	return errs
@@ -183,7 +195,7 @@ func (a *Auditor) Start(ctx context.Context) error {
 			case AuditEventTypeResourceDelete:
 				logger.Debugf("Received delete resource audit event")
 				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
-			case AuditEventTypePoliciesChange:
+			case AuditEventTypePolicyUpdate, AuditEventTypeInitial:
 				updated := e.Data.([]string)
 				a.auditAllResourcesAndSendData(updated, string(e.Type))
 			case AuditEventTypeResourcesSync:
