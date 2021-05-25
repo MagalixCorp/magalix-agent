@@ -21,13 +21,13 @@ const (
 type AuditEventType string
 
 const (
-	AuditEventTypeCommand        AuditEventType = "command"
-	AuditEventTypePolicyUpdate   AuditEventType = "policy-update"
-	AuditEventTypeResourceUpdate AuditEventType = "resource-update"
-	AuditEventTypeResourceDelete AuditEventType = "resource-delete"
-	AuditEventTypeResourcesSync  AuditEventType = "resources-sync"
-	AuditEventTypePeriodic       AuditEventType = "periodic-audit"
-	AuditEventTypeInitial        AuditEventType = "initial-audit"
+	AuditEventTypeCommand      AuditEventType = "command"
+	AuditEventTypePolicyChange AuditEventType = "policy-change"
+	AuditEventTypeEntityChange AuditEventType = "entity-change"
+	AuditEventTypeEntityDelete AuditEventType = "entity-delete"
+	AuditEventTypeEntitiesSync AuditEventType = "entities-sync"
+	AuditEventTypePeriodic     AuditEventType = "periodic-audit"
+	AuditEventTypeInitial      AuditEventType = "initial-audit"
 )
 
 type AuditEvent struct {
@@ -67,7 +67,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 		}
 	} else {
 		event = AuditEvent{
-			Type: AuditEventTypePolicyUpdate,
+			Type: AuditEventTypePolicyChange,
 		}
 	}
 
@@ -98,27 +98,27 @@ func (a *Auditor) triggerAuditCommand() {
 
 func (a *Auditor) OnResourceAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
 	a.auditEvents <- AuditEvent{
-		Type: AuditEventTypeResourceUpdate,
+		Type: AuditEventTypeEntityChange,
 		Data: &obj,
 	}
 }
 
 func (a *Auditor) OnResourceUpdate(gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
 	a.auditEvents <- AuditEvent{
-		Type: AuditEventTypeResourceUpdate,
+		Type: AuditEventTypeEntityChange,
 		Data: &newObj,
 	}
 }
 
 func (a *Auditor) OnResourceDelete(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
 	a.auditEvents <- AuditEvent{
-		Type: AuditEventTypeResourceDelete,
+		Type: AuditEventTypeEntityDelete,
 		Data: &obj,
 	}
 }
 
 func (a *Auditor) OnCacheSync() {
-	a.auditEvents <- AuditEvent{Type: AuditEventTypeResourcesSync}
+	a.auditEvents <- AuditEvent{Type: AuditEventTypeEntitiesSync}
 }
 
 func (a *Auditor) auditResource(resource *unstructured.Unstructured, constraintIds []string, triggerType string) ([]*agent.AuditResult, error) {
@@ -169,7 +169,7 @@ func (a *Auditor) Start(ctx context.Context) error {
 			return nil
 		case e := <-a.auditEvents:
 			switch e.Type {
-			case AuditEventTypeResourceUpdate:
+			case AuditEventTypeEntityChange:
 				if entitiesSynced {
 					logger.Debugf("Received update resource audit event. Auditing resource")
 					resource := e.Data.(*unstructured.Unstructured)
@@ -192,13 +192,13 @@ func (a *Auditor) Start(ctx context.Context) error {
 				} else {
 					logger.Debug("Received update resource audit event. Ignoring as entities are not synced yet")
 				}
-			case AuditEventTypeResourceDelete:
+			case AuditEventTypeEntityDelete:
 				logger.Debugf("Received delete resource audit event")
 				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
-			case AuditEventTypePolicyUpdate, AuditEventTypeInitial:
+			case AuditEventTypePolicyChange, AuditEventTypeInitial:
 				updated := e.Data.([]string)
 				a.auditAllResourcesAndSendData(updated, string(e.Type))
-			case AuditEventTypeResourcesSync:
+			case AuditEventTypeEntitiesSync:
 				entitiesSynced = true
 				fallthrough
 			case AuditEventTypeCommand:
