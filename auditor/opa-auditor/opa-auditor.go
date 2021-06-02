@@ -56,7 +56,9 @@ func New(entitiesWatcher entities.EntitiesWatcherSource) *OpaAuditor {
 		entitiesWatcher: entitiesWatcher,
 	}
 }
-
+func (a *OpaAuditor) GetConstraintsSize() int {
+	return len(a.constraints)
+}
 func (a *OpaAuditor) AddConstraint(constraint *agent.Constraint) (bool, error) {
 	cId := constraint.Id
 	tId := constraint.TemplateId
@@ -188,20 +190,32 @@ func (a *OpaAuditor) findConstraintsToDelete(constraints []*agent.Constraint) []
 func (a *OpaAuditor) RemoveResource(resource *unstructured.Unstructured) {
 	a.cache.RemoveResource(getResourceKey(resource))
 }
-
-func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []string, useCache bool) ([]*agent.AuditResult, []error) {
-	var constraints map[string]*Constraint
-	if constraintIds == nil || len(constraintIds) == 0 {
-		constraints = a.constraints
-	} else {
-		constraints = make(map[string]*Constraint)
-		for _, id := range constraintIds {
-			c, ok := a.constraints[id]
-			if ok {
-				constraints[id] = c
-			}
+func (a *OpaAuditor) CheckResourceStatusWithConstraint(constraintId string, resource *unstructured.Unstructured, currentStatus agent.AuditResultStatus) bool {
+	oldStatus, found := a.cache.Get(constraintId, getResourceKey(resource))
+	return !found || oldStatus != currentStatus
+}
+func (a *OpaAuditor) UpdateCache(results []*agent.AuditResult) {
+	for i := range results {
+		result := results[i]
+		namespace := ""
+		if result.NamespaceName != nil {
+			namespace = *result.NamespaceName
 		}
+		kind := ""
+		if result.EntityKind != nil {
+			kind = *result.EntityKind
+		}
+		name := ""
+		if result.EntityName != nil {
+			name = *result.EntityName
+		}
+		a.cache.Put(*result.ConstraintID, kuber.GetEntityKey(namespace, kind, name), result.Status)
 	}
+}
+
+// evaluate constraint, construct recommendation obj
+func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []string, triggerType string) ([]*agent.AuditResult, []error) {
+	constraints := getConstraints(constraintIds, a.constraints)
 	results := make([]*agent.AuditResult, 0, len(constraints))
 	errs := make([]error, 0)
 
@@ -222,7 +236,8 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 		parentKind = topParent.Kind
 	}
 
-	for _, c := range constraints {
+	for idx := range constraints {
+		c := constraints[idx]
 		templateId := c.TemplateId
 		constraintId := c.Id
 		categoryId := c.CategoryId
@@ -247,6 +262,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 				ParentName:    &parentName,
 				ParentKind:    &parentKind,
 				EntitySpec:    resource.Object,
+				Trigger:       triggerType,
 			}
 
 			t := a.templates[c.TemplateId]
@@ -280,20 +296,27 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 				res.Status = agent.AuditResultStatusCompliant
 			}
 
-			resourceKey := getResourceKey(resource)
-			if useCache {
-				oldStatus, found := a.cache.Get(c.Id, resourceKey)
-				if !found || oldStatus != res.Status {
-					results = append(results, &res)
-				}
-			} else {
-				results = append(results, &res)
-			}
+			results = append(results, &res)
 
-			a.cache.Put(c.Id, resourceKey, res.Status)
 		}
 	}
 	return results, errs
+}
+
+func getConstraints(constraintIds []string, cachedConstraints map[string]*Constraint) map[string]*Constraint {
+	var constraints map[string]*Constraint
+	if constraintIds == nil || len(constraintIds) == 0 {
+		constraints = cachedConstraints
+	} else {
+		constraints = make(map[string]*Constraint)
+		for _, id := range constraintIds {
+			c, ok := cachedConstraints[id]
+			if ok {
+				constraints[id] = c
+			}
+		}
+	}
+	return constraints
 }
 
 func matchEntity(resource *unstructured.Unstructured, match agent.Match) bool {

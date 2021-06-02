@@ -13,10 +13,8 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v3/auditor"
 	"github.com/MagalixCorp/magalix-agent/v3/client"
 	"github.com/MagalixCorp/magalix-agent/v3/entities"
-	"github.com/MagalixCorp/magalix-agent/v3/executor"
 	"github.com/MagalixCorp/magalix-agent/v3/gateway"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
-	"github.com/MagalixCorp/magalix-agent/v3/metrics"
 	"github.com/MagalixCorp/magalix-agent/v3/utils"
 	"github.com/MagalixTechnologies/core/logger"
 	"github.com/MagalixTechnologies/uuid-go"
@@ -61,20 +59,20 @@ Options:
                                               Supported sources are:
                                               * kubelet;
   --kubelet-port <port>                      Override kubelet port for
-                                              automatically discovered nodes.
+                                              automatically discovered nodes. (Deprecated)
                                               [default: 10255]
   --kubelet-backoff-sleep <duration>         Timeout of backoff policy.
-                                              Timeout will be multiplied from 1 to 10.
+                                              Timeout will be multiplied from 1 to 10. (Deprecated)
                                               [default: 300ms]
-  --kubelet-backoff-max-retries <retries>    Max retries of backoff policy, then consider failed.
+  --kubelet-backoff-max-retries <retries>    Max retries of backoff policy, then consider failed. (Deprecated)
                                               [default: 5]
-  --metrics-interval <duration>              Metrics request and send interval.
+  --metrics-interval <duration>              Metrics request and send interval. (Deprecated)
                                               [default: 1m]
   --events-buffer-flush-interval <duration>  Events batch writer flush interval(Deprecated).
                                               [default: 10s]
   --events-buffer-size <size>                Events batch writer buffer size(Deprecated).
                                               [default: 20]
-  --executor-workers <number>                 Executor concurrent workers count
+  --executor-workers <number>                 Executor concurrent workers count. (Deprecated)
                                               [default: 5]
   --timeout-proto-handshake <duration>       Timeout to do a websocket handshake.
                                               [default: 10s]
@@ -92,8 +90,8 @@ Options:
                                               [default: 5m]
   --port <port>                              Port to start the server on for liveness and readiness probes
                                                [default: 80]
-  --disable-metrics                          Disable metrics collecting and sending.
-  --disable-automation-execution              Enable execution of optimizations automated fixes.
+  --disable-metrics                          Disable metrics collecting and sending. (Deprecated)
+  --disable-automation-execution              Enable execution of optimizations automated fixes. (Deprecated)
   --no-send-logs                             Disable sending logs to the backend.
   --debug                                    Enable debug messages.
   --trace                                    Enable debug and trace messages.
@@ -222,29 +220,6 @@ func main() {
 		logger.Fatalw("unable to start observer", "error", err)
 	}
 
-	// Force disabling metrics
-	// enableMetrics := !args["--disable-metrics"].(bool)
-	enableMetrics := false
-	var metricsSource *metrics.Metrics
-	if enableMetrics {
-		kubeletPort := args["--kubelet-port"].(string)
-		metricsInterval := utils.MustParseDuration(args, "--metrics-interval")
-		kubeletBackoffSleepTime := utils.MustParseDuration(args, "--kubelet-backoff-sleep")
-		kubeletBackoffMaxRetries := utils.MustParseInt(args, "--kubelet-backoff-max-retries")
-		metricsSource, err = metrics.NewMetrics(
-			observer,
-			kube,
-			kubeletPort,
-			metricsInterval,
-			kubeletBackoffSleepTime,
-			kubeletBackoffMaxRetries,
-		)
-		if err != nil {
-			logger.Fatalf("unable to initialize metrics source, error: %w", err)
-			os.Exit(1)
-		}
-	}
-
 	k8sMinorVersion, err := kube.GetServerMinorVersion()
 	if err != nil {
 		logger.Warnw("failed to discover server minor version", "error", err)
@@ -252,33 +227,16 @@ func main() {
 
 	ew := entities.NewEntitiesWatcher(observer, k8sMinorVersion)
 
-	// force disable autimations
-	// enableAutomation := !args["--disable-automation-execution"].(bool)
-	enableAutomation := false
-	var automationExecutor *executor.Executor
-	if enableAutomation {
-		executorWorkers := utils.MustParseInt(args, "--executor-workers")
-		automationExecutor = executor.NewExecutor(
-			kube,
-			observer,
-			executorWorkers,
-		)
-	}
-
 	aud := auditor.NewAuditor(ew)
 
 	// init gateway
 	mgxAgent := agent.New(
-		metricsSource,
 		ew,
-		automationExecutor,
 		mgxGateway,
 		func(level *agent.LogLevel) error {
 			return ConfigureGlobalLogger(accountID, clusterID, level.Level, mgxGateway.GetLogsWriteSyncer())
 		},
 		aud,
-		enableMetrics,
-		enableAutomation,
 	)
 
 	probes.IsReady = true

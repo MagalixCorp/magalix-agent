@@ -15,15 +15,10 @@ func (a *Agent) handleResync(resync *EntitiesResync) error {
 	return a.Gateway.SendEntitiesResync(resync)
 }
 
-func (a *Agent) handleMetrics(metrics []*Metric) error {
-	return a.Gateway.SendMetrics(metrics)
-}
-
-func (a *Agent) handleAutomationFeedback(feedback *AutomationFeedback) error {
-	return a.Gateway.SendAutomationFeedback(feedback)
-}
-
 func (a *Agent) handleAuditResult(auditResult []*AuditResult) error {
+	if len(auditResult) == 0 {
+		return nil
+	}
 	return a.Gateway.SendAuditResults(auditResult)
 }
 

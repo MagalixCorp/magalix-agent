@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
 	"time"
 )
 
@@ -56,6 +57,35 @@ type AuditResult struct {
 	ParentName    *string
 	ParentKind    *string
 	EntitySpec    map[string]interface{}
+	Trigger       string
+}
+
+func (r *AuditResult) ToPacket() *proto.PacketAuditResultItem {
+	item := proto.PacketAuditResultItem{
+		TemplateID:    r.TemplateID,
+		ConstraintID:  r.ConstraintID,
+		CategoryID:    r.CategoryID,
+		Severity:      r.Severity,
+		Description:   r.Description,
+		HowToSolve:    r.HowToSolve,
+		Msg:           r.Msg,
+		EntityName:    r.EntityName,
+		EntityKind:    r.EntityKind,
+		NamespaceName: r.NamespaceName,
+		ParentName:    r.ParentName,
+		ParentKind:    r.ParentKind,
+		EntitySpec:    r.EntitySpec,
+		Trigger:       r.Trigger,
+	}
+	switch r.Status {
+	case AuditResultStatusViolating:
+		item.Status = proto.AuditResultStatusViolating
+	case AuditResultStatusCompliant:
+		item.Status = proto.AuditResultStatusCompliant
+	case AuditResultStatusIgnored:
+		item.Status = proto.AuditResultStatusIgnored
+	}
+	return &item
 }
 
 type AuditResultHandler func(auditResult []*AuditResult) error

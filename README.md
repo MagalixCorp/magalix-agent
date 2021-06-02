@@ -2,34 +2,42 @@
 
 
 
-[![CircleCI](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master.svg?style=svg)](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master) [![Go Report Card](https://goreportcard.com/badge/github.com/MagalixCorp/magalix-agent)](https://goreportcard.com/report/github.com/MagalixCorp/magalix-agent) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![CircleCI](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master.svg?style=svg)](https://circleci.com/gh/MagalixCorp/magalix-agent/tree/master) [![Go Report Card](https://goreportcard.com/badge/github.com/MagalixCorp/magalix-agent)](https://goreportcard.com/report/github.com/MagalixCorp/magalix-agent) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
 
-Magalix provides unique insights and recommendations about resources utilization inside Kubernetes. Magalix Autopilot right sizes Kubernetes cluster by dynamically managing resources of pods and containers. Save up to 50% of your cloud bill. Stay on top of capacity management. 
 
-### Core Insights
+
+Magalix provides unique insights and recommendations about governance, security, and resources utilization within your Cloud-Native environment. The Magalix agent performs several tasks: 
+1. It assists with right sizing Kubernetes cluster by dynamically managing resources of pods and containers. Save up to 50% of your cloud bill. Stay on top of capacity management. 
+2. Allows out-of-the-box, or custom policies-as-code (Rego based) between one, to many of your Kubernetes clusters regardless of where it is hosted, and who it is managed by. 
+3. Interfaces with your Kube-APIserver / RBAC to gather only the information necessary to provide performance and policy based analytics. 
+
+### Core Magalix Features
+- Enforce policies at Build, Deploy and Run Time
+- Apply an ever-growing list of policies developed by our internal policy team. 
+- Create your own set of policies from scratch, or leverage our templated policies to help boostrap your efforts. 
+- Automatically apply optimizations with minimal or no disruption to operations
+- Gain detailed recommendations to right size cluster VMs
+- Provide notification hooks for various external systems when certain events are triggered. 
+
+### Core Optimization Insights
 - What is the distribution of CPU, memory, and network across the whole cluster? 
 - How will utilization look like the next few hours?
 - Are there any unusual usage patterns?
 - How does the change in cluster size impacts performance?
-
-### Core Magalix Autopilot Features
-- Control when and how optimization is done
-- Automatically apply optimizations with minimal or no disruption to operations
-- Gain detailed recommendations to right size cluster VMs
 
 # Documentation
 
 The general documentation of the Magalix and its agent, including instructions for installation and dashboards, is located under the [docs website](https://docs.magalix.com).
 
 # Installation
-A valid account is required to run the agent properly.
+A valid account is required to run the agent properly. Please contact sales@magalix.com to set up demo. 
 
 ## Directly through Magalix.com 
 
-1. Go to [https://console.magalix.com](https://console.magalix.com) to create an account.
-2. Copy and paste the provided Kubectl command into your shell. 
+1. Go to [https://console.magalix.com](https://console.magalix.com) after your account has been created.
+2. Copy and paste the provided `kubectl` command into your shell. 
 3. It will install Magalix agent with the proper credentials to read your metrics and generate recommendations. 
 
 ## Via GKE Marketplace
@@ -45,27 +53,14 @@ You can install Magalix agent through GKE marketplace.
 1. Insert your email and password in GKE installation/configuration form. The deployment container will define a new cluster under your account and use generated secrets to connect the installed agent with your account. 
 2. Once installation is successfully complete, you will receive an email confirming cluster connectivity.
 
-**Notes**
 
-* Your first cluster analytics are free.
-
-* No recommendations will be applied to your cluster till you turn on the Autopilot feature at the [console](https://console.magalix.com).
-* Cluster nodes must have Devstorage.read_only scope to install Magalix agent. Otherwise, you will get an error message of `insufficient Oauth scope`. Refer to [this Stackoverflow](https://stackoverflow.com/questions/51750479/insufficient-oauth-scope-when-trying-to-deploy-jenkins-click-to-deploy-on-an-exi) issue. Google also published [this article](https://medium.com/google-cloud/updating-google-container-engine-vm-scopes-with-zero-downtime-50bff87e5f80) explaining 
-
-* The Autopilot feature is a Pro feature. You need to buy a subscription to enable it. 
 
 # Accessing Insights and Recommendations
-Few minutes after agent installation, metrics will start to flow. Magalix analytics and recommendations engine will generate predictions and recommendations in a few hours. You will also receive email notifications when recommendations are generated.
+A few minutes after the agent is installed, metrics will start to flow. The Magalix Analytics and Recommendations engine will generate predictions and recommendations in a few hours. You will also receive email notifications when recommendations are generated.
 
-![Snapshots of recommendations, resources distributions, and namespace resources in a time series](https://github.com/MagalixCorp/magalix-agent/blob/master/pics/snapshots-decision-distribution-timeseries-ns-shadow.png "Generated Decision and Resources Distribution")
+![Snapshots of recommendations, resources distributions, and namespace resources in a time series](./pics/preview.png)
 
-# Get Slack Notifications
-You can add slack webhook to receive notifications when a container or the cluster is having issues or when recommendations are generated. Go to the [cluster's dashboard](https://console.magalix.com/) and click on the watch icon. 
 
-![How to watch a cluster](https://github.com/MagalixCorp/magalix-agent/blob/master/pics/snapshots-watch-cluster.png "Watch cluster popup")
-
-**Note**
-Your first cluster watch feature is enabled by default. It will send you email-only notifications. 
 
 # Updating The Agent's Image
 If you need to update the running agent's installation, you will receive an email that you should do. Because the image pull policy is set to Always, everytime you delete the pod, a fresh image will be installed. 
@@ -80,4 +75,3 @@ The most common issues that users face installing Magalix agent is RBAC. Please 
 
 # Questions and Support
 Please reach out to us at our [support forum](https://docs.magalix.com/discuss) or send us an email at <support@magalix.com>.
-

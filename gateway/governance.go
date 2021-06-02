@@ -1,7 +1,7 @@
 package gateway
 
 import (
-	"math"
+	"context"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
@@ -17,7 +17,7 @@ const (
 	auditResultPacketPriority    = 1
 	auditResultPacketRetries     = 5
 
-	auditResultsBatchMaxSize = 1000
+	auditResultsBatchExpiry = 20 * time.Second
 )
 
 func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler) {
@@ -85,50 +85,36 @@ func (g *MagalixGateway) SetAuditCommandHandler(handler agent.AuditCommandHandle
 }
 
 func (g *MagalixGateway) SendAuditResults(auditResults []*agent.AuditResult) error {
-	noOfBatches := int(math.Ceil(float64(len(auditResults)) / float64(auditResultsBatchMaxSize)))
-	lastBatchSize := len(auditResults) % auditResultsBatchMaxSize
-	for i := 0; i < noOfBatches; i++ {
-		start := i * auditResultsBatchMaxSize
-		var end int
-		if i == noOfBatches-1 && lastBatchSize > 0 {
-			end = start + lastBatchSize
-		} else {
-			end = start + auditResultsBatchMaxSize
-		}
-		g.SendAuditResultsBatch(auditResults[start:end])
+	for _, auditResult := range auditResults {
+		g.auditResultChan <- auditResult
 	}
 	return nil
+}
+
+func (g *MagalixGateway) SendAuditResultsWorker(ctx context.Context) error {
+	timer := time.NewTicker(auditResultsBatchExpiry)
+	for {
+		select {
+		case result := <-g.auditResultChan:
+			g.auditResultsBuffer = append(g.auditResultsBuffer, result)
+			if len(g.auditResultsBuffer) == cap(g.auditResultsBuffer) {
+				g.SendAuditResultsBatch(g.auditResultsBuffer)
+				g.auditResultsBuffer = g.auditResultsBuffer[:0]
+				timer.Reset(auditResultsBatchExpiry)
+			}
+		case <-timer.C:
+			if len(g.auditResultsBuffer) > 0 {
+				g.SendAuditResultsBatch(g.auditResultsBuffer)
+				g.auditResultsBuffer = g.auditResultsBuffer[:0]
+			}
+		}
+	}
 }
 
 func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult) {
 	items := make([]*proto.PacketAuditResultItem, 0, len(auditResult))
 	for _, r := range auditResult {
-		item := proto.PacketAuditResultItem{
-			TemplateID:    r.TemplateID,
-			ConstraintID:  r.ConstraintID,
-			CategoryID:    r.CategoryID,
-			Severity:      r.Severity,
-			Description:   r.Description,
-			HowToSolve:    r.HowToSolve,
-			Msg:           r.Msg,
-			EntityName:    r.EntityName,
-			EntityKind:    r.EntityKind,
-			NamespaceName: r.NamespaceName,
-			ParentName:    r.ParentName,
-			ParentKind:    r.ParentKind,
-			EntitySpec:    r.EntitySpec,
-		}
-
-		switch r.Status {
-		case agent.AuditResultStatusViolating:
-			item.Status = proto.AuditResultStatusViolating
-		case agent.AuditResultStatusCompliant:
-			item.Status = proto.AuditResultStatusCompliant
-		case agent.AuditResultStatusIgnored:
-			item.Status = proto.AuditResultStatusIgnored
-		}
-
-		items = append(items, &item)
+		items = append(items, r.ToPacket())
 	}
 	logger.Infof("Sending %d audit results", len(auditResult))
 	packet := proto.PacketAuditResultRequest{
