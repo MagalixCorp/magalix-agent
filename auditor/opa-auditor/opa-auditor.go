@@ -226,8 +226,8 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 	parent, found := a.entitiesWatcher.GetParents(namespace, kind, name)
 	var parentName, parentKind string
 	if found && parent != nil {
-		// Ignore audit result for pod with parents
-		if kind == "Pod" {
+		// Ignore audit result for pod and replicasets with parents
+		if kind == "Pod" || kind == "ReplicaSet" {
 			return nil, nil
 		}
 		// RootParent func should move outside kuber
