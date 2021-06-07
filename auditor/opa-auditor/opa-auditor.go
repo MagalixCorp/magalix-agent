@@ -37,6 +37,8 @@ type Constraint struct {
 	UpdatedAt  time.Time
 	CategoryId string
 	Severity   string
+	Controls   []string
+	Standards  []string
 }
 
 type OpaAuditor struct {
@@ -75,6 +77,8 @@ func (a *OpaAuditor) AddConstraint(constraint *agent.Constraint) (bool, error) {
 			UpdatedAt:  constraint.UpdatedAt,
 			CategoryId: constraint.CategoryId,
 			Severity:   constraint.Severity,
+			Standards:  constraint.Standards,
+			Controls:   constraint.Controls,
 		}
 
 		if !tFound {
@@ -109,6 +113,8 @@ func (a *OpaAuditor) AddConstraint(constraint *agent.Constraint) (bool, error) {
 			UpdatedAt:  constraint.UpdatedAt,
 			CategoryId: constraint.CategoryId,
 			Severity:   constraint.Severity,
+			Standards:  constraint.Standards,
+			Controls:   constraint.Controls,
 		}
 
 		policy, err := opa.Parse(constraint.Code, PolicyQuery)
@@ -248,14 +254,14 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 			continue
 		} else {
 			res := agent.AuditResult{
-				TemplateID:   &templateId,
-				ConstraintID: &constraintId,
-				CategoryID:   &categoryId,
-				Severity:     &severity,
-
-				Description: a.templates[templateId].Description,
-				HowToSolve:  a.templates[templateId].HowToSolve,
-
+				TemplateID:    &templateId,
+				ConstraintID:  &constraintId,
+				CategoryID:    &categoryId,
+				Severity:      &severity,
+				Standards:     c.Standards,
+				Controls:      c.Controls,
+				Description:   a.templates[templateId].Description,
+				HowToSolve:    a.templates[templateId].HowToSolve,
 				EntityName:    &name,
 				EntityKind:    &kind,
 				NamespaceName: &namespace,
