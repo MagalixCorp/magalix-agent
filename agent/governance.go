@@ -2,8 +2,9 @@ package agent
 
 import (
 	"context"
-	"github.com/MagalixCorp/magalix-agent/v3/proto"
 	"time"
+
+	"github.com/MagalixCorp/magalix-agent/v3/proto"
 )
 
 type Match struct {
@@ -29,6 +30,8 @@ type Constraint struct {
 	UpdatedAt  time.Time
 	CategoryId string
 	Severity   string
+	Controls   []string
+	Standards  []string
 }
 
 type AuditResultStatus string
@@ -44,6 +47,8 @@ type AuditResult struct {
 	ConstraintID *string
 	CategoryID   *string
 	Severity     *string
+	Controls     []string
+	Standards    []string
 
 	Description string
 	HowToSolve  string
@@ -66,6 +71,8 @@ func (r *AuditResult) ToPacket() *proto.PacketAuditResultItem {
 		ConstraintID:  r.ConstraintID,
 		CategoryID:    r.CategoryID,
 		Severity:      r.Severity,
+		Controls:      r.Controls,
+		Standards:     r.Standards,
 		Description:   r.Description,
 		HowToSolve:    r.HowToSolve,
 		Msg:           r.Msg,

@@ -154,10 +154,12 @@ const (
 )
 
 type PacketAuditResultItem struct {
-	TemplateID   *string `json:"template_id"`
-	ConstraintID *string `json:"constraint_id"`
-	CategoryID   *string `json:"category_id"`
-	Severity     *string `json:"severity"`
+	TemplateID   *string  `json:"template_id"`
+	ConstraintID *string  `json:"constraint_id"`
+	CategoryID   *string  `json:"category_id"`
+	Severity     *string  `json:"severity"`
+	Controls     []string `json:"controls"`
+	Standards    []string `json:"standards"`
 
 	Description string `json:"description"`
 	HowToSolve  string `json:"how_to_solve"`
@@ -201,6 +203,8 @@ type PacketConstraintItem struct {
 
 	CategoryId string    `json:"category_id"`
 	Severity   string    `json:"severity"`
+	Controls   []string  `json:"controls"`
+	Standards  []string  `json:"standards"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
