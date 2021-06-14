@@ -106,7 +106,9 @@ jobs:
           command: |
             cd $SOURCE_PATH
             apk add build-base
-            make test
+
+            go test -v -cover -covermode=atomic -coverprofile=coverage.txt ./...
+            bash <(curl -s https://codecov.io/bash) -F unit
 
       - run:
           name: Scan The Image
