@@ -318,7 +318,7 @@ func (ew *EntitiesWatcher) deltaWrapper(
 ) (agent.Delta, error) {
 	delta.Gvrk = packetGvrk(gvrk)
 
-	if gvrk == kuber.Pods {
+	if gvrk == kuber.Pods || gvrk == kuber.ReplicaSets {
 		parents, err := ew.getParents(&delta.Data)
 		if err != nil {
 			return delta, fmt.Errorf(
