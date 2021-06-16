@@ -221,6 +221,9 @@ func (a *OpaAuditor) UpdateCache(results []*agent.AuditResult) {
 
 // evaluate constraint, construct recommendation obj
 func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []string, triggerType string) ([]*agent.AuditResult, []error) {
+	if len(resource.GetOwnerReferences()) > 0 {
+		return nil, nil
+	}
 	constraints := getConstraints(constraintIds, a.constraints)
 	results := make([]*agent.AuditResult, 0, len(constraints))
 	errs := make([]error, 0)
