@@ -75,10 +75,6 @@ func newClient(
 		panic(err)
 	}
 
-	if gwUrl.Scheme == "ws" {
-		gwUrl.Scheme = "wss"
-	}
-
 	address = gwUrl.String()
 
 	client := &Client{
