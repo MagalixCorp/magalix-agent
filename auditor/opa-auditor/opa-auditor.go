@@ -61,7 +61,8 @@ func New(entitiesWatcher entities.EntitiesWatcherSource) *OpaAuditor {
 func (a *OpaAuditor) GetConstraintsSize() int {
 	return len(a.constraints)
 }
-func (a *OpaAuditor) AddConstraint(constraint *agent.Constraint) (bool, error) {
+func (a *OpaAuditor) UpdateConstraint(constraint *agent.Constraint) (bool, error) {
+
 	cId := constraint.Id
 	tId := constraint.TemplateId
 	c, cFound := a.constraints[cId]
@@ -159,7 +160,11 @@ func (a *OpaAuditor) UpdateConstraints(constraints []*agent.Constraint) ([]strin
 	errorsMap := make(map[string]error)
 	updated := make([]string, 0)
 	for _, constraint := range constraints {
-		constraintUpdated, err := a.AddConstraint(constraint)
+		if constraint.DeletedAt != nil {
+			a.RemoveConstraint(constraint.Id)
+			continue
+		}
+		constraintUpdated, err := a.UpdateConstraint(constraint)
 		if err != nil {
 			errorsMap[constraint.Id] = err
 			continue
@@ -170,27 +175,7 @@ func (a *OpaAuditor) UpdateConstraints(constraints []*agent.Constraint) ([]strin
 		}
 	}
 
-	for _, info := range a.findConstraintsToDelete(constraints) {
-		a.RemoveConstraint(info.Id)
-	}
-
 	return updated, errorsMap
-}
-
-func (a *OpaAuditor) findConstraintsToDelete(constraints []*agent.Constraint) []*Constraint {
-	toDelete := make([]*Constraint, 0)
-	constraintsMap := make(map[string]*agent.Constraint)
-	for _, c := range constraints {
-		constraintsMap[c.Id] = c
-	}
-
-	for id, c := range a.constraints {
-		if _, found := constraintsMap[id]; !found {
-			toDelete = append(toDelete, c)
-		}
-	}
-
-	return toDelete
 }
 
 func (a *OpaAuditor) RemoveResource(resource *unstructured.Unstructured) {
@@ -299,7 +284,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 					res.Status = agent.AuditResultStatusViolating
 					res.Msg = &msg
 				} else {
-					errs = append(errs, fmt.Errorf("unable to evaluate resource against policy. constraint id: %s. %w", c.Id, err))
+					errs = append(errs, fmt.Errorf("unable to evaluate resource against policy. template id: %s, constraint id: %s. %w", c.TemplateId, c.Id, err))
 				}
 			} else {
 				res.Status = agent.AuditResultStatusCompliant

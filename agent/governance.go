@@ -32,6 +32,7 @@ type Constraint struct {
 	Severity   string
 	Controls   []string
 	Standards  []string
+	DeletedAt  *string
 }
 
 type AuditResultStatus string
