@@ -2,8 +2,9 @@ package auditor
 
 import (
 	"context"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixCorp/magalix-agent/v3/entities"
@@ -71,13 +72,13 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 		}
 	}
 
-	updated, errs := a.opa.UpdateConstraints(constraints)
+	updatedConstraintIds, errs := a.opa.UpdateConstraints(constraints)
 	if len(errs) > 0 {
 		logger.Warnw("failed to parse some constraints", "constraints-size", len(errs))
 	}
-	if len(updated) > 0 {
+	if len(updatedConstraintIds) > 0 {
 		logger.Infof("firing audit event of type %s", event.Type)
-		event.Data = updated
+		event.Data = updatedConstraintIds
 		a.auditEvents <- event
 	}
 
@@ -208,7 +209,7 @@ func (a *Auditor) Start(ctx context.Context) error {
 				logger.Errorw("unsupported event type", "event-type", e.Type)
 			}
 		case <-auditTicker.C:
-			logger.Debug("Starting peridoical auditing. Auditing all resources")
+			logger.Debug("Starting periodical auditing. Auditing all resources")
 			a.auditAllResourcesAndSendData(nil, string(AuditEventTypePeriodic))
 		}
 	}

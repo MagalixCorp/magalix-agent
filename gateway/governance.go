@@ -54,6 +54,7 @@ func (g *MagalixGateway) SetConstraintsHandler(handler agent.ConstraintsHandler)
 				Severity:    c.Severity,
 				Controls:    c.Controls,
 				Standards:   c.Standards,
+				DeletedAt:   c.DeletedAt,
 			}
 			constraints = append(constraints, constraint)
 		}
