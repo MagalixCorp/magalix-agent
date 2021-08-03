@@ -51,6 +51,10 @@ func (client *Client) onConnect(connected chan bool) error {
 					}
 
 				}
+				if connectionError.Code == 403 {
+					logger.Warnw("account not authorized")
+					time.Sleep(time.Hour * 2)
+				}
 			}
 
 			logger.Errorw(
