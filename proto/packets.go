@@ -206,6 +206,7 @@ type PacketConstraintItem struct {
 	Controls   []string  `json:"controls"`
 	Standards  []string  `json:"standards"`
 	UpdatedAt  time.Time `json:"updated_at"`
+	DeletedAt  *string   `json:"deleted_at,omitempty"`
 }
 
 type PacketConstraintsRequest struct {

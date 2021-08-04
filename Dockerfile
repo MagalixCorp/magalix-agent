@@ -1,4 +1,4 @@
-FROM alpine:3.6
+FROM alpine:3.14
 
 RUN apk --update add --no-cache ca-certificates bash
 
