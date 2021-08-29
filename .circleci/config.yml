@@ -2,7 +2,7 @@ version: 2
 jobs:
   "build & push":
     docker:
-      - image: magalixcorp/circleci-golang-lite:1.16
+      - image: magalixcorp/circleci-golang-lite:1.17
 
     steps:
       - run:
