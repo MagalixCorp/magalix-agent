@@ -36,7 +36,6 @@ func (g *MagalixGateway) sendDeltas(deltas []*agent.Delta) {
 	if len(deltas) == 0 {
 		return
 	}
-	logger.Info("Sending deltas")
 	items := make([]proto.PacketEntityDelta, len(deltas))
 	i := 0
 	for _, item := range deltas {
@@ -56,7 +55,7 @@ func (g *MagalixGateway) sendDeltas(deltas []*agent.Delta) {
 		Items:     items,
 		Timestamp: time.Now().UTC(),
 	}
-	g.gwClient.Pipe(client.Package{
+	err := g.gwClient.Pipe(client.Package{
 		Kind:        proto.PacketKindEntitiesDeltasRequest,
 		ExpiryTime:  utils.After(deltasPacketExpireAfter),
 		ExpiryCount: deltasPacketExpireCount,
@@ -64,6 +63,9 @@ func (g *MagalixGateway) sendDeltas(deltas []*agent.Delta) {
 		Retries:     deltasPacketRetries,
 		Data:        packet,
 	})
+	if err != nil {
+		logger.Errorf("failed to send all deltas, %w", err)
+	}
 	logger.Infof("%d deltas sent", len(deltas))
 }
 
@@ -97,7 +99,7 @@ func (g *MagalixGateway) sendEntitiesResync(resync *agent.EntitiesResync) {
 		}
 	}
 
-	g.gwClient.Pipe(client.Package{
+	err := g.gwClient.Pipe(client.Package{
 		Kind:        proto.PacketKindEntitiesResyncRequest,
 		ExpiryTime:  utils.After(resyncPacketExpireAfter),
 		ExpiryCount: resyncPacketExpireCount,
@@ -105,4 +107,7 @@ func (g *MagalixGateway) sendEntitiesResync(resync *agent.EntitiesResync) {
 		Retries:     resyncPacketRetries,
 		Data:        packet,
 	})
+	if err != nil {
+		logger.Errorf("failed to send all entities resync, %w", err)
+	}
 }

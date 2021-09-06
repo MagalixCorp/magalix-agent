@@ -98,8 +98,8 @@ func (client *Client) ping() error {
 
 	now := time.Now().UTC()
 
-	logger.Infow(
-		"ping-pong has been finished",
+	logger.Debugw(
+		"ping gateway has been finished",
 		"latency/client-server", pong.Started.Sub(started).String(),
 		"latency/server-client", now.Sub(pong.Started).String(),
 	)
