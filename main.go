@@ -97,7 +97,7 @@ Options:
   --trace                                    Enable debug and trace messages.
   --trace-log <path>                         Write log messages to specified file. (Deprecated)
   --log-level <string>                       Log level
-                                              [default: warn]
+                                              [default: info]
   -h --help                                  Show this help.
   --version                                  Show version.
   --packets-v2                               Enable v2 packets (without ids). (Deprecated)
@@ -252,7 +252,7 @@ func getKRestConfig(
 	args map[string]interface{},
 ) (config *rest.Config, err error) {
 	if args["--kube-incluster"].(bool) {
-		logger.Info("initializing kubernetes incluster config")
+		logger.Debug("initializing kubernetes incluster config")
 
 		config, err = rest.InClusterConfig()
 		if err != nil {
@@ -260,7 +260,7 @@ func getKRestConfig(
 		}
 
 	} else {
-		logger.Info("initializing kubernetes user-defined config")
+		logger.Debug("initializing kubernetes user-defined config")
 
 		token, _ := args["--kube-token"].(string)
 		if token == "" {

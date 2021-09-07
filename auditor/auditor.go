@@ -185,6 +185,10 @@ func (a *Auditor) Start(ctx context.Context) error {
 					}
 					results = nResult
 					a.opa.UpdateCache(results)
+					if len(results) != 0 {
+						logger.Infof("sending results of entity change for %s %s",
+							resource.GetKind(), resource.GetName())
+					}
 					err := a.sendAuditResult(results)
 					if err != nil {
 						logger.Errorw("error while sending audit result", "error", err)
@@ -197,19 +201,20 @@ func (a *Auditor) Start(ctx context.Context) error {
 				logger.Debugf("Received delete resource audit event")
 				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
 			case AuditEventTypePolicyChange, AuditEventTypeInitial:
+				logger.Infof("starting %s audit", string(e.Type))
 				updated := e.Data.([]string)
 				a.auditAllResourcesAndSendData(updated, string(e.Type))
 			case AuditEventTypeEntitiesSync:
 				entitiesSynced = true
 				fallthrough
 			case AuditEventTypeCommand:
-				logger.Debug("Received audit command event. Auditing all resources")
+				logger.Info("Received audit command event. Auditing all resources")
 				a.auditAllResourcesAndSendData(nil, string(e.Type))
 			default:
 				logger.Errorw("unsupported event type", "event-type", e.Type)
 			}
 		case <-auditTicker.C:
-			logger.Debug("Starting periodical auditing. Auditing all resources")
+			logger.Info("Starting periodical auditing. Auditing all resources")
 			a.auditAllResourcesAndSendData(nil, string(AuditEventTypePeriodic))
 		}
 	}

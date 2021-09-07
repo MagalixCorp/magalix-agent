@@ -119,12 +119,12 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 	for _, r := range auditResult {
 		items = append(items, r.ToPacket())
 	}
-	logger.Infof("Sending %d audit results", len(auditResult))
+	logger.Debugf("Sending %d audit results", len(auditResult))
 	packet := proto.PacketAuditResultRequest{
 		Items:     items,
 		Timestamp: time.Now().UTC(),
 	}
-	g.gwClient.Pipe(client.Package{
+	err := g.gwClient.Pipe(client.Package{
 		Kind:        proto.PacketKindAuditResultRequest,
 		ExpiryTime:  utils.After(auditResultPacketExpireAfter),
 		ExpiryCount: auditResultPacketExpireCount,
@@ -132,5 +132,8 @@ func (g *MagalixGateway) SendAuditResultsBatch(auditResult []*agent.AuditResult)
 		Retries:     auditResultPacketRetries,
 		Data:        packet,
 	})
+	if err != nil {
+		logger.Errorf("failed to send all recommendations, %w", err)
+	}
 
 }

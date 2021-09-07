@@ -3,13 +3,14 @@ package client
 import (
 	"context"
 	"fmt"
-	"github.com/reconquest/sign-go"
-	"golang.org/x/sync/errgroup"
 	"os"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/reconquest/sign-go"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/core/logger"
@@ -113,7 +114,7 @@ func (client *Client) Connect(ctx context.Context, connect chan bool) error {
 			client.WithBackoff(func() error {
 				err := client.ping()
 				if err != nil {
-					logger.Errorw("unable to send ping-pong request to gateway", "error", err)
+					logger.Errorw("unable to send ping request to gateway", "error", err)
 					return err
 				}
 
