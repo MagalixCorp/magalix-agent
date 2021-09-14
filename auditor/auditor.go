@@ -77,6 +77,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 		logger.Warnw("failed to parse some constraints", "constraints-size", len(errs))
 	}
 	if len(updatedConstraintIds) > 0 {
+		logger.Infow("recieved constraint updates", "count", len(updatedConstraintIds))
 		logger.Infof("firing audit event of type %s", event.Type)
 		event.Data = updatedConstraintIds
 		a.auditEvents <- event
@@ -201,7 +202,6 @@ func (a *Auditor) Start(ctx context.Context) error {
 				logger.Debugf("Received delete resource audit event")
 				a.opa.RemoveResource(e.Data.(*unstructured.Unstructured))
 			case AuditEventTypePolicyChange, AuditEventTypeInitial:
-				logger.Infof("starting %s audit", string(e.Type))
 				updated := e.Data.([]string)
 				a.auditAllResourcesAndSendData(updated, string(e.Type))
 			case AuditEventTypeEntitiesSync:
