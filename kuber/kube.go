@@ -27,8 +27,7 @@ import (
 )
 
 const (
-	milliCore   = 1000
-	maskedValue = "**MASKED**"
+	milliCore = 1000
 )
 
 // Kube kube struct
