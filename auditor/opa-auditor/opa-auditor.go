@@ -7,6 +7,7 @@ import (
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
 	"github.com/MagalixCorp/magalix-agent/v3/entities"
 	"github.com/MagalixCorp/magalix-agent/v3/kuber"
+	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -258,6 +259,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 				EntitySpec:    resource.Object,
 				Trigger:       triggerType,
 			}
+			res.Id = getAuditID()
 
 			t := a.templates[c.TemplateId]
 			err := t.Policy.EvalGateKeeperCompliant(resource.Object, c.Parameters, PolicyQuery)
@@ -365,4 +367,7 @@ func matchEntity(resource *unstructured.Unstructured, match agent.Match) bool {
 
 func getResourceKey(resource *unstructured.Unstructured) string {
 	return kuber.GetEntityKey(resource.GetNamespace(), resource.GetKind(), resource.GetName())
+}
+func getAuditID() string {
+	return uuid.NewV4().String()
 }

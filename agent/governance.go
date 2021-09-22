@@ -44,6 +44,7 @@ const (
 )
 
 type AuditResult struct {
+	Id           string
 	TemplateID   *string
 	ConstraintID *string
 	CategoryID   *string
@@ -68,6 +69,7 @@ type AuditResult struct {
 
 func (r *AuditResult) ToPacket() *proto.PacketAuditResultItem {
 	item := proto.PacketAuditResultItem{
+		Id:            r.Id,
 		TemplateID:    r.TemplateID,
 		ConstraintID:  r.ConstraintID,
 		CategoryID:    r.CategoryID,
