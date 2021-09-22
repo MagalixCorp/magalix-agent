@@ -10,10 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-const (
-	maskedValue = "**MASKED**"
-)
-
 var (
 	podSpecMap = map[string][]string{
 		Pods.Kind:                   {"spec"},
