@@ -215,7 +215,6 @@ func (client *Client) Pipe(pack Package) error {
 	if client.pipe == nil {
 		panic("client pipe not defined")
 	}
-	client.pipe.Send(pack)
 	i := client.pipe.Send(pack)
 	if i > 0 {
 		return fmt.Errorf("dropped %d packets", i)
