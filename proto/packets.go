@@ -154,6 +154,7 @@ const (
 )
 
 type PacketAuditResultItem struct {
+	Id           string   `json:"id"`
 	TemplateID   *string  `json:"template_id"`
 	ConstraintID *string  `json:"constraint_id"`
 	CategoryID   *string  `json:"category_id"`
