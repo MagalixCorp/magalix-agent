@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/proto"
+	"github.com/MagalixTechnologies/uuid-go"
 )
 
 type Match struct {
@@ -65,6 +66,11 @@ type AuditResult struct {
 	ParentKind    *string
 	EntitySpec    map[string]interface{}
 	Trigger       string
+}
+
+func (a *AuditResult) GenerateID() *AuditResult {
+	a.Id = uuid.NewV4().String()
+	return a
 }
 
 func (r *AuditResult) ToPacket() *proto.PacketAuditResultItem {
