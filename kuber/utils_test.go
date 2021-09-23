@@ -60,4 +60,9 @@ func TestGetRootParent(t *testing.T) {
 			t.Errorf("expected root parent with kind Deployment, found kind %s", parent.Kind)
 		}
 	}
+
+	parent = RootParent(&deployment)
+	if parent != nil {
+		t.Errorf("expected root parent nil, found %s", parent.Kind)
+	}
 }
