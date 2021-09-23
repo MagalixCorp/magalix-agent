@@ -62,7 +62,7 @@ func TestGetRootParent(t *testing.T) {
 	}
 
 	parent = RootParent(&deployment)
-	if parent != nil {
+	if parent != &deployment {
 		t.Errorf("expected root parent nil, found %s", parent.Kind)
 	}
 }
