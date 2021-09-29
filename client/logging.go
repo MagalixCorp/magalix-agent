@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/proto"
@@ -26,13 +27,13 @@ func (client *Client) Write(p []byte) (n int, err error) {
 		})
 
 		if len(client.logBuffer) == logBatchSize {
-			client.flushLogs()
+			err = client.flushLogs()
 		}
 	}
-	return len(client.logBuffer), nil
+	return len(client.logBuffer), err
 }
 
-func (client *Client) flushLogs() {
+func (client *Client) flushLogs() error {
 	payload := make(proto.PacketLogs, len(client.logBuffer))
 	copy(payload, client.logBuffer)
 	client.logBuffer = make(proto.PacketLogs, 0, logBatchSize)
@@ -45,11 +46,14 @@ func (client *Client) flushLogs() {
 		Data:        payload,
 	}
 
-	client.Pipe(pkg)
+	err := client.Pipe(pkg)
+	if err != nil {
+		return fmt.Errorf("error when sending logs, %w", err)
+	}
+	return nil
 }
 
 func (client *Client) Sync() error {
 	// TODO: Should actually wait till logs are sent
-	client.flushLogs()
-	return nil
+	return client.flushLogs()
 }

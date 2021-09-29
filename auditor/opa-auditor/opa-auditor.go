@@ -258,6 +258,7 @@ func (a *OpaAuditor) Audit(resource *unstructured.Unstructured, constraintIds []
 				EntitySpec:    resource.Object,
 				Trigger:       triggerType,
 			}
+			res.GenerateID()
 
 			t := a.templates[c.TemplateId]
 			err := t.Policy.EvalGateKeeperCompliant(resource.Object, c.Parameters, PolicyQuery)

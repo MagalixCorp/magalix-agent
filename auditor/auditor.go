@@ -77,6 +77,7 @@ func (a *Auditor) HandleConstraints(constraints []*agent.Constraint) map[string]
 		logger.Warnw("failed to parse some constraints", "constraints-size", len(errs))
 	}
 	if len(updatedConstraintIds) > 0 {
+		logger.Infow("recieved constraint updates", "count", len(updatedConstraintIds))
 		logger.Infof("firing audit event of type %s", event.Type)
 		event.Data = updatedConstraintIds
 		a.auditEvents <- event
@@ -185,6 +186,10 @@ func (a *Auditor) Start(ctx context.Context) error {
 					}
 					results = nResult
 					a.opa.UpdateCache(results)
+					if len(results) != 0 {
+						logger.Infof("sending results of entity change for %s %s",
+							resource.GetKind(), resource.GetName())
+					}
 					err := a.sendAuditResult(results)
 					if err != nil {
 						logger.Errorw("error while sending audit result", "error", err)
@@ -203,13 +208,13 @@ func (a *Auditor) Start(ctx context.Context) error {
 				entitiesSynced = true
 				fallthrough
 			case AuditEventTypeCommand:
-				logger.Debug("Received audit command event. Auditing all resources")
+				logger.Info("Received audit command event. Auditing all resources")
 				a.auditAllResourcesAndSendData(nil, string(e.Type))
 			default:
 				logger.Errorw("unsupported event type", "event-type", e.Type)
 			}
 		case <-auditTicker.C:
-			logger.Debug("Starting periodical auditing. Auditing all resources")
+			logger.Info("Starting periodical auditing. Auditing all resources")
 			a.auditAllResourcesAndSendData(nil, string(AuditEventTypePeriodic))
 		}
 	}

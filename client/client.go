@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"net/url"
 	"sync"
 	"time"
@@ -210,15 +211,15 @@ func (client *Client) PipeStatus(pack Package) {
 }
 
 // Pipe send packages to the agent-gateway with defined priorities and expiration rules
-func (client *Client) Pipe(pack Package) {
+func (client *Client) Pipe(pack Package) error {
 	if client.pipe == nil {
 		panic("client pipe not defined")
 	}
-	client.pipe.Send(pack)
-	// i := client.pipe.Send(pack)  Uncomment after piping logs logic is implemented/revisited
-	// if i > 0 {
-	// 	logger.Errorw("discarded packets to agent-gateway", "#packets", i)
-	// }
+	i := client.pipe.Send(pack)
+	if i > 0 {
+		return fmt.Errorf("dropped %d packets", i)
+	}
+	return nil
 }
 
 // AddListener adds a listener for a specific packet kind
