@@ -107,7 +107,7 @@ jobs:
             cd $SOURCE_PATH
             apk add build-base
 
-            go test -v -cover -covermode=atomic -coverprofile=coverage.txt ./...
+            go test -v -cover -covermode=atomic -coverprofile=coverage.txt -coverpkg=./... ./... 
             bash <(curl -s https://codecov.io/bash) -F unit
 
       - run:
