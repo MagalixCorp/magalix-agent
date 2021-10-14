@@ -6,18 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/labels"
-
-	"github.com/MagalixCorp/magalix-agent/v3/utils"
 	"github.com/MagalixTechnologies/core/logger"
-	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 type Observer struct {
@@ -102,147 +96,6 @@ func (observer *Observer) WaitForCacheSync() error {
 		}
 	}
 
-}
-
-func (observer *Observer) GetNodes() ([]corev1.Node, error) {
-	watcher, err := observer.WatchAndWaitForSync(Nodes)
-	if err != nil {
-		return nil, err
-	}
-	_nodes, err := watcher.Lister().List(labels.Everything())
-	if err != nil {
-		return nil, fmt.Errorf("unable to list nodes, error: %w", err)
-	}
-	nodes := make([]corev1.Node, len(_nodes))
-	for i, n := range _nodes {
-		u := n.(*unstructured.Unstructured)
-		err = utils.Transcode(u, &nodes[i])
-		if err != nil {
-			return nil, fmt.Errorf("unable to transcode unstructured to corev1.Node, error: %w", err)
-		}
-	}
-	return nodes, nil
-}
-
-func (observer *Observer) GetPods() ([]corev1.Pod, error) {
-	watcher, err := observer.WatchAndWaitForSync(Pods)
-	if err != nil {
-		return nil, err
-	}
-	_pods, err := watcher.Lister().List(labels.Everything())
-	if err != nil {
-		return nil, fmt.Errorf("unable to list pods, error: %w", err)
-	}
-	pods := make([]corev1.Pod, len(_pods))
-	for i, n := range _pods {
-		u := n.(*unstructured.Unstructured)
-		err = utils.Transcode(u, &pods[i])
-		if err != nil {
-			return nil, fmt.Errorf("unable to transcode unstructured to corev1.Pod, error: %w", err)
-		}
-	}
-	return pods, nil
-}
-
-func (observer *Observer) FindController(namespaceName string, controllerKind string, controllerName string) (*unstructured.Unstructured, error) {
-	errMap := map[string]interface{}{
-		"namespace-name":  namespaceName,
-		"controller-kind": controllerKind,
-		"controller-name": controllerName,
-	}
-
-	gvrk, err := KindToGVRK(controllerKind)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get GVRK, error: %w with data %+v", err, errMap)
-	}
-	watcher, err := observer.WatchAndWaitForSync(*gvrk)
-	if err != nil {
-		return nil, err
-	}
-
-	controller, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(controllerName)
-	if err != nil {
-		return nil, fmt.Errorf("unable to find controller, error: %w with data %+v", err, errMap)
-	}
-
-	return controller.(*unstructured.Unstructured), err
-}
-
-func (observer *Observer) FindContainer(namespaceName string, controllerKind string, controllerName string, containerName string) (*corev1.Container, error) {
-	errMap := map[string]interface{}{
-		"namespace-name":  namespaceName,
-		"controller-kind": controllerKind,
-		"controller-name": controllerName,
-		"container-name":  containerName,
-	}
-
-	controller, err := observer.FindController(namespaceName, controllerKind, controllerName)
-	if err != nil {
-		return nil, fmt.Errorf("unable to find controller, error: %w with data %+v", err, errMap)
-	}
-
-	containersList, found, err := unstructured.NestedSlice(controller.Object, "spec", "template", "spec", "containers")
-	if err != nil {
-		return nil, fmt.Errorf("unable to find container, error: %w with data %+v", err, errMap)
-	}
-
-	if !found {
-		return nil, fmt.Errorf("unable to find containers spec with data %+v", errMap)
-	}
-
-	for _, c := range containersList {
-		var container corev1.Container
-		err := utils.Transcode(c, &container)
-		if err != nil {
-			return nil, fmt.Errorf("unable to transcode unstructured to container with data %+v", errMap)
-		}
-
-		if container.Name == containerName {
-			return &container, nil
-		}
-	}
-
-	return nil, fmt.Errorf("unable to find container")
-}
-
-func (observer *Observer) FindPodController(namespaceName string, podName string) (string, string, error) {
-	lg := logger.With("pod", podName, "namespace", namespaceName)
-
-	watcher, err := observer.WatchAndWaitForSync(Pods)
-	if err != nil {
-		return "", "", err
-	}
-
-	pod, err := watcher.informer.Lister().ByNamespace(namespaceName).Get(podName)
-	if err != nil {
-		return "", "", errors.Wrap(err, "unable to get pod")
-	}
-
-	parent, err := GetParents(pod.(*unstructured.Unstructured), observer.ParentsStore, func(kind string) (Watcher, bool) {
-		gvrk, err := KindToGVRK(kind)
-		if err != nil {
-			lg.Warnw("unable to get GVRK for kind", "kind", kind, "error", err)
-			return nil, false
-		}
-
-		watcher, err := observer.WatchAndWaitForSync(*gvrk)
-		if err != nil {
-			lg.Errorw("unable to get watcher for parent", "error", err)
-			return nil, false
-		}
-
-		return watcher, true
-	})
-	if err != nil {
-		return "", "", err
-	}
-
-	if parent == nil {
-		return podName, Pods.Kind, nil
-	}
-
-	root := RootParent(parent)
-	return root.Name, root.Kind, nil
 }
 
 type Watcher interface {

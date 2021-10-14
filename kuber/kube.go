@@ -2,7 +2,6 @@ package kuber
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/MagalixCorp/magalix-agent/v3/proto"
 	"github.com/MagalixTechnologies/core/logger"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	appsV1 "k8s.io/api/apps/v1"
@@ -172,28 +170,4 @@ func (kube *Kube) GetAgentPermissions(ctx context.Context) (string, error) {
 
 	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
 	return string(rules), nil
-}
-
-func (kube *Kube) UpdateValidatingWebhookCaBundle(ctx context.Context, name string, certPem []byte) error {
-	logger.Debug("updating web hook's client ca bundle")
-
-	payload := []patch{{
-		Op:    "replace",
-		Path:  "/webhooks/0/clientConfig/caBundle",
-		Value: base64.StdEncoding.EncodeToString(certPem),
-	}}
-
-	payloadBytes, _ := json.Marshal(payload)
-	_, err := kube.Clientset.AdmissionregistrationV1().ValidatingWebhookConfigurations().Patch(
-		ctx,
-		name,
-		types.JSONPatchType,
-		payloadBytes,
-		kmeta.PatchOptions{},
-	)
-
-	if err != nil {
-		return fmt.Errorf("Unable to update web hook's client ca bundle, error: %w", err)
-	}
-	return nil
 }
