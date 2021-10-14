@@ -33,13 +33,8 @@ jobs:
 
 
   integration-test:
-    environment:
-      TEST_GOOGLE_PROJECT_ID: prod-env-203121
-      TEST_GOOGLE_CLUSTER_NAME: fue-automation-dontdelete
-      TEST_GOOGLE_COMPUTE_ZONE: us-central1-a
-
     docker:
-      - image: circleci/python:3.6.3
+      - image: circleci/python:3.8
 
     working_directory: ~/repo
 
@@ -86,11 +81,11 @@ jobs:
 
             if [[ "$CIRCLE_BRANCH" == "master" ]]
             then
-              export URL=https://console.magalix.com
+              export URL=${URL_PRD_ENV}
               export EMAIL=${EMAIL_PRD_ENV}
               export PASSWORD=${PASSWORD_PRD_ENV}
             else
-              export URL=https://console.gcp.dev.magalix.com
+              export URL=${URL_DEV_ENV}
               export EMAIL=${EMAIL_DEV_ENV}
               export PASSWORD=${PASSWORD_DEV_ENV}
             fi
