@@ -6,6 +6,7 @@ metadata:
   labels:
     app: nginx
     test: agent.integration.test
+    test-label: test
 spec:
   replicas: 1
   selector:
