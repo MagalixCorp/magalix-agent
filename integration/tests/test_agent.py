@@ -84,6 +84,79 @@ def patch_agent_resources(yml):
         output_resources.append(resource)
     return output_resources
 
+
+def create_test_constraint(session, account_id):
+    body = {
+        "template_id": "269f8c09-0be5-4208-9afd-3d71d5f13165",
+        "name": "Test Constraint " + uuid.uuid4().hex[:5],
+        "enabled": True,
+        "targets": {
+            "cluster": [],
+            "kind": [
+                "Deployment",
+                "ReplicaSet"
+            ],
+            "namespace": [],
+            "label": [{"test": "agent.integration.test"}]
+        },
+        "parameters": {
+            "label": "test-label",
+            "value": "test",
+            "exclude_label_key": "",
+            "exclude_label_value": "",
+            "exclude_namespace": ""
+        }
+    }
+
+    resp = session.post(URL + f"/api/{account_id}/policies/v1/constraints", json=body)
+    assert resp.ok, "Failed to create test constraint"
+    return resp.json()["id"], body["name"]
+
+
+def update_test_constraint(session, account_id, constraint_id, constraint_name):
+    body = {
+        "name": constraint_name,
+        "enabled": True,
+        "targets": {
+            "cluster": [],
+            "kind": [
+                "Deployment",
+                "ReplicaSet"
+            ],
+            "namespace": [],
+            "label": [{"test": "agent.integration.test"}]
+        },
+        "parameters": {
+            "label": "test-label-2",
+            "value": "test",
+            "exclude_label_key": "",
+            "exclude_label_value": "",
+            "exclude_namespace": ""
+        }
+    }
+
+    resp = session.put(URL + f"/api/{account_id}/policies/v1/constraints/{constraint_id}", json=body)
+    assert resp.ok, "Failed to update test constraint"
+
+def delete_test_constraint(session, account_id, constraint_id):
+    resp = session.delete(URL + f"/api/{account_id}/policies/v1/constraints/{constraint_id}")
+    assert resp.ok, "Failed to delete test constraint"
+
+
+def get_constraint_violation_count(session, account_id, cluster_id, constraint_id):
+    body = {
+        "filters": {
+            "cluster_id":[cluster_id],
+            "constraint_id":[constraint_id]
+        },
+        "limit": 100
+    }
+
+    resp = session.post(URL + f"/api/{account_id}/recommendations/v1/query", json=body)
+    assert resp.ok, "Failed to get cluster recommendations"
+    return resp.json()["count"]
+
+
 class TestViolations:
 
     @pytest.fixture
@@ -113,6 +186,13 @@ class TestViolations:
     def create_cluster(self, login):
         account_id, session = login
 
+        test_constraint_id, test_constraint_name = create_test_constraint(session, account_id)
+        TEST_CONSTRAINTS_1.append({
+            "id": test_constraint_id,
+            "name": test_constraint_name,
+            "violations": 0
+        })
+
         body = {"name": CLUSTER_NAME, "description": "agent integration test"}
         resp = session.post(URL + f"/api/v0.1/accounts/{account_id}/clusters", json=body)
         assert resp.ok, "Creating cluster failed"
@@ -132,9 +212,9 @@ class TestViolations:
         exit_code = os.system(f"kubectl apply -f {AGENT_YAML_PATH}")
         assert exit_code == 0, "Failed to run agent create deployment command"
 
-        time.sleep(360)
-    
-        yield account_id, cluster_id, session
+        time.sleep(300)
+
+        yield account_id, cluster_id, session, test_constraint_id, test_constraint_name
 
         exit_code = os.system(f"kubectl delete -f {AGENT_YAML_PATH}")
         assert exit_code == 0, "Failed to clean up agent deployment"
@@ -142,41 +222,37 @@ class TestViolations:
         resp = session.delete(URL + f"/api/v0.1/accounts/{account_id}/clusters/{cluster_id}")
         assert resp.ok, "Failed to delete cluster from console"
 
+        try:
+            delete_test_constraint(session, account_id, test_constraint_id)
+        except:
+            pass
+
     def test_agent_violations(self, create_cluster):
-        account_id, cluster_id, session = create_cluster
+        account_id, cluster_id, session, test_constraint_id, test_constraint_name = create_cluster
 
         for constraint in TEST_CONSTRAINTS_1:
-            body = {
-                "filters": {
-                    "cluster_id":[cluster_id],
-                    "constraint_id":[constraint["id"]]
-                },
-                "limit": 100
-            }
-
-            resp = session.post(URL + f"/api/{account_id}/recommendations/v1/query", json=body)
-            assert resp.ok, "Failed to get cluster recommendations"
-
-            violations_count = resp.json()["count"] 
+            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint["id"])
             assert violations_count == constraint["violations"], "constraint: %s, expected %d violations, but found %d" % (constraint["name"], constraint["violations"], violations_count)
 
 
         exit_code = os.system(f"kubectl apply -f fixed_resources.yaml")
         assert exit_code == 0, "Failed to apply fixed resources environment"
 
-        time.sleep(360)
+        time.sleep(200)
 
         for constraint in TEST_CONSTRAINTS_2:
-            body = {
-                "filters": {
-                    "cluster_id":[cluster_id],
-                    "constraint_id":[constraint["id"]]
-                },
-                "limit": 100
-            }
-
-            resp = session.post(URL + f"/api/{account_id}/recommendations/v1/query", json=body)
-            assert resp.ok, "Failed to get cluster recommendations"
-
-            violations_count = resp.json()["count"] 
+            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint["id"])
             assert violations_count == constraint["violations"], "constraint: %s, expected %d violations, but found %d" % (constraint["name"], constraint["violations"], violations_count)
+
+        update_test_constraint(session, account_id, test_constraint_id, test_constraint_name)
+        time.sleep(200)
+
+        violations_count = get_constraint_violation_count(session, account_id, cluster_id, test_constraint_id)
+        assert violations_count == 1, f"expected 1 violations after updating test constraint, but found {violations_count}"
+
+
+        delete_test_constraint(session, account_id, test_constraint_id)
+        time.sleep(200)
+
+        violations_count = get_constraint_violation_count(session, account_id, cluster_id, test_constraint_id)
+        assert violations_count == 0, f"expected 0 violations after deleting test constraint, but found {violations_count}"
