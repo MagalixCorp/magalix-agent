@@ -175,7 +175,7 @@ class TestViolations:
     def login(self, prepare_env):
         session = requests.Session()
         body = {"email": EMAIL, "password": PASSWORD}
-        resp = session.post(URL + "/api/v0.1/login/standard", json=body)
+        resp = session.post(URL + "/api/accounts/v1/public/login", json=body)
         assert resp.ok, "Login failed"
         account_id = resp.json()["account_id"]
         auth = resp.headers["authorization"]
@@ -194,11 +194,11 @@ class TestViolations:
         })
 
         body = {"name": CLUSTER_NAME, "description": "agent integration test"}
-        resp = session.post(URL + f"/api/v0.1/accounts/{account_id}/clusters", json=body)
+        resp = session.post(URL + f"/api/accounts/v1/{account_id}/clusters", json=body)
         assert resp.ok, "Creating cluster failed"
         cluster_id = resp.json()["id"]
 
-        resp = session.get(URL + f"/api/v0.1/accounts/{account_id}/clusters/{cluster_id}/url")
+        resp = session.get(URL + f"/api/accounts/v1/{account_id}/clusters/{cluster_id}/url")
         assert resp.ok, "Failed to get cluster connect url"
         agent_yaml_url = resp.json()["url"]
 
@@ -219,7 +219,7 @@ class TestViolations:
         exit_code = os.system(f"kubectl delete -f {AGENT_YAML_PATH}")
         assert exit_code == 0, "Failed to clean up agent deployment"
 
-        resp = session.delete(URL + f"/api/v0.1/accounts/{account_id}/clusters/{cluster_id}")
+        resp = session.delete(URL + f"/api/accounts/v1/{account_id}/clusters/{cluster_id}")
         assert resp.ok, "Failed to delete cluster from console"
 
         try:
