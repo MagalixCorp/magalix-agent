@@ -15,22 +15,26 @@ AGET_IMAGE = os.environ["AGENT_IMAGE"]
 
 TEST_CONSTRAINTS_1 = [
     {
-        "id": "584c046b-bb1f-4f48-a10e-69c1de7511d3",
+        "dev_id": "584c046b-bb1f-4f48-a10e-69c1de7511d3",
+        "prod_id": "a94bdb0e-a92d-4f80-bbb8-ff76520cae41",
         "name": "Using latest Image Tag",
         "violations": 1
     },
     {
-        "id": "bea92907-dc7f-406f-9012-21de7653925a",
+        "dev_id": "bea92907-dc7f-406f-9012-21de7653925a",
+        "prod_id": "26f1219c-9db7-4543-8c0e-cb69fc155b24",
         "name": "Services are not using ports over 1024",
         "violations": 1
     },
     {
-        "id": "8e16cb95-047e-4aed-95b4-ea7a0d89141f",
+        "dev_id": "8e16cb95-047e-4aed-95b4-ea7a0d89141f",
+        "prod_id": "093150df-30e1-485a-a139-985872429087",
         "name": "Missing Owner Label",
         "violations": 1
     },
     {
-        "id": "4e65028c-1988-4f91-9328-23953352037d",
+        "dev_id": "4e65028c-1988-4f91-9328-23953352037d",
+        "prod_id": "c79732ae-3ec0-48d3-82ea-624e568d98b4",
         "name": "Containers running with PrivilegeEscalation",
         "violations": 1
     }
@@ -38,22 +42,26 @@ TEST_CONSTRAINTS_1 = [
 
 TEST_CONSTRAINTS_2 = [
     {
-        "id": "584c046b-bb1f-4f48-a10e-69c1de7511d3",
+        "dev_id": "584c046b-bb1f-4f48-a10e-69c1de7511d3",
+        "prod_id": "a94bdb0e-a92d-4f80-bbb8-ff76520cae41",
         "name": "Using latest Image Tag",
         "violations": 0
     },
     {
-        "id": "bea92907-dc7f-406f-9012-21de7653925a",
+        "dev_id": "bea92907-dc7f-406f-9012-21de7653925a",
+        "prod_id": "26f1219c-9db7-4543-8c0e-cb69fc155b24",
         "name": "Services are not using ports over 1024",
         "violations": 0
     },
     {
-        "id": "8e16cb95-047e-4aed-95b4-ea7a0d89141f",
+        "dev_id": "8e16cb95-047e-4aed-95b4-ea7a0d89141f",
+        "prod_id": "093150df-30e1-485a-a139-985872429087",
         "name": "Missing Owner Label",
         "violations": 0
     },
     {
-        "id": "4e65028c-1988-4f91-9328-23953352037d",
+        "dev_id": "4e65028c-1988-4f91-9328-23953352037d",
+        "prod_id": "c79732ae-3ec0-48d3-82ea-624e568d98b4",
         "name": "Containers running with PrivilegeEscalation",
         "violations": 0
     }
@@ -237,7 +245,12 @@ class TestViolations:
         account_id, cluster_id, session, test_constraint_id, test_constraint_name = create_cluster
 
         for constraint in TEST_CONSTRAINTS_1:
-            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint["id"])
+            if ENV == "PRD":
+                constraint_id = constraint["prod_id"]
+            else:
+                constraint_id = constraint["dev_id"]
+
+            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint_id)
             assert violations_count == constraint["violations"], "constraint: %s, expected %d violations, but found %d" % (constraint["name"], constraint["violations"], violations_count)
 
 
@@ -247,7 +260,12 @@ class TestViolations:
         time.sleep(200)
 
         for constraint in TEST_CONSTRAINTS_2:
-            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint["id"])
+            if ENV == "PRD":
+                constraint_id = constraint["prod_id"]
+            else:
+                constraint_id = constraint["dev_id"]
+
+            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint_id)
             assert violations_count == constraint["violations"], "constraint: %s, expected %d violations, but found %d" % (constraint["name"], constraint["violations"], violations_count)
 
         update_test_constraint(session, account_id, test_constraint_id, test_constraint_name)
