@@ -81,12 +81,10 @@ jobs:
 
             if [[ "$CIRCLE_BRANCH" == "master" ]]
             then
-              export ENV=PRD
               export URL=${URL_PRD_ENV}
               export EMAIL=${EMAIL_PRD_ENV}
               export PASSWORD=${PASSWORD_PRD_ENV}
             else
-              export ENV=DEV
               export URL=${URL_DEV_ENV}
               export EMAIL=${EMAIL_DEV_ENV}
               export PASSWORD=${PASSWORD_DEV_ENV}

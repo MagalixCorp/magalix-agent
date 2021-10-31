@@ -5,7 +5,6 @@ import pytest
 import yaml
 import uuid
 
-ENV = os.environ["ENV"]
 URL = os.environ["URL"]
 EMAIL = os.environ["EMAIL"]
 PASSWORD = os.environ["PASSWORD"]
@@ -13,58 +12,11 @@ CLUSTER_NAME = "agent-integration-test-" + uuid.uuid4().hex[:5]
 NAMESPACE = "agent-integration-test"
 AGET_IMAGE = os.environ["AGENT_IMAGE"]
 
-TEST_CONSTRAINTS_1 = [
-    {
-        "dev_id": "584c046b-bb1f-4f48-a10e-69c1de7511d3",
-        "prod_id": "a94bdb0e-a92d-4f80-bbb8-ff76520cae41",
-        "name": "Using latest Image Tag",
-        "violations": 1
-    },
-    {
-        "dev_id": "bea92907-dc7f-406f-9012-21de7653925a",
-        "prod_id": "26f1219c-9db7-4543-8c0e-cb69fc155b24",
-        "name": "Services are not using ports over 1024",
-        "violations": 1
-    },
-    {
-        "dev_id": "8e16cb95-047e-4aed-95b4-ea7a0d89141f",
-        "prod_id": "093150df-30e1-485a-a139-985872429087",
-        "name": "Missing Owner Label",
-        "violations": 1
-    },
-    {
-        "dev_id": "4e65028c-1988-4f91-9328-23953352037d",
-        "prod_id": "c79732ae-3ec0-48d3-82ea-624e568d98b4",
-        "name": "Containers running with PrivilegeEscalation",
-        "violations": 1
-    }
-]
-
-TEST_CONSTRAINTS_2 = [
-    {
-        "dev_id": "584c046b-bb1f-4f48-a10e-69c1de7511d3",
-        "prod_id": "a94bdb0e-a92d-4f80-bbb8-ff76520cae41",
-        "name": "Using latest Image Tag",
-        "violations": 0
-    },
-    {
-        "dev_id": "bea92907-dc7f-406f-9012-21de7653925a",
-        "prod_id": "26f1219c-9db7-4543-8c0e-cb69fc155b24",
-        "name": "Services are not using ports over 1024",
-        "violations": 0
-    },
-    {
-        "dev_id": "8e16cb95-047e-4aed-95b4-ea7a0d89141f",
-        "prod_id": "093150df-30e1-485a-a139-985872429087",
-        "name": "Missing Owner Label",
-        "violations": 0
-    },
-    {
-        "dev_id": "4e65028c-1988-4f91-9328-23953352037d",
-        "prod_id": "c79732ae-3ec0-48d3-82ea-624e568d98b4",
-        "name": "Containers running with PrivilegeEscalation",
-        "violations": 0
-    }
+TEST_CONSTRAINTS_NAMES = [
+    "Using latest Image Tag",
+    "Services are not using ports over 1024",
+    "Missing Owner Label",
+    "Containers running with PrivilegeEscalation"
 ]
 
 AGENT_YAML_PATH = "/tmp/agent_resources.yaml"
@@ -94,14 +46,32 @@ def patch_agent_resources(yml):
     return output_resources
 
 
-def create_test_constraint(session, account_id):
-    if ENV == "PRD":
-        template_id = "7f65781e-3ca1-4d1b-a5b8-7116f33d1b5b"
-    else:
-        template_id = "269f8c09-0be5-4208-9afd-3d71d5f13165"
-
+def query_constraints_by_names(session, account_id, names):
     body = {
-        "template_id": template_id,
+        "filters": {
+            "names": names
+        }
+    }
+    resp = session.post(URL + f"/api/{account_id}/policies/v1/constraints/query", json=body)
+    assert resp.ok, "failed to query constraints"
+    return resp.json()["data"]
+
+
+def query_templates_by_names(session, account_id, names):
+    body = {
+        "filters": {
+            "names": names
+        }
+    }
+    resp = session.post(URL + f"/api/{account_id}/policies/v1/templates/query", json=body)
+    assert resp.ok, "failed to query templates"
+    return resp.json()["data"]
+
+
+def create_test_constraint(session, account_id):
+    templates = query_templates_by_names(session, account_id, ["Missing Label Key Value Pair"])
+    body = {
+        "template_id": templates[0]["id"],
         "name": "Test Constraint " + uuid.uuid4().hex[:5],
         "enabled": True,
         "targets": {
@@ -199,12 +169,12 @@ class TestViolations:
     @pytest.fixture
     def create_cluster(self, login):
         account_id, session = login
-
+        test_constraints = query_constraints_by_names(session, account_id, TEST_CONSTRAINTS_NAMES)
         test_constraint_id, test_constraint_name = create_test_constraint(session, account_id)
-        TEST_CONSTRAINTS_1.append({
+
+        test_constraints.append({
             "id": test_constraint_id,
             "name": test_constraint_name,
-            "violations": 0
         })
 
         body = {"name": CLUSTER_NAME, "description": "agent integration test"}
@@ -228,7 +198,7 @@ class TestViolations:
 
         time.sleep(300)
 
-        yield account_id, cluster_id, session, test_constraint_id, test_constraint_name
+        yield account_id, cluster_id, session, test_constraint_id, test_constraint_name, test_constraints
 
         exit_code = os.system(f"kubectl delete -f {AGENT_YAML_PATH}")
         assert exit_code == 0, "Failed to clean up agent deployment"
@@ -242,16 +212,11 @@ class TestViolations:
             pass
 
     def test_agent_violations(self, create_cluster):
-        account_id, cluster_id, session, test_constraint_id, test_constraint_name = create_cluster
+        account_id, cluster_id, session, test_constraint_id, test_constraint_name, test_constraints = create_cluster
 
-        for constraint in TEST_CONSTRAINTS_1:
-            if ENV == "PRD":
-                constraint_id = constraint["prod_id"]
-            else:
-                constraint_id = constraint["dev_id"]
-
-            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint_id)
-            assert violations_count == constraint["violations"], "constraint: %s, expected %d violations, but found %d" % (constraint["name"], constraint["violations"], violations_count)
+        for constraint in test_constraints:
+            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint["id"])
+            assert violations_count == 1, "constraint: %s, expected 1 violation, but found %d" % (constraint["name"], violations_count)
 
 
         exit_code = os.system(f"kubectl apply -f fixed_resources.yaml")
@@ -259,14 +224,9 @@ class TestViolations:
 
         time.sleep(200)
 
-        for constraint in TEST_CONSTRAINTS_2:
-            if ENV == "PRD":
-                constraint_id = constraint["prod_id"]
-            else:
-                constraint_id = constraint["dev_id"]
-
-            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint_id)
-            assert violations_count == constraint["violations"], "constraint: %s, expected %d violations, but found %d" % (constraint["name"], constraint["violations"], violations_count)
+        for constraint in test_constraints:
+            violations_count = get_constraint_violation_count(session, account_id, cluster_id, constraint["id"])
+            assert violations_count == 0, "constraint: %s, expected 0 violations, but found %d" % (constraint["name"], violations_count)
 
         update_test_constraint(session, account_id, test_constraint_id, test_constraint_name)
         time.sleep(200)
