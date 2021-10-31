@@ -172,11 +172,6 @@ class TestViolations:
         test_constraints = query_constraints_by_names(session, account_id, TEST_CONSTRAINTS_NAMES)
         test_constraint_id, test_constraint_name = create_test_constraint(session, account_id)
 
-        test_constraints.append({
-            "id": test_constraint_id,
-            "name": test_constraint_name,
-        })
-
         body = {"name": CLUSTER_NAME, "description": "agent integration test"}
         resp = session.post(URL + f"/api/accounts/v1/{account_id}/clusters", json=body)
         assert resp.ok, "Creating cluster failed"
