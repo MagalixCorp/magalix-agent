@@ -5,6 +5,7 @@ import pytest
 import yaml
 import uuid
 
+ENV = os.environ["ENV"]
 URL = os.environ["URL"]
 EMAIL = os.environ["EMAIL"]
 PASSWORD = os.environ["PASSWORD"]
@@ -86,8 +87,13 @@ def patch_agent_resources(yml):
 
 
 def create_test_constraint(session, account_id):
+    if ENV == "PRD":
+        template_id = "7f65781e-3ca1-4d1b-a5b8-7116f33d1b5b"
+    else:
+        template_id = "269f8c09-0be5-4208-9afd-3d71d5f13165"
+
     body = {
-        "template_id": "269f8c09-0be5-4208-9afd-3d71d5f13165",
+        "template_id": template_id,
         "name": "Test Constraint " + uuid.uuid4().hex[:5],
         "enabled": True,
         "targets": {
