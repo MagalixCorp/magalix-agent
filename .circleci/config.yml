@@ -1,5 +1,109 @@
 version: 2
 jobs:
+
+  integration-test-image:
+    docker:
+      - image: magalixcorp/circleci-golang-lite:1.17
+
+    steps:
+      - checkout
+      - run:
+          name: Build test binary
+          command:
+            export GOMODULE=off
+            export CGO_ENABLED=0
+            export GOPRIVATE=github.com/MagalixTechnologies
+            
+            apk add build-base
+
+            go test -c -covermode=atomic -o ./integration/agent-test -cover -coverpkg=github.com/MagalixCorp/magalix-agent/v3/agent/...,github.com/MagalixCorp/magalix-agent/v3/auditor/...,github.com/MagalixCorp/magalix-agent/v3/client/...,github.com/MagalixCorp/magalix-agent/v3/entities/...,github.com/MagalixCorp/magalix-agent/v3/gateway/...,github.com/MagalixCorp/magalix-agent/v3/kuber/...
+
+      - setup_remote_docker
+    
+      - run:
+          name: Build and push test image
+          command:
+            cd integration
+
+            docker build -t magalixcorp/agent:${CIRCLE_BRANCH}.test .
+
+            docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_PASSWORD"
+
+            docker push magalixcorp/agent:${CIRCLE_BRANCH}.test
+
+
+  integration-test:
+    docker:
+      - image: circleci/python:3.8
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "integration/requirements.txt" }}
+            - v1-dependencies-
+
+      - run:
+          name: install dependencies
+          command: |
+            curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-327.0.0-linux-x86_64.tar.gz
+            tar -xf google-cloud-sdk-327.0.0-linux-x86_64.tar.gz && sudo mv google-cloud-sdk /usr/local/bin/
+            PATH=$PATH:/usr/local/bin/google-cloud-sdk/bin
+            echo 'export PATH=$PATH:/usr/local/bin/google-cloud-sdk/bin' >> $BASH_ENV
+            curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.16.0/bin/linux/amd64/kubectl
+            chmod +x ./kubectl
+            sudo mv ./kubectl /usr/local/bin/kubectl
+            python3 -m venv venv
+            . venv/bin/activate
+
+            pip install -r integration/requirements.txt
+
+      - save_cache:
+          paths:
+            - ./venv
+          key: v1-dependencies-{{ checksum "integration/requirements.txt" }}
+
+      - run:
+          name: run tests
+          no_output_timeout: 20m
+          command: |
+            . venv/bin/activate
+
+            cd integration/tests
+
+            echo ${ENV_GCP_SECRET} | base64 -d | gcloud auth activate-service-account --key-file=-
+            gcloud --quiet config set project ${TEST_GOOGLE_PROJECT_ID}
+            gcloud --quiet container clusters get-credentials ${TEST_GOOGLE_CLUSTER_NAME} --zone=${TEST_GOOGLE_COMPUTE_ZONE}
+
+            export PYTHONPATH=$PYTHONPATH:$(dirname $(pwd))
+
+            if [[ "$CIRCLE_BRANCH" == "master" ]]
+            then
+              export URL=${URL_PRD_ENV}
+              export EMAIL=${EMAIL_PRD_ENV}
+              export PASSWORD=${PASSWORD_PRD_ENV}
+            else
+              export URL=${URL_DEV_ENV}
+              export EMAIL=${EMAIL_DEV_ENV}
+              export PASSWORD=${PASSWORD_DEV_ENV}
+            fi
+
+            export AGENT_IMAGE=magalixcorp/agent:${CIRCLE_BRANCH}.test
+
+            export CODECOV_URL="https://codecov.io/upload/v2?token=${AGENT_CODECOV_TOKEN}&branch=${CIRCLE_BRANCH}&commit=${CIRCLE_SHA1}&flags=integration"
+
+            mkdir -p ~/test-results
+            pytest -o junit_family=xunit2 --junitxml=~/test-results/report.xml
+
+      - store_test_results:
+          path: ~/test-results
+
+      - store_artifacts:
+          path: ~/test-results
+
+
   "build & push":
     docker:
       - image: magalixcorp/circleci-golang-lite:1.17
@@ -212,8 +316,16 @@ workflows:
   version: 2
   "build & push":
     jobs:
+      - integration-test-image:
+          context: org-global
+      - integration-test:
+          context: org-global
+          requires:
+            - integration-test-image
       - "build & push":
           context: org-global
+          requires:
+            - integration-test
       - update:
           context: org-global
           requires:

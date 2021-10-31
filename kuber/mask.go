@@ -23,12 +23,6 @@ var (
 	}
 )
 
-func maskPodSpec(podSpec *kv1.PodSpec) {
-	podSpec.Containers = maskContainers(podSpec.Containers)
-	podSpec.InitContainers = maskContainers(podSpec.InitContainers)
-
-}
-
 func maskContainers(containers []kv1.Container) (masked []kv1.Container) {
 	for _, container := range containers {
 		container.Env = maskEnvVars(container.Env)

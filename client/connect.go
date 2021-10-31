@@ -56,6 +56,11 @@ func (client *Client) onConnect(connected chan bool) error {
 					logger.Warnw("account not authorized")
 					time.Sleep(time.Hour * 2)
 				}
+
+				if connectionError.Code == 401 {
+					logger.Warnw("cluster credentials invalid")
+					time.Sleep(time.Hour * 2)
+				}
 			}
 
 			logger.Errorw(
