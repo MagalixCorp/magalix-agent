@@ -24,6 +24,7 @@ type PacketHello struct {
 	PacketV2Enabled  bool      `json:"packet_v2_enabled,omitempty"`
 	ServerVersion    string    `json:"server_version"`
 	AgentPermissions string    `json:"agent_permissions"`
+	ClusterProvider  string    `json:"cluster_provider"`
 }
 
 type PacketAuthorizationRequest struct {

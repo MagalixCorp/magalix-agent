@@ -22,6 +22,7 @@ func (client *Client) hello() error {
 		PacketV2Enabled:  true,
 		ServerVersion:    client.ServerVersion,
 		AgentPermissions: client.AgentPermissions,
+		ClusterProvider:  client.ClusterProvider,
 	}, &hello)
 	if err != nil {
 		return err
