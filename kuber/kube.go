@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"k8s.io/client-go/discovery"
 
@@ -170,4 +171,14 @@ func (kube *Kube) GetAgentPermissions(ctx context.Context) (string, error) {
 
 	rules, _ := json.Marshal(subjectRules.Status.ResourceRules)
 	return string(rules), nil
+}
+
+func (kube *Kube) GetClusterProvider(ctx context.Context) (string, error) {
+	nodes, err := kube.core.Nodes().List(ctx, kmeta.ListOptions{})
+	if err != nil {
+		return "", fmt.Errorf("unable to list cluster nodes, error: %w", err)
+	}
+
+	node := nodes.Items[0]
+	return strings.Split(node.Spec.ProviderID, ":")[0], nil
 }
