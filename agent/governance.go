@@ -15,11 +15,10 @@ type Match struct {
 }
 
 type Constraint struct {
-	Id         string
-	TemplateId string
-	AccountId  string
-	ClusterId  string
-
+	Id           string
+	TemplateId   string
+	AccountId    string
+	ClusterId    string
 	Name         string
 	TemplateName string
 	Parameters   map[string]interface{}
@@ -27,13 +26,12 @@ type Constraint struct {
 	Code         string
 	Description  string
 	HowToSolve   string
-
-	UpdatedAt  time.Time
-	CategoryId string
-	Severity   string
-	Controls   []string
-	Standards  []string
-	DeletedAt  *string
+	UpdatedAt    time.Time
+	CategoryId   string
+	Severity     string
+	Controls     []string
+	Standards    []string
+	DeletedAt    *string
 }
 
 type AuditResultStatus string
@@ -45,20 +43,17 @@ const (
 )
 
 type AuditResult struct {
-	Id           string
-	TemplateID   *string
-	ConstraintID *string
-	CategoryID   *string
-	Severity     *string
-	Controls     []string
-	Standards    []string
-
-	Description string
-	HowToSolve  string
-
-	Status AuditResultStatus
-	Msg    *string
-
+	Id            string
+	TemplateID    *string
+	ConstraintID  *string
+	CategoryID    *string
+	Severity      *string
+	Controls      []string
+	Standards     []string
+	Description   string
+	HowToSolve    string
+	Status        AuditResultStatus
+	Msg           *string
 	EntityName    *string
 	EntityKind    *string
 	NamespaceName *string

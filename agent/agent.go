@@ -50,9 +50,6 @@ func (a *Agent) Start() error {
 	sinksCtx, cancelSinks := context.WithCancel(allCtx)
 	a.cancelSinks = cancelSinks
 
-	a.EntitiesSource.SetDeltasHandler(a.handleDeltas)
-	a.EntitiesSource.SetEntitiesResyncHandler(a.handleResync)
-
 	a.Auditor.SetAuditResultHandler(a.handleAuditResult)
 
 	// Initialize and authenticate gateway
@@ -62,8 +59,10 @@ func (a *Agent) Start() error {
 	a.Gateway.SetChangeLogLevelHandler(a.handleLogLevelChange)
 
 	eg, _ := errgroup.WithContext(allCtx)
+
 	// Add a context to Gateway to manage the numerous go routines in the client
 	eg.Go(func() error { return a.Gateway.Start(sinksCtx) })
+
 	// Blocks until authorized. Uses a long timeout to slowdown agents that are no longer authorized.
 	err := a.Gateway.WaitAuthorization(AuthorizationTimeoutDuration)
 	if err != nil {
