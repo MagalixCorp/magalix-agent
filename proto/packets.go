@@ -10,8 +10,18 @@ import (
 
 	"github.com/MagalixTechnologies/uuid-go"
 	"github.com/golang/snappy"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+)
+
+const (
+	ResourceRequirementKindSet                                = "set"
+	ResourceRequirementKindDefaultsLimitRange                 = "defaults-limit-range"
+	ResourceRequirementKindDefaultFromLimits                  = "default-from-limits"
+	EntityEventTypeUpsert                     EntityDeltaKind = "UPSERT"
+	EntityEventTypeDelete                     EntityDeltaKind = "DELETE"
+	AuditResultStatusViolating                                = "Violation"
+	AuditResultStatusCompliant                                = "Compliance"
+	AuditResultStatusIgnored                                  = "Ignored"
 )
 
 type PacketHello struct {
@@ -24,6 +34,7 @@ type PacketHello struct {
 	PacketV2Enabled  bool      `json:"packet_v2_enabled,omitempty"`
 	ServerVersion    string    `json:"server_version"`
 	AgentPermissions string    `json:"agent_permissions"`
+	ClusterProvider  string    `json:"cluster_provider"`
 }
 
 type PacketAuthorizationRequest struct {
@@ -69,22 +80,11 @@ type ReplicasStatus struct {
 	Available *int32 `json:"available,omitempty"`
 }
 
-const (
-	ResourceRequirementKindSet                = "set"
-	ResourceRequirementKindDefaultsLimitRange = "defaults-limit-range"
-	ResourceRequirementKindDefaultFromLimits  = "default-from-limits"
-)
-
 type PacketLogs []PacketLogItem
 
 type RequestLimit struct {
 	CPU    *int64 `json:"cpu,omitempty"`
 	Memory *int64 `json:"memory,omitempty"`
-}
-
-type ContainerResources struct {
-	Requests *RequestLimit `json:"requests,omitempty"`
-	Limits   *RequestLimit `json:"limits,omitempty"`
 }
 
 type PacketRestart struct {
@@ -97,11 +97,6 @@ type PacketLogLevel struct {
 }
 
 type EntityDeltaKind string
-
-const (
-	EntityEventTypeUpsert EntityDeltaKind = "UPSERT"
-	EntityEventTypeDelete EntityDeltaKind = "DELETE"
-)
 
 type ParentController struct {
 	Kind       string `json:"kind"`
@@ -117,41 +112,7 @@ type GroupVersionResourceKind struct {
 	Kind string `json:"kind"`
 }
 
-type PacketEntityDelta struct {
-	Gvrk      GroupVersionResourceKind  `json:"gvrk"`
-	DeltaKind EntityDeltaKind           `json:"delta_kind"`
-	Data      unstructured.Unstructured `json:"data"`
-	Parent    *ParentController         `json:"parents"`
-	Timestamp time.Time                 `json:"timestamp"`
-}
-
-type PacketEntitiesDeltasRequest struct {
-	Items     []PacketEntityDelta `json:"items"`
-	Timestamp time.Time           `json:"timestamp"`
-}
-type PacketEntitiesDeltasResponse struct{}
-
-type PacketEntitiesResyncItem struct {
-	Gvrk GroupVersionResourceKind     `json:"gvrk"`
-	Data []*unstructured.Unstructured `json:"data"`
-}
-
-type PacketEntitiesResyncRequest struct {
-	Timestamp time.Time `json:"timestamp"`
-
-	// map of entities kind and entities definitions
-	// it holds other entities not already specified in attributes above
-	Snapshot map[string]PacketEntitiesResyncItem `json:"snapshot"`
-}
-type PacketEntitiesResyncResponse struct{}
-
 type AuditResultStatus string
-
-const (
-	AuditResultStatusViolating = "Violation"
-	AuditResultStatusCompliant = "Compliance"
-	AuditResultStatusIgnored   = "Ignored"
-)
 
 type PacketAuditResultItem struct {
 	Id           string   `json:"id"`

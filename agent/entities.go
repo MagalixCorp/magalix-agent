@@ -8,12 +8,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+type EntityDeltaKind string
+
 const (
 	EntityDeltaKindUpsert EntityDeltaKind = "UPSERT"
 	EntityDeltaKindDelete EntityDeltaKind = "DELETE"
 )
-
-type EntityDeltaKind string
 
 type GroupVersionResourceKind struct {
 	schema.GroupVersionResource
@@ -37,25 +37,7 @@ type Delta struct {
 	Timestamp time.Time
 }
 
-type EntitiesResyncItem struct {
-	Gvrk GroupVersionResourceKind     `json:"gvrk"`
-	Data []*unstructured.Unstructured `json:"data"`
-}
-
-type EntitiesResync struct {
-	Timestamp time.Time `json:"timestamp"`
-
-	// map of entities kind and entities definitions
-	Snapshot map[string]EntitiesResyncItem `json:"snapshot"`
-}
-
-type DeltasHandler func(deltas []*Delta) error
-type EntitiesResyncHandler func(resync *EntitiesResync) error
-
 type EntitiesSource interface {
 	Start(ctx context.Context) error
 	Stop() error
-
-	SetDeltasHandler(handler DeltasHandler)
-	SetEntitiesResyncHandler(handler EntitiesResyncHandler)
 }

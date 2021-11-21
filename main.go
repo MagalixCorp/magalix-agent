@@ -176,6 +176,11 @@ func main() {
 		logger.Warnw("Failed to get agent permissions", "error", err)
 	}
 
+	clusterProvider, err := kube.GetClusterProvider(context.Background())
+	if err != nil {
+		logger.Warnw("Failed to get cluster provider", "error", err)
+	}
+
 	gatewayUrl := args["--gateway"].(string)
 	protoHandshakeTime := utils.MustParseDuration(args, "--timeout-proto-handshake")
 	protoWriteTime := utils.MustParseDuration(args, "--timeout-proto-write")
@@ -192,6 +197,7 @@ func main() {
 		startID,
 		k8sServerVersion,
 		agentPermissions,
+		clusterProvider,
 		protoHandshakeTime,
 		protoWriteTime,
 		protoReadTime,

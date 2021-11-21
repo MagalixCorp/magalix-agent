@@ -1,7 +1,6 @@
 package kuber
 
 import (
-	"fmt"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -118,37 +117,4 @@ var (
 		GroupVersionResource: corev1.SchemeGroupVersion.WithResource("serviceaccounts"),
 		Kind:                 "ServiceAccount",
 	}
-
-	kindToGVRK = map[string]*GroupVersionResourceKind{
-		Nodes.Kind:                  &Nodes,
-		Namespaces.Kind:             &Namespaces,
-		Pods.Kind:                   &Pods,
-		ReplicationControllers.Kind: &ReplicationControllers,
-		Deployments.Kind:            &Deployments,
-		StatefulSets.Kind:           &StatefulSets,
-		DaemonSets.Kind:             &DaemonSets,
-		ReplicaSets.Kind:            &ReplicaSets,
-		Jobs.Kind:                   &Jobs,
-		CronJobs.Kind:               &CronJobs,
-		Ingresses.Kind:              &Ingresses,
-		IngressClasses.Kind:         &IngressClasses,
-		NetworkPolicies.Kind:        &NetworkPolicies,
-		Services.Kind:               &Services,
-		PersistentVolumes.Kind:      &PersistentVolumes,
-		PersistentVolumeClaims.Kind: &PersistentVolumeClaims,
-		StorageClasses.Kind:         &StorageClasses,
-		Roles.Kind:                  &Roles,
-		RoleBindings.Kind:           &RoleBindings,
-		ClusterRoles.Kind:           &ClusterRoles,
-		ClusterRoleBindings.Kind:    &ClusterRoleBindings,
-		ServiceAccounts.Kind:        &ServiceAccounts,
-	}
 )
-
-func KindToGVRK(kind string) (*GroupVersionResourceKind, error) {
-	gvrk, ok := kindToGVRK[kind]
-	if !ok {
-		return nil, fmt.Errorf("unknown kind %s", kind)
-	}
-	return gvrk, nil
-}

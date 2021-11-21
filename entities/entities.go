@@ -11,8 +11,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -72,9 +70,6 @@ type EntitiesWatcher struct {
 	deltasQueue           chan agent.Delta
 	resourceEventHandlers map[ResourceEventsHandler]struct{}
 
-	sendDeltas         agent.DeltasHandler
-	sendEntitiesResync agent.EntitiesResyncHandler
-
 	cancelWorker context.CancelFunc
 }
 
@@ -94,14 +89,6 @@ func NewEntitiesWatcher(
 		resourceEventHandlers: make(map[ResourceEventsHandler]struct{}),
 	}
 	return ew
-}
-
-func (ew *EntitiesWatcher) SetDeltasHandler(handler agent.DeltasHandler) {
-	ew.sendDeltas = handler
-}
-
-func (ew *EntitiesWatcher) SetEntitiesResyncHandler(handler agent.EntitiesResyncHandler) {
-	ew.sendEntitiesResync = handler
 }
 
 func (ew *EntitiesWatcher) AddResourceEventsHandler(handler ResourceEventsHandler) {
@@ -133,10 +120,6 @@ func (ew *EntitiesWatcher) Start(ctx context.Context) error {
 		ew.deltasWorker(egCtx)
 		return nil
 	})
-	eg.Go(func() error {
-		ew.snapshotWorker(egCtx)
-		return nil
-	})
 	return eg.Wait()
 }
 
@@ -149,9 +132,7 @@ func (ew *EntitiesWatcher) Stop() error {
 	return nil
 }
 
-func (ew *EntitiesWatcher) WatcherFor(
-	gvrk kuber.GroupVersionResourceKind,
-) (kuber.Watcher, error) {
+func (ew *EntitiesWatcher) WatcherFor(gvrk kuber.GroupVersionResourceKind) (kuber.Watcher, error) {
 	w, ok := ew.watchers[gvrk]
 	if !ok {
 		return nil, fmt.Errorf(
@@ -170,90 +151,6 @@ func (ew *EntitiesWatcher) WaitForCacheSync() {
 	}
 	for handler := range ew.resourceEventHandlers {
 		handler.OnCacheSync()
-	}
-}
-
-func (ew *EntitiesWatcher) buildAndSendSnapshotResync() {
-	resync := agent.EntitiesResync{
-		Snapshot:  map[string]agent.EntitiesResyncItem{},
-		Timestamp: time.Now(),
-	}
-
-	for gvrk, w := range ew.watchers {
-		// no need for concurrent goroutines here because the lister uses
-		// in-memory cached data
-
-		resource := gvrk.Resource
-
-		ret, err := w.Lister().List(labels.Everything())
-		if err != nil {
-			logger.Errorw(
-				"unable to list "+resource,
-				"error", err,
-			)
-		}
-		if len(ret) == 0 {
-			continue
-		}
-
-		var items = make([]*unstructured.Unstructured, len(ret))
-		for i := range ret {
-			u := *ret[i].(*unstructured.Unstructured)
-			meta, err := getObjectMeta(&u)
-			if err != nil {
-				logger.Errorw(
-					"unable to find metadata field",
-					"error", err,
-					"resource", resource,
-				)
-			}
-
-			status, err := getObjectStatus(&u, gvrk)
-			if err != nil {
-				logger.Errorw("unable to get object status data", "error", err)
-			}
-
-			// TODO: Replace with basic identification data. The rest of the data shouldn't be needed
-			items[i] = &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"kind":       u.GetKind(),
-					"apiVersion": u.GetAPIVersion(),
-					"metadata":   meta,
-					"status":     status,
-				},
-			}
-		}
-		resync.Snapshot[resource] = agent.EntitiesResyncItem{
-			Gvrk: packetGvrk(gvrk),
-			Data: items,
-		}
-	}
-
-	err := ew.sendEntitiesResync(&resync)
-	if err != nil {
-		logger.Errorf("Failed to send Entities Resync. %w", err)
-	}
-}
-
-func (ew *EntitiesWatcher) sendSnapshot() {
-	// send nodes and namespaces before all other deltas because they act as
-	// parents for other resources
-	nodesWatcher := ew.watchers[kuber.Nodes]
-	ew.publishGvrk(kuber.Nodes, nodesWatcher)
-
-	namespacesWatcher := ew.watchers[kuber.Namespaces]
-	ew.publishGvrk(kuber.Namespaces, namespacesWatcher)
-
-	for gvrk, w := range ew.watchers {
-		// no need for concurrent goroutines here because the lister uses
-		// in-memory cashed data
-
-		if gvrk == kuber.Nodes || gvrk == kuber.Namespaces {
-			// already sent
-			continue
-		}
-
-		ew.publishGvrk(gvrk, w)
 	}
 }
 
@@ -276,27 +173,7 @@ func (ew *EntitiesWatcher) GetAllEntitiesByGvrk() (map[kuber.GroupVersionResourc
 	return entities, errs
 }
 
-func (ew *EntitiesWatcher) publishGvrk(
-	gvrk kuber.GroupVersionResourceKind,
-	w kuber.Watcher,
-) {
-	resource := gvrk.Resource
-	ret, err := w.Lister().List(labels.Everything())
-	if err != nil {
-		logger.Errorf("unable to list %s. %w", resource, err)
-	}
-	if len(ret) == 0 {
-		return
-	}
-	for i := range ret {
-		u := *ret[i].(*unstructured.Unstructured)
-		ew.OnAdd(gvrk, u)
-	}
-}
-
-func (ew *EntitiesWatcher) getParents(
-	u *unstructured.Unstructured,
-) (*agent.ParentController, error) {
+func (ew *EntitiesWatcher) getParents(u *unstructured.Unstructured) (*agent.ParentController, error) {
 	parent, err := kuber.GetParents(
 		u,
 		ew.observer.ParentsStore,
@@ -312,12 +189,8 @@ func (ew *EntitiesWatcher) getParents(
 	return packetParent(parent), nil
 }
 
-func (ew *EntitiesWatcher) deltaWrapper(
-	gvrk kuber.GroupVersionResourceKind,
-	delta agent.Delta,
-) (agent.Delta, error) {
+func (ew *EntitiesWatcher) deltaWrapper(gvrk kuber.GroupVersionResourceKind, delta agent.Delta) (agent.Delta, error) {
 	delta.Gvrk = packetGvrk(gvrk)
-
 	if gvrk == kuber.Pods {
 		parents, err := ew.getParents(&delta.Data)
 		if err != nil {
@@ -328,14 +201,10 @@ func (ew *EntitiesWatcher) deltaWrapper(
 		}
 		delta.Parent = parents
 	}
-
 	return delta, nil
 }
 
-func (ew *EntitiesWatcher) OnAdd(
-	gvrk kuber.GroupVersionResourceKind,
-	obj unstructured.Unstructured,
-) {
+func (ew *EntitiesWatcher) OnAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
 	delta, err := ew.deltaWrapper(
 		gvrk,
 		agent.Delta{
@@ -356,10 +225,7 @@ func (ew *EntitiesWatcher) OnAdd(
 	}
 }
 
-func (ew *EntitiesWatcher) OnUpdate(
-	gvrk kuber.GroupVersionResourceKind,
-	oldObj, newObj unstructured.Unstructured,
-) {
+func (ew *EntitiesWatcher) OnUpdate(gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
 	delta, err := ew.deltaWrapper(
 		gvrk,
 		agent.Delta{
@@ -380,10 +246,7 @@ func (ew *EntitiesWatcher) OnUpdate(
 	}
 }
 
-func (ew *EntitiesWatcher) OnDelete(
-	gvrk kuber.GroupVersionResourceKind,
-	obj unstructured.Unstructured,
-) {
+func (ew *EntitiesWatcher) OnDelete(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
 	ew.observer.ParentsStore.Delete(obj.GetNamespace(), obj.GetKind(), obj.GetName())
 	delta, err := ew.deltaWrapper(
 		gvrk,
@@ -448,40 +311,12 @@ func (ew *EntitiesWatcher) deltasWorker(ctx context.Context) {
 					_item := item
 					deltas = append(deltas, &_item)
 				}
-				// TODO: If an error happens while sending deltas, the items map should be preserved until sending succeeds
-				err := ew.sendDeltas(deltas)
-				if err != nil {
-					logger.Errorf("Failed to send %d deltas. %w", len(deltas), err)
-				}
 				break
 			}
 		}
 		if shouldStop {
 			logger.Debug("Entities watcher deltas worker stopped")
 			return
-		}
-	}
-}
-
-func (ew *EntitiesWatcher) snapshotWorker(ctx context.Context) {
-	snapshotTicker := time.NewTicker(snapshotInterval)
-	resyncTicker := time.NewTicker(resyncInterval)
-
-	logger.Debug("Entities Watcher snapshot worker started")
-	// Send snapshot & resync immediately once
-	ew.sendSnapshot()
-	ew.buildAndSendSnapshotResync()
-	for {
-		select {
-		case <-ctx.Done():
-			snapshotTicker.Stop()
-			resyncTicker.Stop()
-			logger.Debug("Entities Watcher snapshot worker stopped")
-			return
-		case <-snapshotTicker.C:
-			ew.sendSnapshot()
-		case <-resyncTicker.C:
-			ew.buildAndSendSnapshotResync()
 		}
 	}
 }
@@ -508,72 +343,4 @@ func packetParent(parent *kuber.ParentController) *agent.ParentController {
 		IsWatched:  parent.IsWatched,
 		Parent:     packetParent(parent.Parent),
 	}
-}
-
-func getObjectStatus(obj *unstructured.Unstructured, gvrk kuber.GroupVersionResourceKind) (map[string]interface{}, error) {
-	switch gvrk {
-	case kuber.Nodes:
-		ip, found, err := getNodeInternalIP(obj)
-		if !found || err != nil {
-			return nil, nil
-		}
-
-		return map[string]interface{}{
-			"addresses": []interface{}{
-				map[string]interface{}{
-					"type":    "InternalIP",
-					"address": ip,
-				},
-			}}, nil
-	default:
-		return nil, nil
-	}
-}
-
-func getObjectMeta(u *unstructured.Unstructured) (map[string]interface{}, error) {
-	meta, found, err := unstructured.NestedFieldNoCopy(u.Object, "metadata")
-	if !found || err != nil {
-		return nil, fmt.Errorf("unable to obtain metadata, error: %w", err)
-	}
-	metadataMap, ok := meta.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("metadata is type %T, map[string]interface{} expected", meta)
-	}
-	ownerRef, ok := metadataMap["ownerReferences"].([]interface{})
-	hasOwner := false
-	if ok && len(ownerRef) > 0 {
-		hasOwner = true
-	}
-	return map[string]interface{}{
-		"namespace": metadataMap["namespace"],
-		"name":      metadataMap["name"],
-		"hasOwner":  hasOwner,
-	}, nil
-}
-
-func getNodeInternalIP(node *unstructured.Unstructured) (string, bool, error) {
-	addresses, found, err := unstructured.NestedSlice(node.Object, "status", "addresses")
-	if !found || err != nil {
-		return "", found, err
-	}
-
-	for _, address := range addresses {
-		addressMap, ok := address.(map[string]interface{})
-		if !ok {
-			return "", false, fmt.Errorf("%v of type %T is not map[string]interface{}", address, address)
-		}
-		addressType, ok := addressMap["type"].(string)
-		if !ok {
-			return "", false, fmt.Errorf("%v of type %T is not string", addressMap["type"], addressMap["type"])
-		}
-		if addressType == string(corev1.NodeInternalIP) {
-			internalIP, ok := addressMap["address"].(string)
-			if !ok {
-				return "", false, fmt.Errorf("%v of type %T is not string", addressMap["address"], addressMap["address"])
-			}
-			return internalIP, true, nil
-		}
-	}
-
-	return "", false, nil
 }

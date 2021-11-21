@@ -7,14 +7,6 @@ import (
 	"github.com/MagalixTechnologies/core/logger"
 )
 
-func (a *Agent) handleDeltas(deltas []*Delta) error {
-	return a.Gateway.SendEntitiesDeltas(deltas)
-}
-
-func (a *Agent) handleResync(resync *EntitiesResync) error {
-	return a.Gateway.SendEntitiesResync(resync)
-}
-
 func (a *Agent) handleAuditResult(auditResult []*AuditResult) error {
 	if len(auditResult) == 0 {
 		return nil

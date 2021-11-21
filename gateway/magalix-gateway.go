@@ -26,6 +26,7 @@ type MagalixGateway struct {
 
 	K8sServerVersion string
 	AgentPermissions string
+	ClusterProvider  string
 
 	ProtoHandshake     time.Duration
 	ProtoWriteTime     time.Duration
@@ -55,6 +56,7 @@ func New(
 	agentID string,
 	k8sServerVersion string,
 	agentPermissions string,
+	clusterProvider string,
 	protoHandshake time.Duration,
 	protoWriteTime time.Duration,
 	protoReadTime time.Duration,
@@ -72,6 +74,7 @@ func New(
 		AgentID:            agentID,
 		K8sServerVersion:   k8sServerVersion,
 		AgentPermissions:   agentPermissions,
+		ClusterProvider:    clusterProvider,
 		ProtoHandshake:     protoHandshake,
 		ProtoWriteTime:     protoWriteTime,
 		ProtoReadTime:      protoReadTime,
@@ -87,6 +90,7 @@ func New(
 			secret,
 			k8sServerVersion,
 			agentPermissions,
+			clusterProvider,
 			gatewayUrl,
 			protoHandshake,
 			protoWriteTime,

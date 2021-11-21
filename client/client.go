@@ -36,6 +36,7 @@ type Client struct {
 	secret           []byte
 	ServerVersion    string
 	AgentPermissions string
+	ClusterProvider  string
 
 	channel    *channel.Client
 	connected  bool
@@ -68,6 +69,7 @@ func newClient(
 	secret []byte,
 	serverVersion string,
 	agentPermissions string,
+	clusterProvider string,
 	timeouts timeouts,
 	shouldSendLogs bool,
 ) *Client {
@@ -88,6 +90,7 @@ func newClient(
 		ServerVersion:    serverVersion,
 		shouldSendLogs:   shouldSendLogs,
 		AgentPermissions: agentPermissions,
+		ClusterProvider:  clusterProvider,
 		channel: channel.NewClient(*gwUrl, channel.ChannelOptions{
 			ProtoHandshake: timeouts.protoHandshake,
 			ProtoWrite:     timeouts.protoWrite,
@@ -237,6 +240,7 @@ func InitClient(
 	secret []byte,
 	serverVersion string,
 	agentPermissions string,
+	clusterProvider string,
 	gatewayUrl string,
 	protoHandshake time.Duration,
 	protoWrite time.Duration,
@@ -254,6 +258,7 @@ func InitClient(
 		secret,
 		serverVersion,
 		agentPermissions,
+		clusterProvider,
 		timeouts{
 			protoHandshake: protoHandshake,
 			protoWrite:     protoWrite,

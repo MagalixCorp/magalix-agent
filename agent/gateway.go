@@ -15,8 +15,6 @@ type Gateway interface {
 	WaitAuthorization(timeout time.Duration) error
 	// TODO: Add Sync() function to ensure all buffered data is sent before exit
 
-	SendEntitiesDeltas(deltas []*Delta) error
-	SendEntitiesResync(resync *EntitiesResync) error
 	SendAuditResults(auditResult []*AuditResult) error
 
 	SetRestartHandler(handler RestartHandler)
