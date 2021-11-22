@@ -136,7 +136,13 @@ func (client *Client) Connect(ctx context.Context, connect chan bool) error {
 	go client.channel.Listen()
 	client.pipe.Start(10)
 	client.pipeStatus.Start(1)
-	return eg.Wait()
+
+	err := eg.Wait()
+	if err != nil {
+		logger.Error(err)
+	}
+
+	return err
 }
 
 // IsReady returns true if the agent is connected and authenticated
@@ -145,28 +151,16 @@ func (client *Client) IsReady() bool {
 }
 
 func (client *Client) StartWatchdog(ctx context.Context) error {
-	startTime := time.Now()
 	client.watchdogTicker = time.NewTicker(watchdogInterval)
-	msg := "nothing sent for more than 10 minutes"
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-client.watchdogTicker.C:
-			client.blockedM.Lock()
-			{
-				// it didn't send anything before
-				if (client.lastSent == time.Time{}) {
-					if startTime.Add(10 * time.Minute).Before(time.Now()) {
-						client.blockedM.Unlock()
-						return fmt.Errorf(msg)
-					}
-				} else if client.lastSent.Add(10 * time.Minute).Before(time.Now()) {
-					client.blockedM.Unlock()
-					return fmt.Errorf(msg)
-				}
+			err := client.ping()
+			if err != nil {
+				return fmt.Errorf("failed to ping gateway, error: %w", err)
 			}
-			client.blockedM.Unlock()
 		}
 	}
 }

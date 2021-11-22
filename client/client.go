@@ -48,6 +48,7 @@ type Client struct {
 	// for thread blocked on connection
 	blocked  sync.Map
 	blockedM sync.Mutex
+	logM     sync.Mutex
 
 	timeouts timeouts
 
@@ -100,6 +101,7 @@ func newClient(
 		logBuffer: make(proto.PacketLogs, 0, 10),
 		blocked:   sync.Map{},
 		blockedM:  sync.Mutex{},
+		logM:      sync.Mutex{},
 
 		timeouts: timeouts,
 	}
