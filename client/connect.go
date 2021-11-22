@@ -158,9 +158,11 @@ func (client *Client) StartWatchdog(ctx context.Context) error {
 				// it didn't send anything before
 				if (client.lastSent == time.Time{}) {
 					if startTime.Add(10 * time.Minute).Before(time.Now()) {
+						client.blockedM.Unlock()
 						return fmt.Errorf(msg)
 					}
 				} else if client.lastSent.Add(10 * time.Minute).Before(time.Now()) {
+					client.blockedM.Unlock()
 					return fmt.Errorf(msg)
 				}
 			}
