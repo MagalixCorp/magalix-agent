@@ -17,8 +17,8 @@ const (
 )
 
 func (client *Client) Write(p []byte) (n int, err error) {
-	client.blockedM.Lock()
-	defer client.blockedM.Unlock()
+	client.logM.Lock()
+	defer client.logM.Unlock()
 
 	if client.shouldSendLogs {
 		client.logBuffer = append(client.logBuffer, proto.PacketLogItem{
