@@ -198,9 +198,14 @@ func (client *Client) send(kind proto.PacketKind, in interface{}, out interface{
 func (client *Client) Send(kind proto.PacketKind, in interface{}, out interface{}) error {
 	logger.Debugw("sending package", "kind", kind)
 
-	defer logger.Debugw("package sent", "kind", kind)
 	client.WaitForConnection(time.Minute)
-	return client.send(kind, in, out)
+	err := client.send(kind, in, out)
+	if err != nil {
+		logger.Errorw("sending package failed", "kind", kind)
+		return err
+	}
+	logger.Debugw("package sent", "kind", kind)
+	return nil
 }
 
 // PipeStatus send status packages to the agent-gateway with defined priorities and expiration rules

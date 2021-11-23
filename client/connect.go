@@ -2,18 +2,17 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/reconquest/sign-go"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/core/logger"
+	"github.com/reconquest/sign-go"
 )
 
 const watchdogInterval = time.Minute
@@ -46,19 +45,19 @@ func (client *Client) onConnect(connected chan bool) error {
 
 			if ok {
 				if connectionError.Code == 404 {
-					// TODO: Remove this loop once we get permission to delete the agent
+					logger.Error("cluster not found, suspending the agent")
 					for {
 						time.Sleep(time.Hour * 8760)
 					}
 
 				}
 				if connectionError.Code == 403 {
-					logger.Warnw("account not authorized")
+					logger.Error("account not authorized")
 					time.Sleep(time.Hour * 2)
 				}
 
 				if connectionError.Code == 401 {
-					logger.Warnw("cluster credentials invalid")
+					logger.Error("cluster credentials invalid")
 					time.Sleep(time.Hour * 2)
 				}
 			}
@@ -137,12 +136,7 @@ func (client *Client) Connect(ctx context.Context, connect chan bool) error {
 	client.pipe.Start(10)
 	client.pipeStatus.Start(1)
 
-	err := eg.Wait()
-	if err != nil {
-		logger.Error(err)
-	}
-
-	return err
+	return eg.Wait()
 }
 
 // IsReady returns true if the agent is connected and authenticated
@@ -159,7 +153,7 @@ func (client *Client) StartWatchdog(ctx context.Context) error {
 		case <-client.watchdogTicker.C:
 			err := client.ping()
 			if err != nil {
-				return fmt.Errorf("failed to ping gateway, error: %w", err)
+				logger.Errorw("failed to ping gateway", "error", err)
 			}
 		}
 	}
