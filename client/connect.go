@@ -2,18 +2,17 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/reconquest/sign-go"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/MagalixTechnologies/channel"
 	"github.com/MagalixTechnologies/core/logger"
+	"github.com/reconquest/sign-go"
 )
 
 const watchdogInterval = time.Minute
@@ -46,19 +45,19 @@ func (client *Client) onConnect(connected chan bool) error {
 
 			if ok {
 				if connectionError.Code == 404 {
-					// TODO: Remove this loop once we get permission to delete the agent
+					logger.Error("cluster not found, suspending the agent")
 					for {
 						time.Sleep(time.Hour * 8760)
 					}
 
 				}
 				if connectionError.Code == 403 {
-					logger.Warnw("account not authorized")
+					logger.Error("account not authorized")
 					time.Sleep(time.Hour * 2)
 				}
 
 				if connectionError.Code == 401 {
-					logger.Warnw("cluster credentials invalid")
+					logger.Error("cluster credentials invalid")
 					time.Sleep(time.Hour * 2)
 				}
 			}
@@ -136,6 +135,7 @@ func (client *Client) Connect(ctx context.Context, connect chan bool) error {
 	go client.channel.Listen()
 	client.pipe.Start(10)
 	client.pipeStatus.Start(1)
+
 	return eg.Wait()
 }
 
@@ -145,26 +145,16 @@ func (client *Client) IsReady() bool {
 }
 
 func (client *Client) StartWatchdog(ctx context.Context) error {
-	startTime := time.Now()
 	client.watchdogTicker = time.NewTicker(watchdogInterval)
-	msg := "nothing sent for more than 10 minutes"
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-client.watchdogTicker.C:
-			client.blockedM.Lock()
-			{
-				// it didn't send anything before
-				if (client.lastSent == time.Time{}) {
-					if startTime.Add(10 * time.Minute).Before(time.Now()) {
-						return fmt.Errorf(msg)
-					}
-				} else if client.lastSent.Add(10 * time.Minute).Before(time.Now()) {
-					return fmt.Errorf(msg)
-				}
+			err := client.ping()
+			if err != nil {
+				logger.Errorw("failed to ping gateway", "error", err)
 			}
-			client.blockedM.Unlock()
 		}
 	}
 }
