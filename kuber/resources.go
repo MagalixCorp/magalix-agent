@@ -10,7 +10,6 @@ import (
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 )
@@ -70,11 +69,11 @@ var (
 		Kind:                 "CronJob",
 	}
 	Ingresses = GroupVersionResourceKind{
-		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingresses"),
+		GroupVersionResource: networkingv1.SchemeGroupVersion.WithResource("ingresses"),
 		Kind:                 "Ingress",
 	}
 	IngressClasses = GroupVersionResourceKind{
-		GroupVersionResource: networkingv1beta1.SchemeGroupVersion.WithResource("ingressclasses"),
+		GroupVersionResource: networkingv1.SchemeGroupVersion.WithResource("ingressclasses"),
 		Kind:                 "IngressClass",
 	}
 	NetworkPolicies = GroupVersionResourceKind{
