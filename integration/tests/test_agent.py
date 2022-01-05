@@ -191,15 +191,15 @@ class TestViolations:
         exit_code = os.system(f"kubectl apply -f {AGENT_YAML_PATH}")
         assert exit_code == 0, "Failed to run agent create deployment command"
 
-        time.sleep(300)
+        time.sleep(360)
 
         yield account_id, cluster_id, session, test_constraint_id, test_constraint_name, test_constraints
 
         exit_code = os.system(f"kubectl delete -f {AGENT_YAML_PATH}")
         assert exit_code == 0, "Failed to clean up agent deployment"
 
-        resp = session.delete(URL + f"/api/accounts/v1/{account_id}/clusters/{cluster_id}")
-        assert resp.ok, "Failed to delete cluster from console"
+        # resp = session.delete(URL + f"/api/accounts/v1/{account_id}/clusters/{cluster_id}")
+        # assert resp.ok, "Failed to delete cluster from console"
 
         try:
             delete_test_constraint(session, account_id, test_constraint_id)
