@@ -49,7 +49,8 @@ def patch_agent_resources(yml):
 def query_constraints_by_names(session, account_id, names):
     body = {
         "filters": {
-            "names": names
+            "names": names,
+            "enabled": True,
         }
     }
     resp = session.post(URL + f"/api/{account_id}/policies/v1/constraints/query", json=body)
