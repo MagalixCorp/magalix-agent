@@ -31,9 +31,7 @@ type ParentController struct {
 
 type Delta struct {
 	Kind      EntityDeltaKind
-	Gvrk      GroupVersionResourceKind
 	Data      unstructured.Unstructured
-	Parent    *ParentController
 	Timestamp time.Time
 }
 

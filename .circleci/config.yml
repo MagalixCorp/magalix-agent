@@ -95,7 +95,7 @@ jobs:
             export CODECOV_URL="https://codecov.io/upload/v2?token=${AGENT_CODECOV_TOKEN}&branch=${CIRCLE_BRANCH}&commit=${CIRCLE_SHA1}&flags=integration"
 
             mkdir -p ~/test-results
-            pytest -o junit_family=xunit2 --junitxml=~/test-results/report.xml
+            pytest -s -v -o junit_family=xunit2 --junitxml=~/test-results/report.xml
 
       - store_test_results:
           path: ~/test-results
