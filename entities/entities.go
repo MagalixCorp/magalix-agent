@@ -189,35 +189,13 @@ func (ew *EntitiesWatcher) getParents(u *unstructured.Unstructured) (*agent.Pare
 	return packetParent(parent), nil
 }
 
-func (ew *EntitiesWatcher) deltaWrapper(gvrk kuber.GroupVersionResourceKind, delta agent.Delta) (agent.Delta, error) {
-	delta.Gvrk = packetGvrk(gvrk)
-	if gvrk == kuber.Pods {
-		parents, err := ew.getParents(&delta.Data)
-		if err != nil {
-			return delta, fmt.Errorf(
-				"unable to get pod parents, error: %w",
-				err,
-			)
-		}
-		delta.Parent = parents
-	}
-	return delta, nil
-}
-
 func (ew *EntitiesWatcher) OnAdd(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
-	delta, err := ew.deltaWrapper(
-		gvrk,
-		agent.Delta{
-			Kind:      agent.EntityDeltaKindUpsert,
-			Data:      obj,
-			Timestamp: time.Now(),
-		},
-	)
-
-	if err != nil {
-		logger.Warnw("unable to handle OnAdd delta", "error", err)
-		return
+	delta := agent.Delta{
+		Kind:      agent.EntityDeltaKindUpsert,
+		Data:      obj,
+		Timestamp: time.Now(),
 	}
+
 	ew.deltasQueue <- delta
 
 	for handler := range ew.resourceEventHandlers {
@@ -226,17 +204,10 @@ func (ew *EntitiesWatcher) OnAdd(gvrk kuber.GroupVersionResourceKind, obj unstru
 }
 
 func (ew *EntitiesWatcher) OnUpdate(gvrk kuber.GroupVersionResourceKind, oldObj, newObj unstructured.Unstructured) {
-	delta, err := ew.deltaWrapper(
-		gvrk,
-		agent.Delta{
-			Kind:      agent.EntityDeltaKindUpsert,
-			Data:      newObj,
-			Timestamp: time.Now(),
-		},
-	)
-	if err != nil {
-		logger.Warnw("unable to handle onUpdate delta", "error", err)
-		return
+	delta := agent.Delta{
+		Kind:      agent.EntityDeltaKindUpsert,
+		Data:      newObj,
+		Timestamp: time.Now(),
 	}
 
 	ew.deltasQueue <- delta
@@ -248,17 +219,11 @@ func (ew *EntitiesWatcher) OnUpdate(gvrk kuber.GroupVersionResourceKind, oldObj,
 
 func (ew *EntitiesWatcher) OnDelete(gvrk kuber.GroupVersionResourceKind, obj unstructured.Unstructured) {
 	ew.observer.ParentsStore.Delete(obj.GetNamespace(), obj.GetKind(), obj.GetName())
-	delta, err := ew.deltaWrapper(
-		gvrk,
-		agent.Delta{
-			Kind:      agent.EntityDeltaKindDelete,
-			Data:      obj,
-			Timestamp: time.Now(),
-		},
-	)
-	if err != nil {
-		logger.Warnw("unable to handle OnDelete delta", "error", err)
-		return
+
+	delta := agent.Delta{
+		Kind:      agent.EntityDeltaKindDelete,
+		Data:      obj,
+		Timestamp: time.Now(),
 	}
 	ew.deltasQueue <- delta
 
