@@ -143,9 +143,9 @@ func (a *Auditor) auditAllResourcesAndSendData(constraintIds []string, triggerTy
 		logger.Errorw("error while getting all resources", "error", errs)
 	}
 
+	lock.Lock()
 	for _, resources := range resourcesByGvrk {
 		for idx := range resources {
-			lock.Lock()
 			resource := resources[idx]
 			results, _ := a.auditResource(&resource, constraintIds, triggerType)
 			a.opa.UpdateCache(results)
@@ -153,9 +153,10 @@ func (a *Auditor) auditAllResourcesAndSendData(constraintIds []string, triggerTy
 			if err != nil {
 				logger.Errorw("error while sending audit result", "error", err)
 			}
-			lock.Unlock()
+
 		}
 	}
+	lock.Unlock()
 }
 
 func (a *Auditor) Start(ctx context.Context) error {
