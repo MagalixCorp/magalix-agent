@@ -190,6 +190,7 @@ func (a *OpaAuditor) CheckResourceStatusWithConstraint(constraintId string, reso
 }
 func (a *OpaAuditor) UpdateCache(results []*agent.AuditResult) {
 	lock.Lock()
+	defer lock.Unlock()
 	for i := range results {
 		result := results[i]
 		namespace := ""
@@ -206,7 +207,6 @@ func (a *OpaAuditor) UpdateCache(results []*agent.AuditResult) {
 		}
 		a.cache.Put(*result.ConstraintID, kuber.GetEntityKey(namespace, kind, name), result.Status)
 	}
-	lock.Unlock()
 }
 
 // evaluate constraint, construct recommendation obj
