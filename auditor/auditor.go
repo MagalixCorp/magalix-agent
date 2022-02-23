@@ -139,6 +139,7 @@ func (a *Auditor) auditAllResourcesAndSendData(constraintIds []string, triggerTy
 	if len(errs) > 0 {
 		logger.Errorw("error while getting all resources", "error", errs)
 	}
+
 	for _, resources := range resourcesByGvrk {
 		for idx := range resources {
 			resource := resources[idx]

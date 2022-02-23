@@ -2,6 +2,7 @@ package opa_auditor
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/MagalixCorp/magalix-agent/v3/agent"
@@ -16,6 +17,8 @@ import (
 const (
 	PolicyQuery = "violation"
 )
+
+var lock sync.Mutex
 
 type Template struct {
 	Id          string
@@ -186,6 +189,8 @@ func (a *OpaAuditor) CheckResourceStatusWithConstraint(constraintId string, reso
 	return !found || oldStatus != currentStatus
 }
 func (a *OpaAuditor) UpdateCache(results []*agent.AuditResult) {
+	lock.Lock()
+	defer lock.Unlock()
 	for i := range results {
 		result := results[i]
 		namespace := ""
